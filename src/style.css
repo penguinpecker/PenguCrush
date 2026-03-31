@@ -1,0 +1,82 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  min-height: 100vh;
+  background: url('/assets/bg-arctic.png') center/cover no-repeat fixed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Fredoka', sans-serif;
+  overflow: hidden;
+  user-select: none;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  margin-top: 0;
+}
+
+.logo {
+  width: 440px;
+  height: auto;
+  margin-bottom: 6px;
+  filter: drop-shadow(0 4px 12px rgba(0, 40, 80, 0.4));
+}
+
+.hud {
+  display: flex;
+  gap: 30px;
+  margin-bottom: 16px;
+}
+
+.hud-panel {
+  position: relative;
+  width: 220px;
+  height: 120px;
+}
+
+.hud-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.game-wrapper {
+  position: relative;
+}
+
+#gameCanvas {
+  display: block;
+  cursor: pointer;
+}
+
+.msg {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 100;
+  background: rgba(0, 40, 80, 0.92);
+  color: #fff;
+  font-size: 22px;
+  font-weight: 700;
+  padding: 20px 40px;
+  border-radius: 16px;
+  border: 2px solid rgba(255,255,255,0.3);
+  display: none;
+  text-align: center;
+}
+
+.msg.show {
+  display: block;
+  animation: popIn 0.3s ease;
+}
+
+@keyframes popIn {
+  0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+  100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}

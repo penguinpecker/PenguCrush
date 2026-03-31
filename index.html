@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PenguCrush</title>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <div id="app">
+    <img src="/assets/logo.png" class="logo" alt="PenguCrush" />
+    <div class="hud">
+      <div class="hud-panel">
+        <canvas id="scoreCanvas" class="hud-canvas"></canvas>
+      </div>
+      <div class="hud-panel">
+        <canvas id="movesCanvas" class="hud-canvas"></canvas>
+      </div>
+    </div>
+    <span id="scoreVal" style="display:none">0</span>
+    <span id="movesVal" style="display:none">30</span>
+    <div class="game-wrapper">
+      <canvas id="gameCanvas"></canvas>
+    </div>
+  </div>
+  <div class="msg" id="msg"></div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
