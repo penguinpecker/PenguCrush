@@ -8,11 +8,6 @@
   <link rel="stylesheet" href="/src/map.css" />
 </head>
 <body>
-  <!--
-    The trick: ONE container that maintains the image's exact aspect ratio,
-    scales to fit the viewport (letterboxed), and holds BOTH the image
-    and the nodes. Nodes are % of this container = always aligned.
-  -->
   <div class="map-stage" id="mapStage">
     <img src="/assets/map-bg.png" class="map-img" draggable="false" />
     <div class="map-nodes" id="mapNodes"></div>
@@ -20,35 +15,27 @@
 
   <!-- POPUP -->
   <div class="popup-overlay" id="popupOverlay">
-    <div class="popup-card">
-      <button class="popup-close" id="popupClose">✕</button>
-      <div class="popup-badge">
-        <div class="popup-badge-inner">
-          <span class="popup-level-label">Level</span>
-          <span class="popup-level-num" id="popupLevelNum">1</span>
+    <div class="popup-frame">
+      <img src="/assets/popup-frame.png" class="popup-bg" draggable="false" />
+      <div class="popup-content">
+        <div class="pop-level">
+          <span class="pop-level-label">Level</span>
+          <span class="pop-level-num" id="popupLevelNum">1</span>
         </div>
-      </div>
-      <div class="popup-stars" id="popupStars">
-        <span class="star">★</span><span class="star">★</span><span class="star">★</span>
-      </div>
-      <div class="popup-objectives">
-        <div class="obj-row">
-          <div class="obj-item"><span class="obj-icon">🎯</span><span class="obj-text">Score <strong id="popupTarget">3,000</strong> points</span></div>
-          <div class="obj-item"><span class="obj-icon">🕐</span><span class="obj-text"><strong id="popupMoves">30</strong> Moves</span></div>
+        <div class="pop-stars" id="popupStars">
+          <img class="pop-star" data-index="0" src="/assets/star-empty.png" />
+          <img class="pop-star" data-index="1" src="/assets/star-empty.png" />
+          <img class="pop-star" data-index="2" src="/assets/star-empty.png" />
         </div>
-        <div class="obj-best">Best Score: <span id="popupBest">—</span> 🏆</div>
+        <div class="pop-objectives">
+          <span class="pop-obj-score">Score <strong id="popupTarget">3,000</strong> points</span>
+          <span class="pop-obj-moves"><strong id="popupMoves">30</strong> Moves</span>
+        </div>
+        <div class="pop-best">Best Score: <span id="popupBest">—</span> 🏆</div>
+        <button class="pop-play" id="popupPlay">PLAY</button>
+        <button class="pop-back" id="popupBack">◀ Back to Map</button>
+        <button class="pop-close" id="popupClose">✕</button>
       </div>
-      <div class="popup-boosters">
-        <div class="booster-slot"><div class="booster-icon">💣</div><div class="booster-count">x3</div></div>
-        <div class="booster-slot"><div class="booster-icon">➡️</div><div class="booster-count">x1</div></div>
-        <div class="booster-slot"><div class="booster-icon">❄️</div><div class="booster-count">x2</div></div>
-        <div class="booster-slot add"><div class="booster-icon">+</div></div>
-      </div>
-      <div class="popup-actions">
-        <button class="btn-back" id="popupBack">← Back to Map</button>
-        <button class="btn-play" id="popupPlay">PLAY</button>
-      </div>
-      <div class="popup-penguin">🐧</div>
     </div>
   </div>
 
