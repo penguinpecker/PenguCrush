@@ -168,8 +168,8 @@ body {
 /* ── Level badge: center of gold ring ── */
 .pop-level {
   position: absolute;
-  top: 10%;
-  left: 38.5%;
+  top: 14%;
+  left: 49.5%;
   transform: translate(-50%, -50%);
   display: flex;
   flex-direction: column;
@@ -193,13 +193,13 @@ body {
 .pop-stars {
   position: absolute;
   top: 34%;
-  left: 39%;
+  left: 49%;
   transform: translate(-50%, -50%);
   display: flex;
-  gap: clamp(4px, 1vw, 12px);
+  gap: clamp(4px, 2.1vw, 12px);
 }
 .pop-star {
-  width: clamp(36px, 6vw, 70px);
+  width: clamp(28.6px, 5.4vw, 55px);
   height: auto;
   filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
   transition: all 0.3s;
@@ -208,8 +208,8 @@ body {
 /* ── Objectives: center of white panel ── */
 .pop-objectives {
   position: absolute;
-  top: 50%;
-  left: 38.5%;
+  top: 51%;
+  left: 49.5%;
   transform: translate(-50%, -50%);
   display: flex;
   align-items: center;
@@ -241,8 +241,8 @@ body {
 /* ── Play: center of cyan button bar ── */
 .pop-play {
   position: absolute;
-  top: 85%;
-  left: 32.1%;
+  top: 84%;
+  left: 50.1%;
   transform: translate(-50%, -50%);
   background: transparent;
   border: none;
@@ -264,8 +264,8 @@ body {
 /* ── Back to Map ── */
 .pop-back {
   position: absolute;
-  top: 91%;
-  left: 10%;
+  top: 92%;
+  left: 43%;
   transform: translateY(-50%);
   background: none; border: none;
   color: #2a6a8a;
@@ -280,8 +280,8 @@ body {
 /* ── Close X ── */
 .pop-close {
   position: absolute;
-  top: 13%;
-  right: 8%;
+  top: 14.6%;
+  right: 5.15%;
   transform: translate(50%, -50%);
   width: 7%;
   aspect-ratio: 1;
