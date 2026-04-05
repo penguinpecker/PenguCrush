@@ -8,13 +8,32 @@ body {
   overflow: hidden;
   font-family: 'Fredoka', sans-serif;
   background: #0b1520;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
-.map-stage { position: relative; }
-.map-img { display: block; width: 100%; height: 100%; }
+/* Viewport clip; inner scene is “cover” size so % positions match map art */
+.map-stage {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.map-scene {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: var(--scene-w, 100vw);
+  height: var(--scene-h, 100vh);
+}
+
+.map-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+}
+
 .map-nodes { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
 
 /* ═══════════════════════════════════════════════

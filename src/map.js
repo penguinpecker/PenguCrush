@@ -1,15 +1,16 @@
 // ═══════════════════════════════════════════════════
+// Full-bleed “cover” layout: scene is the scaled map size before viewport crop,
+// centered so level % coords stay aligned with map-bg.png (IMG_W × IMG_H).
 const IMG_W = 2000, IMG_H = 1116;
 const IMG_RATIO = IMG_W / IMG_H;
 const stage = document.getElementById('mapStage');
 
 function resizeStage() {
   const vw = window.innerWidth, vh = window.innerHeight;
-  let w, h;
-  if (vw / vh > IMG_RATIO) { h = vh; w = vh * IMG_RATIO; }
-  else { w = vw; h = vw / IMG_RATIO; }
-  stage.style.width = w + 'px';
-  stage.style.height = h + 'px';
+  const w = Math.max(vw, vh * IMG_RATIO);
+  const h = Math.max(vh, vw / IMG_RATIO);
+  stage.style.setProperty('--scene-w', w + 'px');
+  stage.style.setProperty('--scene-h', h + 'px');
 }
 resizeStage();
 window.addEventListener('resize', resizeStage);
@@ -23,7 +24,7 @@ const LEVELS = [
   { id: 5,  x: 20.8, y: 60.0, stars: 0, best: 0,    status: 'locked'    },
   { id: 6,  x: 15.0, y: 51.1, stars: 0, best: 0,    status: 'locked'    },
   { id: 7,  x: 20.1, y: 42.7, stars: 0, best: 0,    status: 'locked'    },
-  { id: 8,  x: 29.2, y: 39.8, stars: 0, best: 0,    status: 'locked'    },
+  { id: 8,  x: 28.2, y: 39.9, stars: 0, best: 0,    status: 'locked'    },
   { id: 9,  x: 37.4, y: 41.8, stars: 0, best: 0,    status: 'locked'    },
   { id: 10, x: 45.0, y: 47.8, stars: 0, best: 0,    status: 'locked'    },
   { id: 11, x: 50.8, y: 55.9, stars: 0, best: 0,    status: 'locked'    },
@@ -36,7 +37,7 @@ const LEVELS = [
   { id: 18, x: 74.5, y: 49.4, stars: 0, best: 0,    status: 'locked'    },
   { id: 19, x: 69.3, y: 42.4, stars: 0, best: 0,    status: 'locked'    },
   { id: 20, x: 73.2, y: 34.4, stars: 0, best: 0,    status: 'locked'    },
-  { id: 21, x: 81.3, y: 31.2, stars: 0, best: 0,    status: 'locked'    },
+  { id: 21, x: 80.7, y: 31.9, stars: 0, best: 0,    status: 'locked'    },
   { id: 22, x: 87.7, y: 30.7, stars: 0, best: 0,    status: 'locked'    },
 ];
 
