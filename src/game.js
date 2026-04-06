@@ -2,6 +2,147 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 // ═══════════════════════════════════════════════════════════════
+//  LOADING OVERLAY (poster + WebM scrub → outro)
+// ═══════════════════════════════════════════════════════════════
+let loadingVideoSeekRaf = null;
+
+function syncLoadingVideoToProgress(p) {
+  const video = document.getElementById('loadingVideo');
+  if (!video || !video.duration || !Number.isFinite(video.duration)) return;
+  const t = Math.min(1, Math.max(0, p)) * video.duration;
+  const targetTime = Math.min(t, Math.max(0, video.duration - 0.04));
+  if (loadingVideoSeekRaf != null) cancelAnimationFrame(loadingVideoSeekRaf);
+  loadingVideoSeekRaf = requestAnimationFrame(() => {
+    loadingVideoSeekRaf = null;
+    try {
+      video.pause();
+      if (Math.abs(video.currentTime - targetTime) < 0.02) return;
+      video.currentTime = targetTime;
+    } catch (_) {}
+  });
+}
+
+function updateLoadingUI(p) {
+  const pct = Math.round(p * 100);
+  const bar = document.getElementById('loadingBarFill');
+  const host = document.getElementById('loadingProgress');
+  if (bar) bar.style.transform = `scaleX(${p})`;
+  if (host) host.setAttribute('aria-valuenow', String(pct));
+  syncLoadingVideoToProgress(p);
+}
+
+function waitForLoadingPoster() {
+  const img = document.getElementById('loadingPoster');
+  if (!img?.src) return Promise.resolve();
+  if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+  return new Promise((resolve) => {
+    const done = () => resolve();
+    img.addEventListener('load', done, { once: true });
+    img.addEventListener('error', () => {
+      img.classList.add('loading-screen__poster--hidden');
+      done();
+    }, { once: true });
+  });
+}
+
+function waitForLoadingVideo(video) {
+  return new Promise((resolve) => {
+    if (!video) {
+      resolve();
+      return;
+    }
+    const finish = () => resolve();
+    if (video.error) {
+      finish();
+      return;
+    }
+    const ok = () => {
+      if (video.readyState >= 2) {
+        finish();
+        return true;
+      }
+      return false;
+    };
+    if (ok()) return;
+    video.addEventListener('loadeddata', finish, { once: true });
+    video.addEventListener('canplay', finish, { once: true });
+    video.addEventListener('error', finish, { once: true });
+    try {
+      video.load();
+    } catch (_) {
+      finish();
+    }
+  });
+}
+
+function revealLoadingVideoLayer() {
+  const video = document.getElementById('loadingVideo');
+  const content = document.getElementById('loadingScreenContent');
+  if (!video || video.error || video.readyState < 2) return;
+  video.classList.add('loading-screen__video--ready');
+  content?.classList.add('loading-screen__content--video-ready');
+}
+
+function advanceLoadingStep(stepRef, totalSteps) {
+  stepRef.n = Math.min(stepRef.n + 1, totalSteps);
+  updateLoadingUI(stepRef.n / totalSteps);
+}
+
+function finishLoadingOutro(options = {}) {
+  const { redirectTo } = options;
+  const screen = document.getElementById('loadingScreen');
+  const app = document.getElementById('app');
+  const video = document.getElementById('loadingVideo');
+  updateLoadingUI(1);
+  if (video?.duration && Number.isFinite(video.duration)) {
+    try {
+      video.currentTime = Math.max(0, video.duration - 0.03);
+    } catch (_) {}
+  }
+  try {
+    video?.pause();
+  } catch (_) {}
+
+  if (!redirectTo) {
+    app?.classList.remove('app--hidden');
+    app?.classList.add('app--revealed');
+  }
+
+  if (!screen) {
+    if (redirectTo) window.location.replace(redirectTo);
+    return;
+  }
+  screen.setAttribute('aria-busy', 'false');
+  screen.classList.add('loading-screen--exit');
+
+  let outroDone = false;
+  const cleanup = () => {
+    if (outroDone) return;
+    outroDone = true;
+    screen.remove();
+    if (redirectTo) window.location.replace(redirectTo);
+  };
+  screen.addEventListener(
+    'animationend',
+    (e) => {
+      if (e.animationName === 'loading-screen-outro' || e.animationName === 'loading-screen-outro-reduced') {
+        cleanup();
+      }
+    },
+    { once: true }
+  );
+  setTimeout(cleanup, 1000);
+}
+
+function recoverFromLoadingFailure(revealApp = true) {
+  document.getElementById('loadingScreen')?.remove();
+  if (!revealApp) return;
+  const app = document.getElementById('app');
+  app?.classList.remove('app--hidden');
+  app?.classList.add('app--revealed');
+}
+
+// ═══════════════════════════════════════════════════════════════
 //  CONFIG
 // ═══════════════════════════════════════════════════════════════
 const GRID = 8;
@@ -546,103 +687,7 @@ window.addEventListener('keydown', (e) => {
     }
 });
 
-// ═══════════════════════════════════════════════════════════════
-//  LOADING SCREEN — video + progress while assets load; overlay removed via CSS @keyframes outro
-// ═══════════════════════════════════════════════════════════════
-const LOADING_STEPS = 8; // video ready + 4 tile GLBs + frame + 2 HUD panels
-
-function syncLoadingVideoToProgress(p) {
-  const video = document.getElementById('loadingVideo');
-  if (!video || !video.duration || !Number.isFinite(video.duration)) return;
-  const t = Math.min(1, Math.max(0, p)) * video.duration;
-  try {
-    video.pause();
-    video.currentTime = Math.min(t, Math.max(0, video.duration - 0.04));
-  } catch (_) { /* seek may throw on some browsers mid-load */ }
-}
-
-function updateLoadingUI(p) {
-  const pct = Math.round(p * 100);
-  const bar = document.getElementById('loadingBarFill');
-  const host = document.getElementById('loadingProgress');
-  if (bar) bar.style.transform = `scaleX(${p})`;
-  if (host) host.setAttribute('aria-valuenow', String(pct));
-  syncLoadingVideoToProgress(p);
-}
-
-function waitForLoadingVideo(video) {
-  return new Promise((resolve) => {
-    if (!video) {
-      resolve();
-      return;
-    }
-    const finish = () => resolve();
-    if (video.error) {
-      finish();
-      return;
-    }
-    const ok = () => {
-      if (video.readyState >= 2) {
-        finish();
-        return true;
-      }
-      return false;
-    };
-    if (ok()) return;
-    video.addEventListener('loadeddata', finish, { once: true });
-    video.addEventListener('canplay', finish, { once: true });
-    video.addEventListener('error', finish, { once: true });
-    try {
-      video.load();
-    } catch (_) {
-      finish();
-    }
-  });
-}
-
-function advanceLoadingStep(stepRef) {
-  stepRef.n = Math.min(stepRef.n + 1, LOADING_STEPS);
-  updateLoadingUI(stepRef.n / LOADING_STEPS);
-}
-
-function finishLoadingOutro() {
-  const screen = document.getElementById('loadingScreen');
-  const app = document.getElementById('app');
-  const video = document.getElementById('loadingVideo');
-  updateLoadingUI(1);
-  if (video?.duration && Number.isFinite(video.duration)) {
-    try {
-      video.currentTime = Math.max(0, video.duration - 0.03);
-    } catch (_) {}
-  }
-  try {
-    video?.pause();
-  } catch (_) {}
-
-  app?.classList.remove('app--hidden');
-  app?.classList.add('app--revealed');
-
-  if (!screen) return;
-  screen.setAttribute('aria-busy', 'false');
-  screen.classList.add('loading-screen--exit');
-
-  let outroDone = false;
-  const cleanup = () => {
-    if (outroDone) return;
-    outroDone = true;
-    screen.remove();
-  };
-  screen.addEventListener(
-    'animationend',
-    (e) => {
-      if (e.animationName === 'loading-screen-outro' || e.animationName === 'loading-screen-outro-reduced') {
-        cleanup();
-      }
-    },
-    { once: true }
-  );
-  setTimeout(cleanup, 1000);
-}
+const LOADING_GAME_TOTAL = 8; // poster+video bundle + 4 GLBs + frame + 2 HUD (first step after media)
 
 // ═══════════════════════════════════════════════════════════════
 //  INIT
@@ -761,19 +806,20 @@ async function init() {
     loadingVideo?.pause();
   } catch (_) {}
 
-  await waitForLoadingVideo(loadingVideo);
-  advanceLoadingStep(step);
+  await Promise.all([waitForLoadingPoster(), waitForLoadingVideo(loadingVideo)]);
+  revealLoadingVideoLayer();
+  advanceLoadingStep(step, LOADING_GAME_TOTAL);
 
-  await preloadAssets(() => advanceLoadingStep(step));
+  await preloadAssets(() => advanceLoadingStep(step, LOADING_GAME_TOTAL));
 
   await loadGridFrame();
-  advanceLoadingStep(step);
+  advanceLoadingStep(step, LOADING_GAME_TOTAL);
 
   await loadHUDPanel('scoreCanvas', '/assets/score-panel.glb');
-  advanceLoadingStep(step);
+  advanceLoadingStep(step, LOADING_GAME_TOTAL);
 
   await loadHUDPanel('movesCanvas', '/assets/moves-panel.glb');
-  advanceLoadingStep(step);
+  advanceLoadingStep(step, LOADING_GAME_TOTAL);
 
   updateHUD();
   initBoard();
@@ -787,8 +833,5 @@ async function init() {
 
 init().catch((err) => {
   console.error(err);
-  document.getElementById('loadingScreen')?.remove();
-  const app = document.getElementById('app');
-  app?.classList.remove('app--hidden');
-  app?.classList.add('app--revealed');
+  recoverFromLoadingFailure(true);
 });

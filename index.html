@@ -9,7 +9,20 @@
 </head>
 <body>
   <div id="loadingScreen" class="loading-screen" aria-busy="true" aria-label="Loading game">
-    <div class="loading-screen__content">
+    <div class="loading-screen__content" id="loadingScreenContent">
+      <picture>
+        <source srcset="/assets/loading-poster.webp" type="image/webp" />
+        <img
+          id="loadingPoster"
+          class="loading-screen__poster"
+          src="/assets/loading-poster.jpg"
+          alt=""
+          width="1920"
+          height="1080"
+          decoding="async"
+          fetchpriority="high"
+        />
+      </picture>
       <video
         id="loadingVideo"
         class="loading-screen__video"
@@ -18,6 +31,7 @@
         preload="auto"
         aria-hidden="true"
       >
+        <source src="/assets/loading.webm" type="video/webm" />
         <source src="/assets/loading.mp4" type="video/mp4" />
       </video>
       <div class="loading-screen__progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="loadingProgress">
@@ -43,6 +57,6 @@
     </div>
   </div>
   <div class="msg" id="msg"></div>
-  <script type="module" src="/src/main.js"></script>
+  <script type="module" src="/src/entry.js"></script>
 </body>
 </html>
