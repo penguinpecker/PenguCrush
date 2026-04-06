@@ -89,12 +89,13 @@ async function loadGLB(url) {
   });
 }
 
-async function preloadAssets() {
+async function preloadAssets(onEachDone) {
   for (const [type, path] of Object.entries(GLB_PATHS)) {
     try {
       glbCache[type] = await loadGLB(path);
       console.log(`✓ ${type} loaded`);
     } catch (e) { console.warn(`✗ ${type} failed`, e); }
+    onEachDone?.();
   }
 }
 
@@ -546,6 +547,104 @@ window.addEventListener('keydown', (e) => {
 });
 
 // ═══════════════════════════════════════════════════════════════
+//  LOADING SCREEN — video + progress while assets load; overlay removed via CSS @keyframes outro
+// ═══════════════════════════════════════════════════════════════
+const LOADING_STEPS = 8; // video ready + 4 tile GLBs + frame + 2 HUD panels
+
+function syncLoadingVideoToProgress(p) {
+  const video = document.getElementById('loadingVideo');
+  if (!video || !video.duration || !Number.isFinite(video.duration)) return;
+  const t = Math.min(1, Math.max(0, p)) * video.duration;
+  try {
+    video.pause();
+    video.currentTime = Math.min(t, Math.max(0, video.duration - 0.04));
+  } catch (_) { /* seek may throw on some browsers mid-load */ }
+}
+
+function updateLoadingUI(p) {
+  const pct = Math.round(p * 100);
+  const bar = document.getElementById('loadingBarFill');
+  const host = document.getElementById('loadingProgress');
+  if (bar) bar.style.transform = `scaleX(${p})`;
+  if (host) host.setAttribute('aria-valuenow', String(pct));
+  syncLoadingVideoToProgress(p);
+}
+
+function waitForLoadingVideo(video) {
+  return new Promise((resolve) => {
+    if (!video) {
+      resolve();
+      return;
+    }
+    const finish = () => resolve();
+    if (video.error) {
+      finish();
+      return;
+    }
+    const ok = () => {
+      if (video.readyState >= 2) {
+        finish();
+        return true;
+      }
+      return false;
+    };
+    if (ok()) return;
+    video.addEventListener('loadeddata', finish, { once: true });
+    video.addEventListener('canplay', finish, { once: true });
+    video.addEventListener('error', finish, { once: true });
+    try {
+      video.load();
+    } catch (_) {
+      finish();
+    }
+  });
+}
+
+function advanceLoadingStep(stepRef) {
+  stepRef.n = Math.min(stepRef.n + 1, LOADING_STEPS);
+  updateLoadingUI(stepRef.n / LOADING_STEPS);
+}
+
+function finishLoadingOutro() {
+  const screen = document.getElementById('loadingScreen');
+  const app = document.getElementById('app');
+  const video = document.getElementById('loadingVideo');
+  updateLoadingUI(1);
+  if (video?.duration && Number.isFinite(video.duration)) {
+    try {
+      video.currentTime = Math.max(0, video.duration - 0.03);
+    } catch (_) {}
+  }
+  try {
+    video?.pause();
+  } catch (_) {}
+
+  app?.classList.remove('app--hidden');
+  app?.classList.add('app--revealed');
+
+  if (!screen) return;
+  screen.setAttribute('aria-busy', 'false');
+  screen.classList.add('loading-screen--exit');
+
+  let outroDone = false;
+  const cleanup = () => {
+    if (outroDone) return;
+    outroDone = true;
+    screen.remove();
+  };
+  screen.addEventListener(
+    'animationend',
+    (e) => {
+      if (e.animationName === 'loading-screen-outro' || e.animationName === 'loading-screen-outro-reduced') {
+        cleanup();
+      }
+    },
+    { once: true }
+  );
+  setTimeout(cleanup, 1000);
+}
+
+// ═══════════════════════════════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════
@@ -653,15 +752,43 @@ function drawHUDPanel(cvs) {
 }
 
 async function init() {
-  updateHUD();
+  const step = { n: 0 };
+  updateLoadingUI(0);
+
   console.log('🐧 PenguCrush loading...');
-  await preloadAssets();
+  const loadingVideo = document.getElementById('loadingVideo');
+  try {
+    loadingVideo?.pause();
+  } catch (_) {}
+
+  await waitForLoadingVideo(loadingVideo);
+  advanceLoadingStep(step);
+
+  await preloadAssets(() => advanceLoadingStep(step));
+
   await loadGridFrame();
+  advanceLoadingStep(step);
+
   await loadHUDPanel('scoreCanvas', '/assets/score-panel.glb');
+  advanceLoadingStep(step);
+
   await loadHUDPanel('movesCanvas', '/assets/moves-panel.glb');
+  advanceLoadingStep(step);
+
+  updateHUD();
   initBoard();
   animate();
   console.log('🐧 PenguCrush ready!');
+
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  await new Promise((r) => setTimeout(r, 120));
+  finishLoadingOutro();
 }
 
-init();
+init().catch((err) => {
+  console.error(err);
+  document.getElementById('loadingScreen')?.remove();
+  const app = document.getElementById('app');
+  app?.classList.remove('app--hidden');
+  app?.classList.add('app--revealed');
+});

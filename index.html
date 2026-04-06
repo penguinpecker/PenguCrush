@@ -8,7 +8,25 @@
   <link rel="stylesheet" href="/src/style.css" />
 </head>
 <body>
-  <div id="app">
+  <div id="loadingScreen" class="loading-screen" aria-busy="true" aria-label="Loading game">
+    <div class="loading-screen__content">
+      <video
+        id="loadingVideo"
+        class="loading-screen__video"
+        muted
+        playsinline
+        preload="auto"
+        aria-hidden="true"
+      >
+        <source src="/assets/loading.mp4" type="video/mp4" />
+      </video>
+      <div class="loading-screen__progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="loadingProgress">
+        <div class="loading-screen__progress-fill" id="loadingBarFill"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="app" class="app app--hidden">
     <img src="/assets/logo.png" class="logo" alt="PenguCrush" />
     <div class="hud">
       <div class="hud-panel">
