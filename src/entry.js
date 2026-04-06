@@ -128,6 +128,33 @@ void (async () => {
       setTimeout(cleanup, 1000);
     }
 
+    const MIN_LOADING_PLAY_MS = 2500;
+    async function holdMinLoadingVideoPlayback(video) {
+      if (!video || video.error || !Number.isFinite(video.duration)) {
+        await new Promise((r) => setTimeout(r, MIN_LOADING_PLAY_MS));
+        return;
+      }
+      const deadline = performance.now() + MIN_LOADING_PLAY_MS;
+      try {
+        if (video.currentTime >= video.duration - 0.12) {
+          video.currentTime = 0;
+        }
+        await video.play();
+      } catch (_) {}
+      while (performance.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 50));
+        if (video.ended) {
+          video.currentTime = 0;
+          try {
+            await video.play();
+          } catch (_) {}
+        }
+      }
+      try {
+        video.pause();
+      } catch (_) {}
+    }
+
     const BOOT_STEPS = 3;
     const step = { n: 0 };
     updateLoadingUI(0);
@@ -150,7 +177,7 @@ void (async () => {
     advanceLoadingStep(step, BOOT_STEPS);
 
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-    await new Promise((r) => setTimeout(r, 80));
+    await holdMinLoadingVideoPlayback(loadingVideo);
     finishLoadingOutroRedirect();
   } catch (err) {
     console.error(err);

@@ -142,6 +142,35 @@ function recoverFromLoadingFailure(revealApp = true) {
   app?.classList.add('app--revealed');
 }
 
+const MIN_LOADING_PLAY_MS = 2500;
+
+/** After load, play the clip forward for at least this long (loops if it ends early). */
+async function holdMinLoadingVideoPlayback(video) {
+  if (!video || video.error || !Number.isFinite(video.duration)) {
+    await new Promise((r) => setTimeout(r, MIN_LOADING_PLAY_MS));
+    return;
+  }
+  const deadline = performance.now() + MIN_LOADING_PLAY_MS;
+  try {
+    if (video.currentTime >= video.duration - 0.12) {
+      video.currentTime = 0;
+    }
+    await video.play();
+  } catch (_) {}
+  while (performance.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 50));
+    if (video.ended) {
+      video.currentTime = 0;
+      try {
+        await video.play();
+      } catch (_) {}
+    }
+  }
+  try {
+    video.pause();
+  } catch (_) {}
+}
+
 // ═══════════════════════════════════════════════════════════════
 //  CONFIG
 // ═══════════════════════════════════════════════════════════════
@@ -827,7 +856,7 @@ async function init() {
   console.log('🐧 PenguCrush ready!');
 
   await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-  await new Promise((r) => setTimeout(r, 120));
+  await holdMinLoadingVideoPlayback(loadingVideo);
   finishLoadingOutro();
 }
 
