@@ -1,21 +1,6 @@
-// ═══════════════════════════════════════════════════
-// Full-bleed “cover” layout: scene is the scaled map size before viewport crop,
-// centered so level % coords stay aligned with map-bg.png (IMG_W × IMG_H).
 const IMG_W = 2000, IMG_H = 1116;
 const IMG_RATIO = IMG_W / IMG_H;
-const stage = document.getElementById('mapStage');
 
-function resizeStage() {
-  const vw = window.innerWidth, vh = window.innerHeight;
-  const w = Math.max(vw, vh * IMG_RATIO);
-  const h = Math.max(vh, vw / IMG_RATIO);
-  stage.style.setProperty('--scene-w', w + 'px');
-  stage.style.setProperty('--scene-h', h + 'px');
-}
-resizeStage();
-window.addEventListener('resize', resizeStage);
-
-// ═══════════════════════════════════════════════════
 const LEVELS = [
   { id: 1,  x: 11.8, y: 85.9, stars: 2, best: 4200, status: 'completed' },
   { id: 2,  x: 20.3, y: 82.9, stars: 3, best: 5100, status: 'completed' },
@@ -44,126 +29,122 @@ const LEVELS = [
 function getTargetScore(lv) { return 3000 + (lv - 1) * 500; }
 function getMoves(lv) { return Math.max(20, 35 - lv); }
 
-// ═══════════════════════════════════════════════════
-const nodesContainer = document.getElementById('mapNodes');
+export function initMap() {
+  const stage = document.getElementById('mapStage');
+  const nodesContainer = document.getElementById('mapNodes');
 
-LEVELS.forEach(lv => {
-  const node = document.createElement('button');
-  node.className = `level-node ${lv.status}`;
-  node.style.left = `${lv.x}%`;
-  node.style.top = `${lv.y}%`;
-  node.dataset.level = lv.id;
+  function resizeStage() {
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const w = Math.max(vw, vh * IMG_RATIO);
+    const h = Math.max(vh, vw / IMG_RATIO);
+    stage.style.setProperty('--scene-w', w + 'px');
+    stage.style.setProperty('--scene-h', h + 'px');
+  }
+  resizeStage();
+  window.addEventListener('resize', resizeStage);
 
-  const inner = document.createElement('div');
-  inner.className = 'node-inner';
-  inner.textContent = lv.id;
-  node.appendChild(inner);
+  LEVELS.forEach(lv => {
+    const node = document.createElement('button');
+    node.className = 'level-node ' + lv.status;
+    node.style.left = lv.x + '%';
+    node.style.top = lv.y + '%';
+    node.dataset.level = lv.id;
 
-  // Stars using img tags
-  if (lv.status === 'completed' && lv.stars > 0) {
-    const starsEl = document.createElement('div');
-    starsEl.className = 'node-stars';
-    for (let s = 0; s < 3; s++) {
-      const star = document.createElement('img');
-      star.src = s < lv.stars ? '/assets/star-gold.png' : '/assets/star-empty.png';
-      star.className = 'node-star-img';
-      star.draggable = false;
-      starsEl.appendChild(star);
+    const inner = document.createElement('div');
+    inner.className = 'node-inner';
+    inner.textContent = lv.id;
+    node.appendChild(inner);
+
+    if (lv.status === 'completed' && lv.stars > 0) {
+      const starsEl = document.createElement('div');
+      starsEl.className = 'node-stars';
+      for (let s = 0; s < 3; s++) {
+        const star = document.createElement('img');
+        star.src = s < lv.stars ? '/assets/star-gold.png' : '/assets/star-empty.png';
+        star.className = 'node-star-img';
+        star.draggable = false;
+        starsEl.appendChild(star);
+      }
+      node.appendChild(starsEl);
     }
-    node.appendChild(starsEl);
-  }
 
-  if (lv.status === 'locked') {
-    const lock = document.createElement('span');
-    lock.className = 'lock-icon';
-    lock.textContent = '🔒';
-    node.appendChild(lock);
-  }
-
-  node.addEventListener('click', () => {
     if (lv.status === 'locked') {
-      node.style.animation = 'none';
-      node.offsetHeight;
-      node.style.animation = 'shake 0.4s ease';
-      setTimeout(() => node.style.animation = '', 400);
-      return;
+      const lock = document.createElement('span');
+      lock.className = 'lock-icon';
+      lock.textContent = '\u{1F512}';
+      node.appendChild(lock);
     }
-    openPopup(lv);
+
+    node.addEventListener('click', () => {
+      if (lv.status === 'locked') {
+        node.style.animation = 'none';
+        node.offsetHeight;
+        node.style.animation = 'shake 0.4s ease';
+        setTimeout(() => node.style.animation = '', 400);
+        return;
+      }
+      openPopup(lv);
+    });
+
+    nodesContainer.appendChild(node);
   });
 
-  nodesContainer.appendChild(node);
-});
+  const s = document.createElement('style');
+  s.textContent = '@keyframes shake { 0%, 100% { transform: translate(-50%,-50%) translateX(0); } 20% { transform: translate(-50%,-50%) translateX(-6px); } 40% { transform: translate(-50%,-50%) translateX(6px); } 60% { transform: translate(-50%,-50%) translateX(-4px); } 80% { transform: translate(-50%,-50%) translateX(4px); } }';
+  document.head.appendChild(s);
 
-// Shake
-const s = document.createElement('style');
-s.textContent = `@keyframes shake {
-  0%, 100% { transform: translate(-50%,-50%) translateX(0); }
-  20% { transform: translate(-50%,-50%) translateX(-6px); }
-  40% { transform: translate(-50%,-50%) translateX(6px); }
-  60% { transform: translate(-50%,-50%) translateX(-4px); }
-  80% { transform: translate(-50%,-50%) translateX(4px); }
-}`;
-document.head.appendChild(s);
+  const overlay = document.getElementById('popupOverlay');
+  let currentPopupLevel = null;
 
-// ═══════════════════════════════════════════════════
-// POPUP
-// ═══════════════════════════════════════════════════
-const overlay = document.getElementById('popupOverlay');
-let currentPopupLevel = null;
+  function openPopup(lv) {
+    currentPopupLevel = lv;
+    document.getElementById('popupLevelNum').textContent = lv.id;
+    document.querySelectorAll('.pop-star').forEach((img, i) => {
+      img.src = i < lv.stars ? '/assets/star-gold.png' : '/assets/star-empty.png';
+    });
+    document.getElementById('popupTarget').textContent = getTargetScore(lv.id).toLocaleString();
+    document.getElementById('popupMoves').textContent = getMoves(lv.id);
+    document.getElementById('popupBest').textContent = lv.best > 0 ? lv.best.toLocaleString() : '\u2014';
+    overlay.classList.add('active');
+  }
 
-function openPopup(lv) {
-  currentPopupLevel = lv;
-  document.getElementById('popupLevelNum').textContent = lv.id;
+  function closePopup() { overlay.classList.remove('active'); currentPopupLevel = null; }
 
-  // Update star images
-  document.querySelectorAll('.pop-star').forEach((img, i) => {
-    img.src = i < lv.stars ? '/assets/star-gold.png' : '/assets/star-empty.png';
+  document.getElementById('popupClose').addEventListener('click', closePopup);
+  document.getElementById('popupBack').addEventListener('click', closePopup);
+  overlay.addEventListener('click', e => { if (e.target === overlay) closePopup(); });
+  document.getElementById('popupPlay').addEventListener('click', () => {
+    if (currentPopupLevel) window.__pengu.goToLevel(currentPopupLevel.id);
   });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closePopup(); });
 
-  document.getElementById('popupTarget').textContent = getTargetScore(lv.id).toLocaleString();
-  document.getElementById('popupMoves').textContent = getMoves(lv.id);
-  document.getElementById('popupBest').textContent = lv.best > 0 ? lv.best.toLocaleString() : '—';
-  overlay.classList.add('active');
+  // DEV TOOLS
+  let dragging = null;
+  document.addEventListener('mousedown', e => {
+    if (!e.shiftKey) return;
+    const node = e.target.closest('.level-node');
+    if (!node) return;
+    e.preventDefault(); dragging = node; node.style.zIndex = '999';
+  });
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    const rect = nodesContainer.getBoundingClientRect();
+    dragging.style.left = ((e.clientX - rect.left) / rect.width * 100).toFixed(1) + '%';
+    dragging.style.top = ((e.clientY - rect.top) / rect.height * 100).toFixed(1) + '%';
+  });
+  document.addEventListener('mouseup', () => {
+    if (dragging) {
+      dragging.style.zIndex = '';
+      console.log('Level ' + dragging.dataset.level + ' -> x: ' + parseFloat(dragging.style.left).toFixed(1) + ', y: ' + parseFloat(dragging.style.top).toFixed(1));
+      dragging = null;
+    }
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'd' || e.key === 'D') {
+      console.log('-- Positions --');
+      nodesContainer.querySelectorAll('.level-node').forEach(n =>
+        console.log('  { id: ' + n.dataset.level + ', x: ' + parseFloat(n.style.left).toFixed(1) + ', y: ' + parseFloat(n.style.top).toFixed(1) + ' },')
+      );
+    }
+  });
 }
-
-function closePopup() { overlay.classList.remove('active'); currentPopupLevel = null; }
-
-document.getElementById('popupClose').addEventListener('click', closePopup);
-document.getElementById('popupBack').addEventListener('click', closePopup);
-overlay.addEventListener('click', e => { if (e.target === overlay) closePopup(); });
-document.getElementById('popupPlay').addEventListener('click', () => {
-  if (currentPopupLevel) window.location.href = `/?level=${currentPopupLevel.id}`;
-});
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closePopup(); });
-
-// ═══════════════════════════════════════════════════
-// DEV TOOLS
-// ═══════════════════════════════════════════════════
-let dragging = null;
-document.addEventListener('mousedown', e => {
-  if (!e.shiftKey) return;
-  const node = e.target.closest('.level-node');
-  if (!node) return;
-  e.preventDefault(); dragging = node; node.style.zIndex = '999';
-});
-document.addEventListener('mousemove', e => {
-  if (!dragging) return;
-  const rect = nodesContainer.getBoundingClientRect();
-  dragging.style.left = `${((e.clientX - rect.left) / rect.width * 100).toFixed(1)}%`;
-  dragging.style.top = `${((e.clientY - rect.top) / rect.height * 100).toFixed(1)}%`;
-});
-document.addEventListener('mouseup', () => {
-  if (dragging) {
-    dragging.style.zIndex = '';
-    console.log(`Level ${dragging.dataset.level} → x: ${parseFloat(dragging.style.left).toFixed(1)}, y: ${parseFloat(dragging.style.top).toFixed(1)}`);
-    dragging = null;
-  }
-});
-document.addEventListener('keydown', e => {
-  if (e.key === 'd' || e.key === 'D') {
-    console.log('── Positions ──');
-    nodesContainer.querySelectorAll('.level-node').forEach(n =>
-      console.log(`  { id: ${n.dataset.level}, x: ${parseFloat(n.style.left).toFixed(1)}, y: ${parseFloat(n.style.top).toFixed(1)} },`)
-    );
-  }
-});

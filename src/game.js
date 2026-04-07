@@ -2,176 +2,6 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 // ═══════════════════════════════════════════════════════════════
-//  LOADING OVERLAY (poster + WebM scrub → outro)
-// ═══════════════════════════════════════════════════════════════
-let loadingVideoSeekRaf = null;
-
-function syncLoadingVideoToProgress(p) {
-  const video = document.getElementById('loadingVideo');
-  if (!video || !video.duration || !Number.isFinite(video.duration)) return;
-  const t = Math.min(1, Math.max(0, p)) * video.duration;
-  const targetTime = Math.min(t, Math.max(0, video.duration - 0.04));
-  if (loadingVideoSeekRaf != null) cancelAnimationFrame(loadingVideoSeekRaf);
-  loadingVideoSeekRaf = requestAnimationFrame(() => {
-    loadingVideoSeekRaf = null;
-    try {
-      video.pause();
-      if (Math.abs(video.currentTime - targetTime) < 0.02) return;
-      video.currentTime = targetTime;
-    } catch (_) {}
-  });
-}
-
-function updateLoadingUI(p) {
-  const pct = Math.round(p * 100);
-  const bar = document.getElementById('loadingBarFill');
-  const host = document.getElementById('loadingProgress');
-  if (bar) bar.style.transform = `scaleX(${p})`;
-  if (host) host.setAttribute('aria-valuenow', String(pct));
-  syncLoadingVideoToProgress(p);
-}
-
-function waitForLoadingPoster() {
-  const img = document.getElementById('loadingPoster');
-  if (!img?.src) return Promise.resolve();
-  if (img.complete && img.naturalWidth > 0) return Promise.resolve();
-  return new Promise((resolve) => {
-    const done = () => resolve();
-    img.addEventListener('load', done, { once: true });
-    img.addEventListener('error', () => {
-      img.classList.add('loading-screen__poster--hidden');
-      done();
-    }, { once: true });
-  });
-}
-
-function waitForLoadingVideo(video) {
-  return new Promise((resolve) => {
-    if (!video) {
-      resolve();
-      return;
-    }
-    const finish = () => resolve();
-    if (video.error) {
-      finish();
-      return;
-    }
-    const ok = () => {
-      if (video.readyState >= 2) {
-        finish();
-        return true;
-      }
-      return false;
-    };
-    if (ok()) return;
-    video.addEventListener('loadeddata', finish, { once: true });
-    video.addEventListener('canplay', finish, { once: true });
-    video.addEventListener('error', finish, { once: true });
-    try {
-      video.load();
-    } catch (_) {
-      finish();
-    }
-  });
-}
-
-function revealLoadingVideoLayer() {
-  const video = document.getElementById('loadingVideo');
-  const content = document.getElementById('loadingScreenContent');
-  if (!video || video.error || video.readyState < 2) return;
-  video.classList.add('loading-screen__video--ready');
-  content?.classList.add('loading-screen__content--video-ready');
-}
-
-function advanceLoadingStep(stepRef, totalSteps) {
-  stepRef.n = Math.min(stepRef.n + 1, totalSteps);
-  updateLoadingUI(stepRef.n / totalSteps);
-}
-
-function finishLoadingOutro(options = {}) {
-  const { redirectTo } = options;
-  const screen = document.getElementById('loadingScreen');
-  const app = document.getElementById('app');
-  const video = document.getElementById('loadingVideo');
-  updateLoadingUI(1);
-  if (video?.duration && Number.isFinite(video.duration)) {
-    try {
-      video.currentTime = Math.max(0, video.duration - 0.03);
-    } catch (_) {}
-  }
-  try {
-    video?.pause();
-  } catch (_) {}
-
-  if (!redirectTo) {
-    app?.classList.remove('app--hidden');
-    app?.classList.add('app--revealed');
-  }
-
-  if (!screen) {
-    if (redirectTo) window.location.replace(redirectTo);
-    return;
-  }
-  screen.setAttribute('aria-busy', 'false');
-  screen.classList.add('loading-screen--exit');
-
-  let outroDone = false;
-  const cleanup = () => {
-    if (outroDone) return;
-    outroDone = true;
-    screen.remove();
-    if (redirectTo) window.location.replace(redirectTo);
-  };
-  screen.addEventListener(
-    'animationend',
-    (e) => {
-      if (e.animationName === 'loading-screen-outro' || e.animationName === 'loading-screen-outro-reduced') {
-        cleanup();
-      }
-    },
-    { once: true }
-  );
-  setTimeout(cleanup, 1000);
-}
-
-function recoverFromLoadingFailure(revealApp = true) {
-  document.getElementById('loadingScreen')?.remove();
-  if (!revealApp) return;
-  const app = document.getElementById('app');
-  app?.classList.remove('app--hidden');
-  app?.classList.add('app--revealed');
-}
-
-const MIN_LOADING_PLAY_MS = 2500;
-
-/** After load, play the clip forward for at least this long (loops if it ends early). */
-async function holdMinLoadingVideoPlayback(video) {
-  if (!video || video.error || !Number.isFinite(video.duration)) {
-    await new Promise((r) => setTimeout(r, MIN_LOADING_PLAY_MS));
-    return;
-  }
-  const deadline = performance.now() + MIN_LOADING_PLAY_MS;
-  try {
-    if (video.currentTime >= video.duration - 0.12) {
-      video.currentTime = 0;
-    }
-    await video.play();
-  } catch (_) {}
-  while (performance.now() < deadline) {
-    await new Promise((r) => setTimeout(r, 50));
-    if (video.ended) {
-      video.currentTime = 0;
-      try {
-        await video.play();
-      } catch (_) {}
-    }
-  }
-  try {
-    video.pause();
-  } catch (_) {}
-}
-
-// ═══════════════════════════════════════════════════════════════
 //  CONFIG
 // ═══════════════════════════════════════════════════════════════
 const GRID = 8;
@@ -716,8 +546,6 @@ window.addEventListener('keydown', (e) => {
     }
 });
 
-const LOADING_GAME_TOTAL = 8; // poster+video bundle + 4 GLBs + frame + 2 HUD (first step after media)
-
 // ═══════════════════════════════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════════════════════════════
@@ -826,41 +654,19 @@ function drawHUDPanel(cvs) {
 }
 
 async function init() {
-  const step = { n: 0 };
-  updateLoadingUI(0);
-
   console.log('🐧 PenguCrush loading...');
-  const loadingVideo = document.getElementById('loadingVideo');
-  try {
-    loadingVideo?.pause();
-  } catch (_) {}
 
-  await Promise.all([waitForLoadingPoster(), waitForLoadingVideo(loadingVideo)]);
-  revealLoadingVideoLayer();
-  advanceLoadingStep(step, LOADING_GAME_TOTAL);
-
-  await preloadAssets(() => advanceLoadingStep(step, LOADING_GAME_TOTAL));
-
+  await preloadAssets(() => {});
   await loadGridFrame();
-  advanceLoadingStep(step, LOADING_GAME_TOTAL);
-
   await loadHUDPanel('scoreCanvas', '/assets/score-panel.glb');
-  advanceLoadingStep(step, LOADING_GAME_TOTAL);
-
   await loadHUDPanel('movesCanvas', '/assets/moves-panel.glb');
-  advanceLoadingStep(step, LOADING_GAME_TOTAL);
 
   updateHUD();
   initBoard();
   animate();
   console.log('🐧 PenguCrush ready!');
-
-  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-  await holdMinLoadingVideoPlayback(loadingVideo);
-  finishLoadingOutro();
 }
 
 init().catch((err) => {
   console.error(err);
-  recoverFromLoadingFailure(true);
 });

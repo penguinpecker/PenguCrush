@@ -1,16 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700;800&display=swap');
+/* ═══ Screen visibility ═══ */
+.screen--hidden { display: none !important; }
+.screen--active { display: block; }
 
-* { margin: 0; padding: 0; box-sizing: border-box; }
-
-body {
-  width: 100vw;
-  height: 100vh;
-  overflow: hidden;
-  font-family: 'Fredoka', sans-serif;
-  background: #0b1520;
-}
-
-/* Viewport clip; inner scene is “cover” size so % positions match map art */
+/* Viewport clip; inner scene is "cover" size so % positions match map art */
 .map-stage {
   position: relative;
   width: 100vw;
@@ -37,7 +29,7 @@ body {
 .map-nodes { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
 
 /* ═══════════════════════════════════════════════
-   ALL LEVEL NODES — use the button PNG
+   ALL LEVEL NODES
    ═══════════════════════════════════════════════ */
 .level-node {
   position: absolute;
@@ -52,7 +44,6 @@ body {
   justify-content: center;
   font-family: 'Fredoka', sans-serif;
   font-weight: 800;
-  /* Size to cover the grey artwork buttons */
   width: 4.2%;
   padding-top: 4.2%;
   height: 0;
@@ -67,7 +58,6 @@ body {
   background: url('/assets/btn-cyan.png') center/contain no-repeat;
 }
 
-/* ── COMPLETED ── */
 .level-node.completed .node-inner {
   color: #fff;
   font-size: clamp(12px, 1.4vw, 22px);
@@ -79,7 +69,6 @@ body {
   transform: translate(-50%, -50%) scale(1.18);
 }
 
-/* Stars */
 .node-stars {
   position: absolute;
   bottom: 100%;
@@ -98,7 +87,6 @@ body {
   filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3));
 }
 
-/* ── CURRENT: same button + pulsing glow ── */
 .level-node.current { width: 4.6%; padding-top: 4.6%; }
 
 .level-node.current .node-inner {
@@ -116,7 +104,6 @@ body {
   50% { filter: drop-shadow(0 0 22px rgba(0,220,255,0.9)) drop-shadow(0 0 40px rgba(0,200,240,0.6)); }
 }
 
-/* ── LOCKED: same button PNG but greyscale + darker ── */
 .level-node.locked .node-inner {
   filter: saturate(0.1) brightness(1.05) contrast(0.85);
   color: rgba(255, 255, 255, 0.8);
@@ -140,7 +127,7 @@ body {
 }
 
 /* ═══════════════════════════════════════════════
-   POPUP — all elements center-anchored to measured positions
+   POPUP
    ═══════════════════════════════════════════════ */
 .popup-overlay {
   position: fixed; inset: 0; z-index: 100;
@@ -165,7 +152,6 @@ body {
 .popup-content { position: absolute; inset: 0; }
 .pop-actions { display: contents; }
 
-/* ── Level badge: center of gold ring ── */
 .pop-level {
   position: absolute;
   top: 14%;
@@ -189,7 +175,6 @@ body {
   text-shadow: 0 2px 6px rgba(0,60,100,0.6);
 }
 
-/* ── Stars: center of star outlines ── */
 .pop-stars {
   position: absolute;
   top: 34%;
@@ -205,7 +190,6 @@ body {
   transition: all 0.3s;
 }
 
-/* ── Objectives: center of white panel ── */
 .pop-objectives {
   position: absolute;
   top: 51%;
@@ -225,7 +209,6 @@ body {
   font-weight: 800; color: #0a3a5a;
 }
 
-/* ── Best score: below white panel ── */
 .pop-best {
   display: none;
   position: absolute;
@@ -238,7 +221,6 @@ body {
   white-space: nowrap;
 }
 
-/* ── Play: center of cyan button bar ── */
 .pop-play {
   position: absolute;
   top: 84%;
@@ -261,7 +243,6 @@ body {
   transform: translate(-50%, -50%) scale(1.03);
 }
 
-/* ── Back to Map ── */
 .pop-back {
   position: absolute;
   top: 92%;
@@ -277,7 +258,6 @@ body {
 }
 .pop-back:hover { color: #0a4a6a; }
 
-/* ── Close X ── */
 .pop-close {
   position: absolute;
   top: 14.6%;

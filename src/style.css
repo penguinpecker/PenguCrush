@@ -108,28 +108,19 @@
   }
 }
 
-.app.app--hidden {
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-}
-
-.app.app--revealed {
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-  transition: opacity 0.55s ease 0.12s;
-}
-
 body {
   min-height: 100vh;
-  background: url('/assets/bg-arctic.png') center/cover no-repeat fixed;
+  background: #0b1520;
   display: flex;
   align-items: center;
   justify-content: center;
   font-family: 'Fredoka', sans-serif;
   overflow: hidden;
   user-select: none;
+}
+
+body[data-screen="game"] {
+  background: url('/assets/bg-arctic.png') center/cover no-repeat fixed;
 }
 
 #app {
