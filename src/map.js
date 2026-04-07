@@ -60,7 +60,7 @@ export function initMap() {
       starsEl.className = 'node-stars';
       for (let s = 0; s < 3; s++) {
         const star = document.createElement('img');
-        star.src = s < lv.stars ? '/assets/star-gold.png' : '/assets/star-empty.png';
+        star.src = s < lv.stars ? '/assets/ui/star-gold.png' : '/assets/ui/star-empty.png';
         star.className = 'node-star-img';
         star.draggable = false;
         starsEl.appendChild(star);
@@ -100,7 +100,7 @@ export function initMap() {
     currentPopupLevel = lv;
     document.getElementById('popupLevelNum').textContent = lv.id;
     document.querySelectorAll('.pop-star').forEach((img, i) => {
-      img.src = i < lv.stars ? '/assets/star-gold.png' : '/assets/star-empty.png';
+      img.src = i < lv.stars ? '/assets/ui/star-gold.png' : '/assets/ui/star-empty.png';
     });
     document.getElementById('popupTarget').textContent = getTargetScore(lv.id).toLocaleString();
     document.getElementById('popupMoves').textContent = getMoves(lv.id);

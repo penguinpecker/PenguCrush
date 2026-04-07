@@ -12,11 +12,11 @@
   <div id="loadingScreen" class="loading-screen" aria-busy="true" aria-label="Loading game">
     <div class="loading-screen__content" id="loadingScreenContent">
       <picture>
-        <source srcset="/assets/loading-poster.webp" type="image/webp" />
+        <source srcset="/assets/loading/loading-poster.webp" type="image/webp" />
         <img
           id="loadingPoster"
           class="loading-screen__poster"
-          src="/assets/loading-poster.jpg"
+          src="/assets/loading/loading-poster.jpg"
           alt=""
           width="1920"
           height="1080"
@@ -32,8 +32,8 @@
         preload="auto"
         aria-hidden="true"
       >
-        <source src="/assets/loading.webm" type="video/webm" />
-        <source src="/assets/loading.mp4" type="video/mp4" />
+        <source src="/assets/loading/loading.webm" type="video/webm" />
+        <source src="/assets/loading/loading.mp4" type="video/mp4" />
       </video>
       <div class="loading-screen__progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="loadingProgress">
         <div class="loading-screen__progress-fill" id="loadingBarFill"></div>
@@ -45,23 +45,23 @@
   <div id="mapScreen" class="screen screen--hidden">
     <div class="map-stage" id="mapStage">
       <div class="map-scene">
-        <img src="/assets/map-bg.png" class="map-img" draggable="false" />
+        <img src="/assets/map/map-bg.png" class="map-img" draggable="false" />
         <div class="map-nodes" id="mapNodes"></div>
       </div>
     </div>
 
     <div class="popup-overlay" id="popupOverlay">
       <div class="popup-frame">
-        <img src="/assets/popup-frame.png" class="popup-bg" draggable="false" />
+        <img src="/assets/ui/popup-frame.png" class="popup-bg" draggable="false" />
         <div class="popup-content">
           <div class="pop-level">
             <span class="pop-level-label">Level</span>
             <span class="pop-level-num" id="popupLevelNum">1</span>
           </div>
           <div class="pop-stars" id="popupStars">
-            <img class="pop-star" data-index="0" src="/assets/star-empty.png" />
-            <img class="pop-star" data-index="1" src="/assets/star-empty.png" />
-            <img class="pop-star" data-index="2" src="/assets/star-empty.png" />
+            <img class="pop-star" data-index="0" src="/assets/ui/star-empty.png" />
+            <img class="pop-star" data-index="1" src="/assets/ui/star-empty.png" />
+            <img class="pop-star" data-index="2" src="/assets/ui/star-empty.png" />
           </div>
           <div class="pop-objectives">
             <span class="pop-obj-score">Score <strong id="popupTarget">3,000</strong> points</span>
@@ -79,7 +79,7 @@
   <!-- ═══ GAME SCREEN ═══ -->
   <div id="gameScreen" class="screen screen--hidden">
     <div id="app" class="app">
-      <img src="/assets/logo.png" class="logo" alt="PenguCrush" />
+      <img src="/assets/hud/logo.png" class="logo" alt="PenguCrush" />
       <div class="hud">
         <div class="hud-panel">
           <canvas id="scoreCanvas" class="hud-canvas"></canvas>

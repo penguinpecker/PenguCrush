@@ -120,7 +120,7 @@ body {
 }
 
 body[data-screen="game"] {
-  background: url('/assets/bg-arctic.png') center/cover no-repeat fixed;
+  background: url('/assets/board/bg-arctic.png') center/cover no-repeat fixed;
 }
 
 #app {

@@ -55,7 +55,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: url('/assets/btn-cyan.png') center/contain no-repeat;
+  background: url('/assets/ui/btn-cyan.png') center/contain no-repeat;
 }
 
 .level-node.completed .node-inner {

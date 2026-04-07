@@ -10,10 +10,10 @@ const MAX_MOVES = 30;
 const TYPES = ['ice', 'popsicle', 'fish', 'frostice'];
 
 const GLB_PATHS = {
-  ice:       '/assets/ice-crystal.glb',
-  popsicle:  '/assets/popsicle.glb',
-  fish:      '/assets/fish.glb',
-  frostice:  '/assets/frosted-ice.glb',
+  ice:       '/assets/tiles/shells/ice-crystal.glb',
+  popsicle:  '/assets/tiles/inners/popsicle.glb',
+  fish:      '/assets/tiles/inners/fish.glb',
+  frostice:  '/assets/tiles/shells/frosted-ice.glb',
 };
 
 const TYPE_FIX = {
@@ -102,7 +102,7 @@ async function preloadAssets(onEachDone) {
 // ═══════════════════════════════════════════════════════════════
 async function loadGridFrame() {
   try {
-    const frame = await loadGLB('/assets/grid-frame.glb');
+    const frame = await loadGLB('/assets/board/grid-frame.glb');
 
     // Rotate to face camera straight on
     // The model might need rotation — try X = -PI/2 to face forward
@@ -658,8 +658,8 @@ async function init() {
 
   await preloadAssets(() => {});
   await loadGridFrame();
-  await loadHUDPanel('scoreCanvas', '/assets/score-panel.glb');
-  await loadHUDPanel('movesCanvas', '/assets/moves-panel.glb');
+  await loadHUDPanel('scoreCanvas', '/assets/hud/score-panel.glb');
+  await loadHUDPanel('movesCanvas', '/assets/hud/moves-panel.glb');
 
   updateHUD();
   initBoard();
