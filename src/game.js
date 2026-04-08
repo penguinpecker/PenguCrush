@@ -33,6 +33,19 @@ if (!GLB_PATHS['ice']) GLB_PATHS['ice'] = ALL_GLB_PATHS['ice'];
 // Inner tile types that render inside an ice crystal shell
 const INNER_TYPES = new Set(['fish', 'popsicle', 'shrimp', 'crab']);
 
+// Blocker GLB paths — loaded if level has blockers
+const BLOCKER_GLB_PATHS = {
+  frozen:  '/assets/blockers/frozen-overlay.glb',
+  wall:    '/assets/blockers/stone-wall.glb',
+  faller:  '/assets/blockers/falling-icicle.glb',
+};
+const blockerGlbCache = {};
+
+// Booster state
+let activeBooster = null; // null or 'row' | 'col' | 'colorBomb' | 'hammer' | 'shuffle'
+const boosterCharges = {}; // { row: 1, col: 1, ... }
+for (const b of CONFIG.boosters) boosterCharges[b] = 1;
+
 const TYPE_FIX = {
   ice:       { rx: 0, ry: 0, rz: 0, scale: 0.85 },
   popsicle:  { rx: Math.PI/2, ry: Math.PI*5/4, rz: 0, scale: 0.70 },
@@ -128,6 +141,16 @@ async function preloadAssets(onEachDone) {
       console.log(`✓ ${type} loaded`);
     } catch (e) { console.warn(`✗ ${type} failed`, e); }
     onEachDone?.();
+  }
+  // Load blocker GLBs needed for this level
+  const blockerTypes = new Set(CONFIG.blockers.map(b => b.type));
+  for (const [type, path] of Object.entries(BLOCKER_GLB_PATHS)) {
+    if (blockerTypes.has(type)) {
+      try {
+        blockerGlbCache[type] = await loadGLB(path);
+        console.log(`✓ blocker:${type} loaded`);
+      } catch (e) { console.warn(`✗ blocker:${type} failed`, e); }
+    }
   }
 }
 
@@ -256,15 +279,97 @@ function createTileMesh(type) {
 // ═══════════════════════════════════════════════════════════════
 function randomType() { return TILE_TYPES[Math.floor(Math.random() * TILE_TYPES.length)]; }
 
-function createTile(type, row, col) {
+function addFrozenOverlay(tile) {
+  if (!blockerGlbCache['frozen']) {
+    // Fallback: semi-transparent blue box
+    const geo = new THREE.BoxGeometry(CELL * 0.9, CELL * 0.9, CELL * 0.4);
+    const mat = new THREE.MeshPhysicalMaterial({
+      color: 0x88ccff, transparent: true, opacity: 0.35,
+      roughness: 0.05, clearcoat: 1, depthWrite: false, side: THREE.DoubleSide,
+    });
+    const overlay = new THREE.Mesh(geo, mat);
+    overlay.position.z = 0.3;
+    tile.mesh.add(overlay);
+    tile.frozenMesh = overlay;
+    return;
+  }
+  const clone = blockerGlbCache['frozen'].clone();
+  clone.traverse(ch => {
+    if (ch.isMesh && ch.material) {
+      ch.material = ch.material.clone();
+      ch.material.transparent = true;
+      ch.material.opacity = 0.5;
+      ch.material.depthWrite = false;
+    }
+  });
+  const box = new THREE.Box3().setFromObject(clone);
+  const sz = new THREE.Vector3(); box.getSize(sz);
+  const maxDim = Math.max(sz.x, sz.y, sz.z);
+  if (maxDim > 0) clone.scale.multiplyScalar((CELL * 0.9) / maxDim);
+  const nb = new THREE.Box3().setFromObject(clone);
+  const ct = new THREE.Vector3(); nb.getCenter(ct);
+  clone.position.sub(ct);
+  clone.position.z = 0.3;
+  tile.mesh.add(clone);
+  tile.frozenMesh = clone;
+}
+
+function removeFrozenOverlay(tile) {
+  if (tile.frozenMesh) {
+    tile.mesh.remove(tile.frozenMesh);
+    tile.frozenMesh = null;
+  }
+  tile.frozen = false;
+}
+
+function createWall(row, col) {
+  let mesh;
+  if (blockerGlbCache['wall']) {
+    const clone = blockerGlbCache['wall'].clone();
+    clone.traverse(ch => {
+      if (ch.isMesh && ch.material) ch.material = ch.material.clone();
+    });
+    const box = new THREE.Box3().setFromObject(clone);
+    const sz = new THREE.Vector3(); box.getSize(sz);
+    const maxDim = Math.max(sz.x, sz.y, sz.z);
+    if (maxDim > 0) clone.scale.multiplyScalar((CELL * 0.85) / maxDim);
+    const nb = new THREE.Box3().setFromObject(clone);
+    const ct = new THREE.Vector3(); nb.getCenter(ct);
+    const wrapper = new THREE.Group();
+    clone.position.sub(ct);
+    wrapper.add(clone);
+    mesh = wrapper;
+  } else {
+    mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(CELL * 0.85, CELL * 0.85, CELL * 0.5),
+      new THREE.MeshStandardMaterial({ color: 0x556677, roughness: 0.8 })
+    );
+  }
+  mesh.position.copy(gridToWorld(row, col));
+  scene.add(mesh);
+  return { type: '__wall', mesh, row, col, isWall: true };
+}
+
+function createTile(type, row, col, opts = {}) {
   const mesh = createTileMesh(type);
   mesh.position.copy(gridToWorld(row, col));
   scene.add(mesh);
-  return { type, mesh, row, col };
+  const tile = { type, mesh, row, col, frozen: false, iceLayer: 0, isWall: false, frozenMesh: null };
+  if (opts.frozen) {
+    tile.frozen = true;
+    addFrozenOverlay(tile);
+  }
+  if (opts.iceLayer) {
+    tile.iceLayer = opts.iceLayer;
+    tile.frozen = true;
+    addFrozenOverlay(tile);
+  }
+  return tile;
 }
 
 function initBoard() {
   board = [];
+  // Fill grid with random tiles avoiding initial matches
   for (let r = 0; r < GRID; r++) {
     board[r] = [];
     for (let c = 0; c < GRID; c++) {
@@ -276,6 +381,43 @@ function initBoard() {
       board[r][c] = createTile(type, r, c);
     }
   }
+
+  // Place blockers from level config
+  for (const blocker of CONFIG.blockers) {
+    const positions = getRandomEmptyCells(blocker.count || 0);
+    for (const [r, c] of positions) {
+      if (blocker.type === 'wall') {
+        // Remove existing tile and place wall
+        if (board[r][c]?.mesh) scene.remove(board[r][c].mesh);
+        board[r][c] = createWall(r, c);
+      } else if (blocker.type === 'frozen') {
+        // Freeze existing tile
+        board[r][c].frozen = true;
+        addFrozenOverlay(board[r][c]);
+      } else if (blocker.type === 'ice') {
+        // Layered ice — frozen with layers
+        board[r][c].frozen = true;
+        board[r][c].iceLayer = blocker.layers || 1;
+        addFrozenOverlay(board[r][c]);
+      }
+    }
+  }
+}
+
+function getRandomEmptyCells(count) {
+  const available = [];
+  // Avoid edges for blockers — keep them interior for better gameplay
+  const margin = 1;
+  for (let r = margin; r < GRID - margin; r++)
+    for (let c = margin; c < GRID - margin; c++)
+      if (board[r][c] && !board[r][c].isWall && !board[r][c].frozen)
+        available.push([r, c]);
+  // Shuffle and take count
+  for (let i = available.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [available[i], available[j]] = [available[j], available[i]];
+  }
+  return available.slice(0, Math.min(count, available.length));
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -283,19 +425,22 @@ function initBoard() {
 // ═══════════════════════════════════════════════════════════════
 function findMatches() {
   const matched = new Set();
+  const canMatch = (r, c) => board[r]?.[c] && !board[r][c].isWall && !board[r][c].frozen;
   for (let r = 0; r < GRID; r++) for (let c = 0; c < GRID - 2; c++) {
-    const t = board[r][c]?.type;
-    if (t && board[r][c+1]?.type === t && board[r][c+2]?.type === t) {
+    if (!canMatch(r, c)) continue;
+    const t = board[r][c].type;
+    if (canMatch(r, c+1) && board[r][c+1].type === t && canMatch(r, c+2) && board[r][c+2].type === t) {
       let e = c + 2;
-      while (e + 1 < GRID && board[r][e+1]?.type === t) e++;
+      while (e + 1 < GRID && canMatch(r, e+1) && board[r][e+1].type === t) e++;
       for (let i = c; i <= e; i++) matched.add(`${r},${i}`);
     }
   }
   for (let c = 0; c < GRID; c++) for (let r = 0; r < GRID - 2; r++) {
-    const t = board[r][c]?.type;
-    if (t && board[r+1]?.[c]?.type === t && board[r+2]?.[c]?.type === t) {
+    if (!canMatch(r, c)) continue;
+    const t = board[r][c].type;
+    if (canMatch(r+1, c) && board[r+1][c].type === t && canMatch(r+2, c) && board[r+2][c].type === t) {
       let e = r + 2;
-      while (e + 1 < GRID && board[e+1]?.[c]?.type === t) e++;
+      while (e + 1 < GRID && canMatch(e+1, c) && board[e+1][c].type === t) e++;
       for (let i = r; i <= e; i++) matched.add(`${i},${c}`);
     }
   }
@@ -395,6 +540,8 @@ async function swapTiles(r1, c1, r2, c2) {
 async function removeMatches(matched) {
   const cols = { ice: 0x4fc3f7, popsicle: 0x7cb342, fish: 0xff7043, frostice: 0xe0f0ff, shrimp: 0xff5544, crab: 0xff8844 };
   const ps = [];
+  const unfrozen = new Set();
+
   for (const k of matched) {
     const [r, c] = k.split(',').map(Number);
     if (board[r][c]) {
@@ -402,9 +549,29 @@ async function removeMatches(matched) {
       particles(board[r][c].mesh.position.clone(), cols[tileType] || 0xfff);
       ps.push(animDestroy(board[r][c].mesh));
 
-      // Track for objectives
       tilesCleared[tileType] = (tilesCleared[tileType] || 0) + 1;
       totalTilesCleared++;
+
+      // Check adjacent cells for frozen tiles to unfreeze
+      for (const [dr, dc] of [[0,1],[0,-1],[1,0],[-1,0]]) {
+        const nr = r + dr, nc = c + dc;
+        const adj = board[nr]?.[nc];
+        if (adj && adj.frozen && !unfrozen.has(`${nr},${nc}`)) {
+          unfrozen.add(`${nr},${nc}`);
+          if (adj.iceLayer > 1) {
+            adj.iceLayer--;
+            // Visual feedback — shake the frozen tile
+            ps.push(animShake(adj.mesh, 200));
+            particles(adj.mesh.position.clone(), 0x88ccff);
+          } else {
+            removeFrozenOverlay(adj);
+            adj.iceLayer = 0;
+            particles(adj.mesh.position.clone(), 0xaaeeff);
+            blockersDestroyed['frozen'] = (blockersDestroyed['frozen'] || 0) + 1;
+            blockersDestroyed['ice'] = (blockersDestroyed['ice'] || 0) + 1;
+          }
+        }
+      }
 
       board[r][c] = null;
     }
@@ -416,15 +583,20 @@ async function dropTiles() {
   const ps = [];
   for (let c = 0; c < GRID; c++) {
     let wr = GRID - 1;
-    for (let r = GRID - 1; r >= 0; r--) if (board[r][c]) {
+    for (let r = GRID - 1; r >= 0; r--) {
+      const tile = board[r][c];
+      if (!tile) continue;
+      if (tile.isWall) { wr = r - 1; continue; } // Walls stay put, skip over
       if (r !== wr) {
-        board[wr][c] = board[r][c]; board[r][c] = null;
-        board[wr][c].row = wr;
-        ps.push(animMove(board[wr][c].mesh, gridToWorld(wr, c), 300));
+        board[wr][c] = tile; board[r][c] = null;
+        tile.row = wr;
+        ps.push(animMove(tile.mesh, gridToWorld(wr, c), 300));
       }
       wr--;
     }
+    // Fill empty cells above (skip wall rows)
     for (let r = wr; r >= 0; r--) {
+      if (board[r][c]?.isWall) continue;
       const t = randomType(), tile = createTile(t, r, c);
       board[r][c] = tile;
       ps.push(animSpawn(tile.mesh, gridToWorld(r, c), 450));
@@ -504,6 +676,263 @@ async function handleSwap(r1, c1, r2, c2) {
 const delay = ms => new Promise(r => setTimeout(r, ms));
 
 // ═══════════════════════════════════════════════════════════════
+//  BOOSTERS
+// ═══════════════════════════════════════════════════════════════
+async function useBoosterRow(row) {
+  if (animating) return;
+  animating = true;
+  const ps = [];
+  for (let c = 0; c < GRID; c++) {
+    const tile = board[row][c];
+    if (!tile || tile.isWall) continue;
+    if (tile.frozen) { removeFrozenOverlay(tile); tile.iceLayer = 0; continue; }
+    particles(tile.mesh.position.clone(), 0x00bfff);
+    ps.push(animDestroy(tile.mesh));
+    tilesCleared[tile.type] = (tilesCleared[tile.type] || 0) + 1;
+    totalTilesCleared++;
+    board[row][c] = null;
+  }
+  await Promise.all(ps);
+  await delay(100);
+  await dropTiles();
+  await processMatches();
+  animating = false;
+}
+
+async function useBoosterCol(col) {
+  if (animating) return;
+  animating = true;
+  const ps = [];
+  for (let r = 0; r < GRID; r++) {
+    const tile = board[r][col];
+    if (!tile || tile.isWall) continue;
+    if (tile.frozen) { removeFrozenOverlay(tile); tile.iceLayer = 0; continue; }
+    particles(tile.mesh.position.clone(), 0x00ced1);
+    ps.push(animDestroy(tile.mesh));
+    tilesCleared[tile.type] = (tilesCleared[tile.type] || 0) + 1;
+    totalTilesCleared++;
+    board[r][col] = null;
+  }
+  await Promise.all(ps);
+  await delay(100);
+  await dropTiles();
+  await processMatches();
+  animating = false;
+}
+
+async function useBoosterHammer(row, col) {
+  if (animating) return;
+  const tile = board[row][col];
+  if (!tile || tile.isWall) return;
+  animating = true;
+  if (tile.frozen) {
+    removeFrozenOverlay(tile);
+    tile.iceLayer = 0;
+    particles(tile.mesh.position.clone(), 0xaaeeff);
+  } else {
+    particles(tile.mesh.position.clone(), 0xffb800);
+    await animDestroy(tile.mesh);
+    tilesCleared[tile.type] = (tilesCleared[tile.type] || 0) + 1;
+    totalTilesCleared++;
+    board[row][col] = null;
+    await delay(100);
+    await dropTiles();
+    await processMatches();
+  }
+  animating = false;
+}
+
+async function useBoosterColorBomb(row, col) {
+  if (animating) return;
+  const tile = board[row][col];
+  if (!tile || tile.isWall || tile.frozen) return;
+  animating = true;
+  const targetType = tile.type;
+  const ps = [];
+  for (let r = 0; r < GRID; r++) for (let c = 0; c < GRID; c++) {
+    const t = board[r][c];
+    if (!t || t.isWall || t.frozen || t.type !== targetType) continue;
+    particles(t.mesh.position.clone(), 0xff66aa);
+    ps.push(animDestroy(t.mesh));
+    tilesCleared[t.type] = (tilesCleared[t.type] || 0) + 1;
+    totalTilesCleared++;
+    board[r][c] = null;
+  }
+  await Promise.all(ps);
+  await delay(100);
+  await dropTiles();
+  await processMatches();
+  animating = false;
+}
+
+async function useBoosterShuffle() {
+  if (animating) return;
+  animating = true;
+  // Collect non-wall, non-frozen tile types
+  const positions = [];
+  for (let r = 0; r < GRID; r++) for (let c = 0; c < GRID; c++) {
+    const t = board[r][c];
+    if (t && !t.isWall && !t.frozen) positions.push([r, c]);
+  }
+  // Remove all
+  for (const [r, c] of positions) {
+    scene.remove(board[r][c].mesh);
+    board[r][c] = null;
+  }
+  // Refill avoiding matches
+  for (const [r, c] of positions) {
+    let type;
+    do { type = randomType(); } while (
+      (c >= 2 && board[r][c-1]?.type === type && board[r][c-2]?.type === type) ||
+      (r >= 2 && board[r-1]?.[c]?.type === type && board[r-2]?.[c]?.type === type)
+    );
+    board[r][c] = createTile(type, r, c);
+  }
+  await delay(300);
+  animating = false;
+}
+
+function consumeBooster(type) {
+  boosterCharges[type]--;
+  updateBoosterUI();
+  if (boosterCharges[type] <= 0) activeBooster = null;
+}
+
+function updateBoosterUI() {
+  document.querySelectorAll('.booster-slot').forEach(btn => {
+    const type = btn.dataset.booster;
+    if (!CONFIG.boosters.includes(type)) return;
+    const charges = boosterCharges[type] || 0;
+    btn.classList.toggle('booster-slot--empty', charges <= 0);
+    btn.classList.toggle('booster-slot--active', type === activeBooster);
+    const badge = btn.querySelector('.booster-slot-count');
+    if (badge) badge.textContent = charges;
+  });
+}
+
+async function renderGLBIcon(glbPath, size = 128) {
+  try {
+    const offCanvas = document.createElement('canvas');
+    offCanvas.width = size;
+    offCanvas.height = size;
+    const pr = new THREE.WebGLRenderer({ canvas: offCanvas, antialias: true, alpha: true });
+    pr.setSize(size, size);
+    pr.setClearColor(0x000000, 0);
+    pr.toneMapping = THREE.ACESFilmicToneMapping;
+    pr.toneMappingExposure = 1.6;
+
+    const ps = new THREE.Scene();
+    ps.add(new THREE.AmbientLight(0xffffff, 1.8));
+    const dl = new THREE.DirectionalLight(0xffffff, 1.4);
+    dl.position.set(2, 3, 8);
+    ps.add(dl);
+
+    const model = await loadGLB(glbPath);
+
+    // Auto-rotate to best facing
+    const rots = [[0,0,0], [-Math.PI/2,0,0], [0,-Math.PI/2,0]];
+    let best = rots[0], bestArea = 0;
+    for (const r of rots) {
+      model.rotation.set(r[0], r[1], r[2]);
+      const b = new THREE.Box3().setFromObject(model);
+      const s = new THREE.Vector3(); b.getSize(s);
+      if (s.x * s.y > bestArea) { bestArea = s.x * s.y; best = r; }
+    }
+    model.rotation.set(best[0], best[1], best[2]);
+
+    const box = new THREE.Box3().setFromObject(model);
+    const sz = new THREE.Vector3(); box.getSize(sz);
+    model.scale.multiplyScalar(3.5 / Math.max(sz.x, sz.y, sz.z));
+    const nb = new THREE.Box3().setFromObject(model);
+    const ct = new THREE.Vector3(); nb.getCenter(ct);
+    model.position.sub(ct);
+    ps.add(model);
+
+    const finalBox = new THREE.Box3().setFromObject(model);
+    const finalSz = new THREE.Vector3(); finalBox.getSize(finalSz);
+    const pad = 1.15;
+    const halfW = finalSz.x * pad / 2;
+    const halfH = finalSz.y * pad / 2;
+    const camH = Math.max(halfH, halfW);
+    const pc = new THREE.OrthographicCamera(-camH, camH, camH, -camH, 0.1, 100);
+    pc.position.set(0, 0, 15);
+    pc.lookAt(0, 0, 0);
+    pr.render(ps, pc);
+
+    const dataUrl = offCanvas.toDataURL();
+    pr.dispose();
+    return dataUrl;
+  } catch (e) {
+    console.warn('Booster icon render failed:', glbPath, e);
+    return null;
+  }
+}
+
+const BOOSTER_GLB = {
+  row:       '/assets/boosters/row-clear.glb',
+  col:       '/assets/boosters/col-clear.glb',
+  colorBomb: '/assets/boosters/color-bomb.glb',
+  hammer:    '/assets/boosters/hammer.glb',
+  shuffle:   '/assets/boosters/shuffle.glb',
+};
+
+const ALL_BOOSTERS = ['row', 'col', 'colorBomb', 'hammer', 'shuffle'];
+
+function setupBoosterUI() {
+  const bar = document.getElementById('boosterBar');
+  if (!bar) return;
+
+  const tray = document.createElement('img');
+  tray.className = 'booster-tray-bg';
+  tray.src = '/assets/ui/booster-tray.png';
+  tray.draggable = false;
+  bar.appendChild(tray);
+
+  const slotsEl = document.createElement('div');
+  slotsEl.className = 'booster-slots';
+  bar.appendChild(slotsEl);
+
+  for (const type of ALL_BOOSTERS) {
+    const isAvailable = CONFIG.boosters.includes(type);
+    const btn = document.createElement('button');
+    btn.className = 'booster-slot';
+    btn.dataset.booster = type;
+
+    if (!isAvailable) {
+      btn.classList.add('booster-slot--locked');
+      btn.innerHTML = '<div class="booster-slot-icon"></div>';
+      slotsEl.appendChild(btn);
+      continue;
+    }
+
+    btn.innerHTML = `<div class="booster-slot-icon"><div class="booster-slot-spinner"></div></div><span class="booster-slot-count">${boosterCharges[type] || 0}</span>`;
+
+    const iconWrap = btn.querySelector('.booster-slot-icon');
+    renderGLBIcon(BOOSTER_GLB[type], 128).then(dataUrl => {
+      if (dataUrl) iconWrap.innerHTML = `<img src="${dataUrl}" alt="${type}" />`;
+    });
+
+    btn.addEventListener('click', () => {
+      if ((boosterCharges[type] || 0) <= 0) return;
+      if (activeBooster === type) {
+        activeBooster = null;
+      } else {
+        activeBooster = type;
+      }
+      if (type === 'shuffle' && activeBooster === 'shuffle') {
+        activeBooster = null;
+        consumeBooster('shuffle');
+        useBoosterShuffle();
+        return;
+      }
+      updateBoosterUI();
+    });
+    slotsEl.appendChild(btn);
+  }
+  updateBoosterUI();
+}
+
+// ═══════════════════════════════════════════════════════════════
 //  INPUT
 // ═══════════════════════════════════════════════════════════════
 const raycaster = new THREE.Raycaster(), mouse = new THREE.Vector2();
@@ -537,17 +966,45 @@ canvas.addEventListener('click', e => {
   if (animating || moves <= 0) return;
   const cl = getClicked(e);
   if (!cl) return;
+
+  // Booster mode — click applies the booster
+  if (activeBooster) {
+    const bType = activeBooster;
+    activeBooster = null;
+    updateBoosterUI();
+    consumeBooster(bType);
+    if (bType === 'row') useBoosterRow(cl.row);
+    else if (bType === 'col') useBoosterCol(cl.col);
+    else if (bType === 'hammer') useBoosterHammer(cl.row, cl.col);
+    else if (bType === 'colorBomb') useBoosterColorBomb(cl.row, cl.col);
+    selRing.visible = false;
+    selected = null;
+    return;
+  }
+
+  // Normal match-3 mode
+  const tileAt = (r, c) => board[r]?.[c];
+  const blocked = (r, c) => { const t = tileAt(r, c); return !t || t.isWall || t.frozen; };
+
   if (!selected) {
+    if (blocked(cl.row, cl.col)) return;
     selected = cl;
     const p = gridToWorld(cl.row, cl.col);
     selRing.position.set(p.x, p.y, 0.6); selRing.visible = true;
   } else if (selected.row === cl.row && selected.col === cl.col) {
     selected = null; selRing.visible = false;
   } else if (Math.abs(selected.row - cl.row) + Math.abs(selected.col - cl.col) === 1) {
+    if (blocked(cl.row, cl.col) || blocked(selected.row, selected.col)) {
+      const reason = tileAt(cl.row, cl.col)?.isWall || tileAt(selected.row, selected.col)?.isWall ? 'Can\'t move walls!' : 'Tile is frozen!';
+      showMsg(reason, 500);
+      selected = null; selRing.visible = false;
+      return;
+    }
     selRing.visible = false;
     handleSwap(selected.row, selected.col, cl.row, cl.col);
     selected = null;
   } else {
+    if (blocked(cl.row, cl.col)) return;
     selected = cl;
     const p = gridToWorld(cl.row, cl.col);
     selRing.position.set(p.x, p.y, 0.6);
@@ -736,6 +1193,7 @@ async function init() {
   await loadHUDPanel('movesCanvas', '/assets/hud/moves-panel.glb');
 
   updateHUD();
+  setupBoosterUI();
   initBoard();
   animate();
   console.log('🐧 PenguCrush ready!');
