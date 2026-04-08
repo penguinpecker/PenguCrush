@@ -1,7 +1,10 @@
+import { getLevel, getLevelCount } from './levels.js';
+
 const IMG_W = 2000, IMG_H = 1116;
 const IMG_RATIO = IMG_W / IMG_H;
 
-const LEVELS = [
+// Map node positions + player progress (will come from chain/localStorage later)
+const MAP_NODES = [
   { id: 1,  x: 11.8, y: 85.9, stars: 2, best: 4200, status: 'completed' },
   { id: 2,  x: 20.3, y: 82.9, stars: 3, best: 5100, status: 'completed' },
   { id: 3,  x: 28.7, y: 79.7, stars: 0, best: 0,    status: 'current'   },
@@ -22,12 +25,7 @@ const LEVELS = [
   { id: 18, x: 74.5, y: 49.4, stars: 0, best: 0,    status: 'locked'    },
   { id: 19, x: 69.3, y: 42.4, stars: 0, best: 0,    status: 'locked'    },
   { id: 20, x: 73.2, y: 34.4, stars: 0, best: 0,    status: 'locked'    },
-  { id: 21, x: 80.7, y: 31.9, stars: 0, best: 0,    status: 'locked'    },
-  { id: 22, x: 87.7, y: 30.7, stars: 0, best: 0,    status: 'locked'    },
 ];
-
-function getTargetScore(lv) { return 3000 + (lv - 1) * 500; }
-function getMoves(lv) { return Math.max(20, 35 - lv); }
 
 export function initMap() {
   const stage = document.getElementById('mapStage');
@@ -43,7 +41,7 @@ export function initMap() {
   resizeStage();
   window.addEventListener('resize', resizeStage);
 
-  LEVELS.forEach(lv => {
+  MAP_NODES.forEach(lv => {
     const node = document.createElement('button');
     node.className = 'level-node ' + lv.status;
     node.style.left = lv.x + '%';
@@ -98,12 +96,13 @@ export function initMap() {
 
   function openPopup(lv) {
     currentPopupLevel = lv;
+    const cfg = getLevel(lv.id);
     document.getElementById('popupLevelNum').textContent = lv.id;
     document.querySelectorAll('.pop-star').forEach((img, i) => {
       img.src = i < lv.stars ? '/assets/ui/star-gold.png' : '/assets/ui/star-empty.png';
     });
-    document.getElementById('popupTarget').textContent = getTargetScore(lv.id).toLocaleString();
-    document.getElementById('popupMoves').textContent = getMoves(lv.id);
+    document.getElementById('popupTarget').textContent = cfg.targetScore.toLocaleString();
+    document.getElementById('popupMoves').textContent = cfg.moves;
     document.getElementById('popupBest').textContent = lv.best > 0 ? lv.best.toLocaleString() : '\u2014';
     overlay.classList.add('active');
   }

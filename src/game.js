@@ -1,29 +1,61 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { getLevel } from './levels.js';
 
 // ═══════════════════════════════════════════════════════════════
-//  CONFIG
+//  LEVEL CONFIG — driven by ?level=N URL param
 // ═══════════════════════════════════════════════════════════════
-const GRID = 8;
+const levelNum = parseInt(new URLSearchParams(window.location.search).get('level')) || 1;
+const CONFIG = getLevel(levelNum);
+
+const GRID = CONFIG.grid;
 const CELL = 1.2;
-const MAX_MOVES = 30;
-const TYPES = ['ice', 'popsicle', 'fish', 'frostice'];
+const TILE_TYPES = CONFIG.tiles;
 
-const GLB_PATHS = {
+// All known GLB paths — only the ones needed for this level get loaded
+const ALL_GLB_PATHS = {
   ice:       '/assets/tiles/shells/ice-crystal.glb',
-  popsicle:  '/assets/tiles/inners/popsicle.glb',
-  fish:      '/assets/tiles/inners/fish.glb',
   frostice:  '/assets/tiles/shells/frosted-ice.glb',
+  fish:      '/assets/tiles/inners/fish.glb',
+  popsicle:  '/assets/tiles/inners/popsicle.glb',
+  shrimp:    '/assets/tiles/inners/shrimp.glb',
+  crab:      '/assets/tiles/inners/snow-crab.glb',
 };
+
+// Only load GLBs needed for this level's tile set + ice shell for inners
+const GLB_PATHS = {};
+for (const t of TILE_TYPES) {
+  if (ALL_GLB_PATHS[t]) GLB_PATHS[t] = ALL_GLB_PATHS[t];
+}
+// Always load ice shell — needed for fish/popsicle/shrimp/crab composites
+if (!GLB_PATHS['ice']) GLB_PATHS['ice'] = ALL_GLB_PATHS['ice'];
+
+// Inner tile types that render inside an ice crystal shell
+const INNER_TYPES = new Set(['fish', 'popsicle', 'shrimp', 'crab']);
 
 const TYPE_FIX = {
   ice:       { rx: 0, ry: 0, rz: 0, scale: 0.85 },
   popsicle:  { rx: Math.PI/2, ry: Math.PI*5/4, rz: 0, scale: 0.70 },
   fish:      { rx: 0, ry: Math.PI/2, rz: 0, scale: 0.55 },
   frostice:  { rx: 0, ry: 0, rz: 0, scale: 0.85 },
+  shrimp:    { rx: 0, ry: Math.PI/2, rz: 0, scale: 0.60 },
+  crab:      { rx: 0, ry: 0, rz: 0, scale: 0.60 },
 };
 
-let board = [], selected = null, animating = false, score = 0, moves = MAX_MOVES, combo = 0;
+let board = [], selected = null, animating = false, score = 0, moves = CONFIG.moves, combo = 0;
+
+// Objective tracking
+const objective = { ...CONFIG.objective };
+let tilesCleared = {};
+let blockersDestroyed = {};
+let totalTilesCleared = 0;
+
+// Set background based on era
+if (CONFIG.bg) {
+  document.body.style.background = `url('${CONFIG.bg}') center/cover no-repeat fixed`;
+}
+
+console.log(`🐧 Level ${levelNum} | Era ${CONFIG.era} | ${GRID}x${GRID} | ${CONFIG.moves} moves | Tiles: ${TILE_TYPES.join(', ')}`);
 
 // ═══════════════════════════════════════════════════════════════
 //  THREE.JS SETUP — transparent canvas so BG shows through
@@ -187,15 +219,11 @@ function createInsideIceTile(innerType) {
 }
 
 function createTileMesh(type) {
-  // Fish inside ice
-  if (type === 'fish' && glbCache['fish'] && glbCache['ice']) {
-    return createInsideIceTile('fish');
+  // Inner types render inside a transparent ice shell
+  if (INNER_TYPES.has(type) && glbCache[type] && glbCache['ice']) {
+    return createInsideIceTile(type);
   }
-  // Popsicle inside ice
-  if (type === 'popsicle' && glbCache['popsicle'] && glbCache['ice']) {
-    return createInsideIceTile('popsicle');
-  }
-  // Ice crystal — standalone
+  // Shell types — standalone
   if (glbCache[type]) {
     const clone = glbCache[type].clone();
     clone.traverse(ch => {
@@ -226,7 +254,7 @@ function createTileMesh(type) {
 // ═══════════════════════════════════════════════════════════════
 //  BOARD
 // ═══════════════════════════════════════════════════════════════
-function randomType() { return TYPES[Math.floor(Math.random() * TYPES.length)]; }
+function randomType() { return TILE_TYPES[Math.floor(Math.random() * TILE_TYPES.length)]; }
 
 function createTile(type, row, col) {
   const mesh = createTileMesh(type);
@@ -365,13 +393,19 @@ async function swapTiles(r1, c1, r2, c2) {
 }
 
 async function removeMatches(matched) {
-  const cols = { ice: 0x4fc3f7, popsicle: 0x7cb342, fish: 0xff7043, frostice: 0xe0f0ff };
+  const cols = { ice: 0x4fc3f7, popsicle: 0x7cb342, fish: 0xff7043, frostice: 0xe0f0ff, shrimp: 0xff5544, crab: 0xff8844 };
   const ps = [];
   for (const k of matched) {
     const [r, c] = k.split(',').map(Number);
     if (board[r][c]) {
-      particles(board[r][c].mesh.position.clone(), cols[board[r][c].type] || 0xfff);
+      const tileType = board[r][c].type;
+      particles(board[r][c].mesh.position.clone(), cols[tileType] || 0xfff);
       ps.push(animDestroy(board[r][c].mesh));
+
+      // Track for objectives
+      tilesCleared[tileType] = (tilesCleared[tileType] || 0) + 1;
+      totalTilesCleared++;
+
       board[r][c] = null;
     }
   }
@@ -413,6 +447,38 @@ async function processMatches() {
   combo = 0; updateHUD();
 }
 
+function checkObjective() {
+  const obj = CONFIG.objective;
+  switch (obj.type) {
+    case 'score':
+      return score >= obj.target;
+    case 'clearTile':
+      if (obj.tileType === 'any') return totalTilesCleared >= obj.count;
+      return (tilesCleared[obj.tileType] || 0) >= obj.count;
+    case 'breakBlocker':
+      return (blockersDestroyed[obj.blockerType] || 0) >= obj.count;
+    case 'breakAll':
+      // Check no blockers remain on board (placeholder — blockers not placed yet)
+      return score >= CONFIG.targetScore;
+    case 'clearPercent': {
+      const total = GRID * GRID;
+      return totalTilesCleared >= Math.ceil(total * obj.percent / 100);
+    }
+    case 'combo':
+      return score >= obj.scoreTarget;
+    default:
+      return score >= CONFIG.targetScore;
+  }
+}
+
+function getStars() {
+  const [s1, s2, s3] = CONFIG.stars;
+  if (score >= s3) return 3;
+  if (score >= s2) return 2;
+  if (score >= s1) return 1;
+  return 0;
+}
+
 async function handleSwap(r1, c1, r2, c2) {
   if (animating) return; animating = true;
   await swapTiles(r1, c1, r2, c2);
@@ -422,7 +488,15 @@ async function handleSwap(r1, c1, r2, c2) {
     showMsg('No match!', 500);
   } else {
     moves--; updateHUD(); await processMatches();
-    if (moves <= 0) showMsg(`Game Over! Score: ${score}`, 4000);
+
+    if (checkObjective()) {
+      const stars = getStars();
+      const starStr = '⭐'.repeat(stars) + '☆'.repeat(3 - stars);
+      showMsg(`Level ${levelNum} Complete!<br>${starStr}<br>Score: ${score}`, 4000);
+      // TODO: submit to chain, update map progress
+    } else if (moves <= 0) {
+      showMsg(`Out of moves!<br>Score: ${score}`, 4000);
+    }
   }
   animating = false;
 }
