@@ -15,12 +15,10 @@ function showScreen(id) {
 
 window.__pengu = {
   goToMap() {
-    history.pushState(null, '', '/');
-    boot();
+    window.location.href = '/';
   },
   goToLevel(lvl) {
-    history.pushState(null, '', '/?level=' + lvl);
-    boot();
+    window.location.href = '/?level=' + lvl;
   },
 };
 
