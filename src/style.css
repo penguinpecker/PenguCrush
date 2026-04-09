@@ -303,3 +303,175 @@ body[data-screen="game"] {
 .booster-slot-label {
   display: none;
 }
+
+/* ═══ Level Complete / Fail Popup ═══ */
+.level-popup-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 12, 24, 0.6);
+  backdrop-filter: blur(6px);
+}
+
+.level-popup-overlay.active {
+  display: flex;
+}
+
+.level-popup {
+  position: relative;
+  width: min(600px, 92vw);
+  animation: popup-scale-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes popup-scale-in {
+  0% { transform: scale(0.6); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.level-popup-bg {
+  display: block;
+  width: 100%;
+  height: auto;
+  pointer-events: none;
+  filter: drop-shadow(0 12px 40px rgba(0, 0, 0, 0.4));
+}
+
+.level-popup-content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* Level number — positioned inside the gold ring on the left */
+.level-popup-title {
+  position: absolute;
+  top: 42%;
+  left: 15%;
+  transform: translate(-50%, -50%);
+  font-family: 'Fredoka', sans-serif;
+  font-size: clamp(11px, 2vw, 18px);
+  font-weight: 800;
+  color: #1a5a7a;
+  text-shadow: 0 1px 2px rgba(255,255,255,0.5);
+  text-align: center;
+  line-height: 1.1;
+}
+
+.level-popup-title.fail {
+  color: #cc4444;
+}
+
+/* Stars — positioned over the star outlines in the artwork */
+.level-popup-stars {
+  position: absolute;
+  top: 28%;
+  left: 55%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  gap: clamp(4px, 1.5vw, 10px);
+}
+
+.level-popup-stars img {
+  width: clamp(28px, 5vw, 44px);
+  height: auto;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
+}
+
+.level-popup-stars img.earned {
+  animation: star-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes star-pop {
+  0% { transform: scale(0) rotate(-30deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+
+.level-popup-stars img:nth-child(2).earned { animation-delay: 0.15s; }
+.level-popup-stars img:nth-child(3).earned { animation-delay: 0.3s; }
+
+/* Score — positioned over the frosted white panel */
+.level-popup-score {
+  position: absolute;
+  top: 52%;
+  left: 55%;
+  transform: translate(-50%, -50%);
+  font-family: 'Fredoka', sans-serif;
+  font-size: clamp(16px, 3vw, 26px);
+  font-weight: 800;
+  color: #0a3a5a;
+  text-align: center;
+}
+
+.level-popup-objective {
+  position: absolute;
+  top: 64%;
+  left: 55%;
+  transform: translate(-50%, -50%);
+  font-family: 'Fredoka', sans-serif;
+  font-size: clamp(10px, 1.6vw, 14px);
+  font-weight: 600;
+  color: #4a8aaa;
+  text-align: center;
+}
+
+/* Buttons — positioned over the 3 pill buttons at bottom */
+.level-popup-buttons {
+  position: absolute;
+  bottom: 7%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: clamp(4px, 1.5vw, 12px);
+  width: 88%;
+  justify-content: center;
+}
+
+.level-popup-btn {
+  font-family: 'Fredoka', sans-serif;
+  font-size: clamp(11px, 1.8vw, 16px);
+  font-weight: 800;
+  padding: clamp(5px, 1vw, 9px) clamp(10px, 2.2vw, 22px);
+  border-radius: 20px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  letter-spacing: 0.5px;
+  background: transparent;
+  color: #fff;
+}
+
+.level-popup-btn:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.1);
+}
+
+.level-popup-btn--map {
+  background: linear-gradient(180deg, #c4a0e0, #a07cc8);
+  color: #fff;
+  box-shadow: 0 3px 0 #8a66b0;
+}
+
+.level-popup-btn--replay {
+  background: linear-gradient(180deg, #ffd966, #f0b830);
+  color: #7a5500;
+  box-shadow: 0 3px 0 #d4a020;
+}
+
+.level-popup-btn--next {
+  background: linear-gradient(180deg, #5ce0e6, #30c0d0);
+  color: #fff;
+  box-shadow: 0 3px 0 #20a0b0;
+}
+
+.level-popup-btn:active {
+  transform: translateY(1px);
+}
+
+.level-popup-btn--next.hidden {
+  display: none;
+}

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { getLevel } from './levels.js';
+import { getWallet, ensureWallet, saveLevelResult } from './supabase.js';
 
 // ═══════════════════════════════════════════════════════════════
 //  LEVEL CONFIG — driven by ?level=N URL param
@@ -56,12 +57,21 @@ const TYPE_FIX = {
 };
 
 let board = [], selected = null, animating = false, score = 0, moves = CONFIG.moves, combo = 0;
+let gameOver = false;
 
 // Objective tracking
 const objective = { ...CONFIG.objective };
 let tilesCleared = {};
 let blockersDestroyed = {};
 let totalTilesCleared = 0;
+
+// Game timing
+const gameStartTime = performance.now();
+
+// Falling blocker tracking
+let turnCount = 0;
+const fallerConfig = CONFIG.blockers.find(b => b.type === 'faller');
+let fallerDropsPenalized = 0;
 
 // Set background based on era
 if (CONFIG.bg) {
@@ -425,7 +435,7 @@ function getRandomEmptyCells(count) {
 // ═══════════════════════════════════════════════════════════════
 function findMatches() {
   const matched = new Set();
-  const canMatch = (r, c) => board[r]?.[c] && !board[r][c].isWall && !board[r][c].frozen;
+  const canMatch = (r, c) => board[r]?.[c] && !board[r][c].isWall && !board[r][c].frozen && !board[r][c].isFaller;
   for (let r = 0; r < GRID; r++) for (let c = 0; c < GRID - 2; c++) {
     if (!canMatch(r, c)) continue;
     const t = board[r][c].type;
@@ -587,6 +597,7 @@ async function dropTiles() {
       const tile = board[r][c];
       if (!tile) continue;
       if (tile.isWall) { wr = r - 1; continue; } // Walls stay put, skip over
+      if (tile.isFaller) { wr = r - 1; continue; } // Fallers stay put during match cascades
       if (r !== wr) {
         board[wr][c] = tile; board[r][c] = null;
         tile.row = wr;
@@ -596,7 +607,7 @@ async function dropTiles() {
     }
     // Fill empty cells above (skip wall rows)
     for (let r = wr; r >= 0; r--) {
-      if (board[r][c]?.isWall) continue;
+      if (board[r][c]?.isWall || board[r][c]?.isFaller) continue;
       const t = randomType(), tile = createTile(t, r, c);
       board[r][c] = tile;
       ps.push(animSpawn(tile.mesh, gridToWorld(r, c), 450));
@@ -617,6 +628,113 @@ async function processMatches() {
     m = findMatches();
   }
   combo = 0; updateHUD();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  FALLING BLOCKERS
+// ═══════════════════════════════════════════════════════════════
+function createFallerMesh() {
+  if (blockerGlbCache['faller']) {
+    const clone = blockerGlbCache['faller'].clone();
+    clone.traverse(ch => {
+      if (ch.isMesh && ch.material) ch.material = ch.material.clone();
+    });
+    const box = new THREE.Box3().setFromObject(clone);
+    const sz = new THREE.Vector3(); box.getSize(sz);
+    const maxDim = Math.max(sz.x, sz.y, sz.z);
+    if (maxDim > 0) clone.scale.multiplyScalar((CELL * 0.75) / maxDim);
+    const nb = new THREE.Box3().setFromObject(clone);
+    const ct = new THREE.Vector3(); nb.getCenter(ct);
+    const wrapper = new THREE.Group();
+    clone.position.sub(ct);
+    wrapper.add(clone);
+    return wrapper;
+  }
+  // Fallback: cyan icicle shape
+  const geo = new THREE.ConeGeometry(CELL * 0.25, CELL * 0.7, 6);
+  const mat = new THREE.MeshStandardMaterial({ color: 0x88ccff, roughness: 0.15, metalness: 0.1 });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.rotation.x = Math.PI; // point down
+  return mesh;
+}
+
+function spawnFaller() {
+  // Pick a random column that has an empty or swappable tile in row 0
+  const candidates = [];
+  for (let c = 0; c < GRID; c++) {
+    if (!board[0][c] || (!board[0][c].isWall && !board[0][c].isFaller)) candidates.push(c);
+  }
+  if (candidates.length === 0) return;
+  const col = candidates[Math.floor(Math.random() * candidates.length)];
+
+  // Remove existing tile at row 0 if present
+  if (board[0][col] && !board[0][col].isWall) {
+    scene.remove(board[0][col].mesh);
+    board[0][col] = null;
+  }
+
+  const mesh = createFallerMesh();
+  mesh.position.copy(gridToWorld(0, col));
+  scene.add(mesh);
+  board[0][col] = { type: '__faller', mesh, row: 0, col, isWall: false, isFaller: true, frozen: false };
+}
+
+async function dropFallers() {
+  const ps = [];
+  // Process from bottom to top so fallers don't collide
+  for (let c = 0; c < GRID; c++) {
+    for (let r = GRID - 1; r >= 0; r--) {
+      const tile = board[r][c];
+      if (!tile || !tile.isFaller) continue;
+
+      if (r === GRID - 1) {
+        // Hit bottom — penalty!
+        particles(tile.mesh.position.clone(), 0xff4444);
+        await animDestroy(tile.mesh);
+        board[r][c] = null;
+        moves = Math.max(0, moves - 1);
+        fallerDropsPenalized++;
+        updateHUD();
+        showMsg('-1 Move!', 600);
+
+        // Refill with a normal tile
+        const t = randomType();
+        const newTile = createTile(t, r, c);
+        board[r][c] = newTile;
+        continue;
+      }
+
+      // Check cell below
+      const below = board[r + 1]?.[c];
+      if (below && (below.isWall || below.isFaller)) continue; // blocked
+
+      // Move faller down one row
+      if (below && !below.isWall) {
+        // Swap with the tile below
+        board[r + 1][c] = tile;
+        board[r][c] = below;
+        tile.row = r + 1;
+        below.row = r;
+        ps.push(animMove(tile.mesh, gridToWorld(r + 1, c), 200));
+        ps.push(animMove(below.mesh, gridToWorld(r, c), 200));
+      } else if (!below) {
+        board[r + 1][c] = tile;
+        board[r][c] = null;
+        tile.row = r + 1;
+        ps.push(animMove(tile.mesh, gridToWorld(r + 1, c), 200));
+      }
+    }
+  }
+  if (ps.length) await Promise.all(ps);
+}
+
+async function processFallers() {
+  if (!fallerConfig) return;
+  turnCount++;
+  if (turnCount % fallerConfig.interval !== 0) return;
+  spawnFaller();
+  await delay(200);
+  await dropFallers();
 }
 
 function checkObjective() {
@@ -651,8 +769,95 @@ function getStars() {
   return 0;
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  LEVEL COMPLETE / FAIL POPUP
+// ═══════════════════════════════════════════════════════════════
+function showLevelPopup(won) {
+  gameOver = true;
+  const popup = document.getElementById('levelPopup');
+  const title = document.getElementById('levelPopupTitle');
+  const starsEl = document.getElementById('levelPopupStars');
+  const scoreEl = document.getElementById('levelPopupScore');
+  const objEl = document.getElementById('levelPopupObjective');
+  const nextBtn = document.getElementById('levelPopupNext');
+
+  const stars = won ? getStars() : 0;
+  const durationMs = Math.round(performance.now() - gameStartTime);
+
+  if (won) {
+    title.innerHTML = `Level ${levelNum}<br>Complete!`;
+    title.classList.remove('fail');
+
+    starsEl.innerHTML = '';
+    for (let i = 0; i < 3; i++) {
+      const img = document.createElement('img');
+      img.src = i < stars ? '/assets/ui/star-gold.png' : '/assets/ui/star-empty.png';
+      if (i < stars) img.classList.add('earned');
+      img.style.animationDelay = i < stars ? `${i * 0.15}s` : '0s';
+      starsEl.appendChild(img);
+    }
+
+    scoreEl.textContent = score.toLocaleString();
+    objEl.textContent = `${stars} star${stars !== 1 ? 's' : ''} earned`;
+    nextBtn.classList.toggle('hidden', levelNum >= 20);
+  } else {
+    title.innerHTML = 'Out of<br>Moves!';
+    title.classList.add('fail');
+
+    starsEl.innerHTML = '';
+    for (let i = 0; i < 3; i++) {
+      const img = document.createElement('img');
+      img.src = '/assets/ui/star-empty.png';
+      starsEl.appendChild(img);
+    }
+
+    scoreEl.textContent = score.toLocaleString();
+    objEl.textContent = 'Try again!';
+    nextBtn.classList.add('hidden');
+  }
+
+  // Save to localStorage (immediate fallback)
+  const progress = JSON.parse(localStorage.getItem('pengucrush_progress') || '{}');
+  const prev = progress[levelNum] || { stars: 0, best: 0 };
+  progress[levelNum] = { stars: Math.max(prev.stars, stars), best: Math.max(prev.best, score) };
+  if (won && !progress[levelNum + 1] && levelNum < 20) progress[levelNum + 1] = { stars: 0, best: 0, unlocked: true };
+  localStorage.setItem('pengucrush_progress', JSON.stringify(progress));
+
+  // Save to Supabase (async, non-blocking)
+  const wallet = getWallet();
+  if (wallet) {
+    saveLevelResult({
+      wallet,
+      level: levelNum,
+      score,
+      stars,
+      movesUsed: CONFIG.moves - moves,
+      boostersUsed: {},
+      completed: won,
+      durationMs,
+    }).then(res => {
+      if (res?.success) console.log('🐧 Progress saved to Supabase:', res);
+      else console.warn('🐧 Supabase save failed:', res);
+    });
+  }
+
+  popup.classList.add('active');
+}
+
+function setupLevelPopupButtons() {
+  document.getElementById('levelPopupMap').addEventListener('click', () => {
+    window.__pengu.goToMap();
+  });
+  document.getElementById('levelPopupReplay').addEventListener('click', () => {
+    window.location.href = `/?level=${levelNum}`;
+  });
+  document.getElementById('levelPopupNext').addEventListener('click', () => {
+    if (levelNum < 20) window.__pengu.goToLevel(levelNum + 1);
+  });
+}
+
 async function handleSwap(r1, c1, r2, c2) {
-  if (animating) return; animating = true;
+  if (animating || gameOver) return; animating = true;
   await swapTiles(r1, c1, r2, c2);
   if (findMatches().size === 0) {
     await swapTiles(r2, c2, r1, c1);
@@ -661,13 +866,15 @@ async function handleSwap(r1, c1, r2, c2) {
   } else {
     moves--; updateHUD(); await processMatches();
 
+    // Process falling blockers after each turn
+    await processFallers();
+
     if (checkObjective()) {
-      const stars = getStars();
-      const starStr = '⭐'.repeat(stars) + '☆'.repeat(3 - stars);
-      showMsg(`Level ${levelNum} Complete!<br>${starStr}<br>Score: ${score}`, 4000);
-      // TODO: submit to chain, update map progress
+      await delay(400);
+      showLevelPopup(true);
     } else if (moves <= 0) {
-      showMsg(`Out of moves!<br>Score: ${score}`, 4000);
+      await delay(400);
+      showLevelPopup(false);
     }
   }
   animating = false;
@@ -963,7 +1170,7 @@ function getClicked(event) {
 }
 
 canvas.addEventListener('click', e => {
-  if (animating || moves <= 0) return;
+  if (animating || gameOver || moves <= 0) return;
   const cl = getClicked(e);
   if (!cl) return;
 
@@ -984,7 +1191,7 @@ canvas.addEventListener('click', e => {
 
   // Normal match-3 mode
   const tileAt = (r, c) => board[r]?.[c];
-  const blocked = (r, c) => { const t = tileAt(r, c); return !t || t.isWall || t.frozen; };
+  const blocked = (r, c) => { const t = tileAt(r, c); return !t || t.isWall || t.frozen || t.isFaller; };
 
   if (!selected) {
     if (blocked(cl.row, cl.col)) return;
@@ -1194,6 +1401,7 @@ async function init() {
 
   updateHUD();
   setupBoosterUI();
+  setupLevelPopupButtons();
   initBoard();
   animate();
   console.log('🐧 PenguCrush ready!');

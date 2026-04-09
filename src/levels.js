@@ -28,6 +28,25 @@
 const LEVELS = [
 
   // ═══════════════════════════════════════════════════
+  //  LEVEL 0 — TEST (not on map, 2 moves to trigger popup fast)
+  // ═══════════════════════════════════════════════════
+
+  {
+    level: 99,
+    era: 1,
+    grid: 5,
+    moves: 2,
+    targetScore: 10,
+    tiles: ['ice', 'fish', 'popsicle', 'frostice'],
+    objective: { type: 'score', target: 10 },
+    blockers: [],
+    boosters: ['row', 'col', 'colorBomb'],
+    stars: [10, 50, 100],
+    bg: '/assets/board/bg-arctic.png',
+    gridTint: 0x88DDFF,
+  },
+
+  // ═══════════════════════════════════════════════════
   //  ERA 1 — SHALLOW ICE (levels 1–5)
   //  Teach the basics. Generous moves, no blockers.
   // ═══════════════════════════════════════════════════

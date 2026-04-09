@@ -96,6 +96,24 @@
       <div class="booster-bar" id="boosterBar"></div>
     </div>
     <div class="msg" id="msg"></div>
+
+    <!-- Level Complete / Fail Popup -->
+    <div class="level-popup-overlay" id="levelPopup">
+      <div class="level-popup">
+        <img src="/assets/ui/level-popup-frame.png" class="level-popup-bg" draggable="false" />
+        <div class="level-popup-content">
+          <div class="level-popup-title" id="levelPopupTitle">Level 1<br>Complete!</div>
+          <div class="level-popup-stars" id="levelPopupStars"></div>
+          <div class="level-popup-score" id="levelPopupScore">0</div>
+          <div class="level-popup-objective" id="levelPopupObjective"></div>
+          <div class="level-popup-buttons">
+            <button class="level-popup-btn level-popup-btn--map" id="levelPopupMap">Map</button>
+            <button class="level-popup-btn level-popup-btn--replay" id="levelPopupReplay">Retry</button>
+            <button class="level-popup-btn level-popup-btn--next" id="levelPopupNext">Next</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script type="module" src="/src/entry.js"></script>
