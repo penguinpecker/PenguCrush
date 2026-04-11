@@ -7,27 +7,26 @@ const EDGE_URL = `${SUPABASE_URL}/functions/v1/pengu-save-progress`;
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ═══════════════════════════════════════════════════
-//  WALLET — simple getter/setter until Web3 is wired
+//  WALLET — powered by Abstract Global Wallet (AGW)
 // ═══════════════════════════════════════════════════
-let _wallet = localStorage.getItem('pengu_wallet') || null;
+import { connectAGW, disconnectAGW, getAGWAddress, shortAddress, hasInjectedWallet } from './agw.js';
 
 export function getWallet() {
-  return _wallet;
+  return getAGWAddress();
 }
 
-export function setWallet(address) {
-  _wallet = address?.toLowerCase() || null;
-  if (_wallet) localStorage.setItem('pengu_wallet', _wallet);
-  else localStorage.removeItem('pengu_wallet');
+export async function ensureWallet() {
+  const addr = getAGWAddress();
+  if (addr) return addr;
+  try {
+    return await connectAGW();
+  } catch (err) {
+    console.warn('AGW connect failed:', err.message);
+    return null;
+  }
 }
 
-// Quick wallet prompt for testing (replaced by real Web3 later)
-export function ensureWallet() {
-  if (_wallet) return _wallet;
-  const addr = prompt('Enter wallet address (for testing):');
-  if (addr) setWallet(addr);
-  return _wallet;
-}
+export { connectAGW, disconnectAGW, shortAddress, hasInjectedWallet };
 
 // ═══════════════════════════════════════════════════
 //  READ — fetch player progress from Supabase

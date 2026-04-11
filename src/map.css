@@ -272,3 +272,37 @@
   color: transparent;
 }
 .pop-close:hover { background: rgba(255,255,255,0.15); }
+
+/* ═══ AGW Wallet Button ═══ */
+.agw-btn {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 100;
+  font-family: 'Fredoka', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 8px 18px;
+  border-radius: 24px;
+  border: 2px solid rgba(255,255,255,0.3);
+  cursor: pointer;
+  letter-spacing: 0.3px;
+  background: linear-gradient(180deg, #5ce0e6, #30c0d0);
+  color: #fff;
+  box-shadow: 0 3px 0 #20a0b0, 0 6px 16px rgba(0,0,0,0.25);
+  transition: all 0.15s ease;
+}
+.agw-btn:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.1);
+}
+.agw-btn:active {
+  transform: translateY(1px);
+  box-shadow: 0 1px 0 #20a0b0;
+}
+.agw-btn.connected {
+  background: linear-gradient(180deg, #a0e6a0, #60c060);
+  box-shadow: 0 3px 0 #40a040, 0 6px 16px rgba(0,0,0,0.25);
+  font-size: 12px;
+  padding: 8px 14px;
+}

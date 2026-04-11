@@ -1,5 +1,5 @@
 import { getLevel, getLevelCount } from './levels.js';
-import { getWallet, fetchPlayerProgress, buildMapProgress } from './supabase.js';
+import { getWallet, fetchPlayerProgress, buildMapProgress, connectAGW, disconnectAGW, shortAddress, hasInjectedWallet } from './supabase.js';
 
 const IMG_W = 2000, IMG_H = 1116;
 const IMG_RATIO = IMG_W / IMG_H;
@@ -157,6 +157,42 @@ export function initMap() {
   const s = document.createElement('style');
   s.textContent = '@keyframes shake { 0%, 100% { transform: translate(-50%,-50%) translateX(0); } 20% { transform: translate(-50%,-50%) translateX(-6px); } 40% { transform: translate(-50%,-50%) translateX(6px); } 60% { transform: translate(-50%,-50%) translateX(-4px); } 80% { transform: translate(-50%,-50%) translateX(4px); } }';
   document.head.appendChild(s);
+
+  // ── AGW wallet button ──────────────────────────────
+  const agwBtn = document.getElementById('agwBtn');
+  function updateAgwBtn() {
+    const addr = getWallet();
+    if (addr) {
+      agwBtn.textContent = shortAddress(addr);
+      agwBtn.classList.add('connected');
+    } else {
+      agwBtn.textContent = 'Connect Wallet';
+      agwBtn.classList.remove('connected');
+    }
+  }
+  updateAgwBtn();
+  agwBtn.addEventListener('click', async () => {
+    if (getWallet()) {
+      disconnectAGW();
+      updateAgwBtn();
+      return;
+    }
+    agwBtn.textContent = 'Connecting…';
+    agwBtn.disabled = true;
+    try {
+      await connectAGW();
+      updateAgwBtn();
+      loadProgress(); // refresh map with wallet data
+    } catch (err) {
+      console.error('AGW connect error:', err);
+      agwBtn.textContent = 'Connect Wallet';
+      if (!hasInjectedWallet()) {
+        alert('No wallet detected. Please install MetaMask or another browser wallet.');
+      }
+    } finally {
+      agwBtn.disabled = false;
+    }
+  });
 
   const overlay = document.getElementById('popupOverlay');
   let currentPopupLevel = null;
