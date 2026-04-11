@@ -535,3 +535,126 @@ body[data-screen="game"] {
   transform: none;
   filter: grayscale(0.25) brightness(0.95);
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   BOTTOM NAV BAR
+   ═══════════════════════════════════════════════════════════════ */
+.nav-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 150;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  padding: 0 8px 8px;
+}
+
+.nav-bar__inner {
+  position: relative;
+  width: min(600px, 96vw);
+  pointer-events: auto;
+}
+
+.nav-bar__bg {
+  display: block;
+  width: 100%;
+  height: auto;
+  pointer-events: none;
+  filter: drop-shadow(0 -4px 20px rgba(0, 40, 80, 0.4));
+}
+
+.nav-bar__buttons {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+}
+
+.nav-btn {
+  flex: 1;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+  margin: 3%;
+  transition: transform 0.15s ease;
+}
+
+.nav-btn:active {
+  transform: scale(0.94);
+}
+
+/* ── Ice glow shine on hover ── */
+.nav-btn__glow {
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  background: radial-gradient(
+    ellipse 120% 80% at 50% 40%,
+    rgba(180, 240, 255, 0.45) 0%,
+    rgba(140, 220, 255, 0.2) 40%,
+    transparent 70%
+  );
+  box-shadow:
+    inset 0 0 18px 4px rgba(180, 240, 255, 0.3),
+    0 0 24px 6px rgba(120, 210, 255, 0.25);
+  pointer-events: none;
+}
+
+/* Animated shimmer sweep */
+.nav-btn__glow::after {
+  content: '';
+  position: absolute;
+  top: -20%;
+  left: -60%;
+  width: 40%;
+  height: 140%;
+  background: linear-gradient(
+    105deg,
+    transparent 20%,
+    rgba(255, 255, 255, 0.35) 45%,
+    rgba(200, 245, 255, 0.5) 50%,
+    rgba(255, 255, 255, 0.35) 55%,
+    transparent 80%
+  );
+  transform: skewX(-18deg);
+  animation: ice-shimmer 1.8s ease-in-out infinite;
+}
+
+@keyframes ice-shimmer {
+  0%   { left: -60%; }
+  100% { left: 120%; }
+}
+
+.nav-btn:hover .nav-btn__glow,
+.nav-btn:focus-visible .nav-btn__glow {
+  opacity: 1;
+}
+
+/* Active page indicator */
+.nav-btn.active {
+  pointer-events: none;
+}
+.nav-btn.active .nav-btn__glow {
+  opacity: 0.5;
+  animation: none;
+}
+.nav-btn.active .nav-btn__glow::after {
+  display: none;
+}
+
+/* Hide nav during loading & game */
+body:has(.loading-screen:not(.loading-screen--exit)) .nav-bar {
+  display: none;
+}
+body[data-screen="game"] .nav-bar {
+  display: none;
+}

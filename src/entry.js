@@ -46,6 +46,33 @@ async function boot() {
 window.addEventListener('popstate', () => boot());
 
 // ═══════════════════════════════════════════════════
+// BOTTOM NAV BAR
+// ═══════════════════════════════════════════════════
+function updateNav() {
+  const page = getLevel() ? 'game' : (new URLSearchParams(window.location.search).get('page') || 'map');
+  document.querySelectorAll('.nav-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.page === page);
+  });
+}
+
+document.querySelectorAll('.nav-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const page = btn.dataset.page;
+    if (page === 'map') {
+      window.location.href = '/';
+    } else if (page === 'home') {
+      window.location.href = '/?page=home';
+    } else if (page === 'shop') {
+      window.location.href = '/?page=shop';
+    } else if (page === 'leaderboard') {
+      window.location.href = '/?page=leaderboard';
+    }
+  });
+});
+
+updateNav();
+
+// ═══════════════════════════════════════════════════
 // LOADING SCREEN (runs once on first visit)
 // ═══════════════════════════════════════════════════
 let loadingVideoSeekRaf = null;
