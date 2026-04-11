@@ -122,24 +122,17 @@
     </div>
   </div>
 
-  <!-- ═══ TOP NAV BAR ═══ -->
+  <!-- ═══ BOTTOM NAV BAR ═══ -->
   <nav class="nav-bar" id="navBar">
-    <button class="nav-btn" data-page="home">
-      <span class="nav-btn__label">Home</span>
-      <span class="nav-btn__glow"></span>
-    </button>
-    <button class="nav-btn" data-page="map">
-      <span class="nav-btn__label">Map</span>
-      <span class="nav-btn__glow"></span>
-    </button>
-    <button class="nav-btn" data-page="shop">
-      <span class="nav-btn__label">Shop</span>
-      <span class="nav-btn__glow"></span>
-    </button>
-    <button class="nav-btn" data-page="leaderboard">
-      <span class="nav-btn__label">Board</span>
-      <span class="nav-btn__glow"></span>
-    </button>
+    <div class="nav-bar__inner">
+      <img src="/assets/ui/navbar.png" class="nav-bar__bg" draggable="false" alt="" />
+      <div class="nav-bar__buttons">
+        <button class="nav-btn" data-page="home"><span class="nav-btn__glow"></span></button>
+        <button class="nav-btn" data-page="map"><span class="nav-btn__glow"></span></button>
+        <button class="nav-btn" data-page="shop"><span class="nav-btn__glow"></span></button>
+        <button class="nav-btn" data-page="leaderboard"><span class="nav-btn__glow"></span></button>
+      </div>
+    </div>
   </nav>
 
   <script type="module" src="/src/entry.js"></script>
