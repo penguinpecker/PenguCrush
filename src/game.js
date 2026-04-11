@@ -737,6 +737,19 @@ async function processFallers() {
   await dropFallers();
 }
 
+/** After cascades settle: faller step, then win / out-of-moves popup (same as a normal swap). */
+async function resolveLevelStateAfterBoardSettled() {
+  await processFallers();
+  if (gameOver) return;
+  if (checkObjective()) {
+    await delay(400);
+    showLevelPopup(true);
+  } else if (moves <= 0) {
+    await delay(400);
+    showLevelPopup(false);
+  }
+}
+
 function checkObjective() {
   const obj = CONFIG.objective;
   switch (obj.type) {
@@ -872,17 +885,7 @@ async function handleSwap(r1, c1, r2, c2) {
     showMsg('No match!', 500);
   } else {
     moves--; updateHUD(); await processMatches();
-
-    // Process falling blockers after each turn
-    await processFallers();
-
-    if (checkObjective()) {
-      await delay(400);
-      showLevelPopup(true);
-    } else if (moves <= 0) {
-      await delay(400);
-      showLevelPopup(false);
-    }
+    await resolveLevelStateAfterBoardSettled();
   }
   animating = false;
 }
@@ -910,6 +913,7 @@ async function useBoosterRow(row) {
   await delay(100);
   await dropTiles();
   await processMatches();
+  await resolveLevelStateAfterBoardSettled();
   animating = false;
 }
 
@@ -931,6 +935,7 @@ async function useBoosterCol(col) {
   await delay(100);
   await dropTiles();
   await processMatches();
+  await resolveLevelStateAfterBoardSettled();
   animating = false;
 }
 
@@ -952,6 +957,7 @@ async function useBoosterHammer(row, col) {
     await delay(100);
     await dropTiles();
     await processMatches();
+    await resolveLevelStateAfterBoardSettled();
   }
   animating = false;
 }
@@ -976,6 +982,7 @@ async function useBoosterColorBomb(row, col) {
   await delay(100);
   await dropTiles();
   await processMatches();
+  await resolveLevelStateAfterBoardSettled();
   animating = false;
 }
 
@@ -1003,6 +1010,7 @@ async function useBoosterShuffle() {
     board[r][c] = createTile(type, r, c);
   }
   await delay(300);
+  await resolveLevelStateAfterBoardSettled();
   animating = false;
 }
 
@@ -1176,7 +1184,7 @@ function getClicked(event) {
   return null;
 }
 
-canvas.addEventListener('click', e => {
+canvas.addEventListener('click', async e => {
   if (animating || gameOver || moves <= 0) return;
   const cl = getClicked(e);
   if (!cl) return;
@@ -1187,10 +1195,10 @@ canvas.addEventListener('click', e => {
     activeBooster = null;
     updateBoosterUI();
     consumeBooster(bType);
-    if (bType === 'row') useBoosterRow(cl.row);
-    else if (bType === 'col') useBoosterCol(cl.col);
-    else if (bType === 'hammer') useBoosterHammer(cl.row, cl.col);
-    else if (bType === 'colorBomb') useBoosterColorBomb(cl.row, cl.col);
+    if (bType === 'row') await useBoosterRow(cl.row);
+    else if (bType === 'col') await useBoosterCol(cl.col);
+    else if (bType === 'hammer') await useBoosterHammer(cl.row, cl.col);
+    else if (bType === 'colorBomb') await useBoosterColorBomb(cl.row, cl.col);
     selRing.visible = false;
     selected = null;
     return;
