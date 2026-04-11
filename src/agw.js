@@ -1,19 +1,25 @@
 // ═══════════════════════════════════════════════════════════════
 //  AGW — Abstract Global Wallet integration (vanilla JS)
 //
-//  Uses @abstract-foundation/agw-client to wrap an injected
-//  EIP-1193 provider (MetaMask, Rabby, etc.) so transactions
+//  Uses @privy-io/cross-app-connect to open the real AGW login
+//  popup (email, Google, passkeys, etc.) and then wraps the
+//  provider with @abstract-foundation/agw-client so transactions
 //  route through the user's AGW smart contract wallet.
 // ═══════════════════════════════════════════════════════════════
+import { toPrivyWalletProvider } from '@privy-io/cross-app-connect';
 import { transformEIP1193Provider } from '@abstract-foundation/agw-client';
 import { createPublicClient, createWalletClient, custom, http } from 'viem';
 import { abstract } from 'viem/chains';
 
-let _agwProvider = null;   // wrapped EIP-1193 provider
-let _walletClient = null;  // viem WalletClient
-let _publicClient = null;  // viem PublicClient
-let _address = null;       // AGW smart contract wallet address
-let _signerAddress = null; // underlying EOA address
+// Abstract's Privy provider app ID (from agw-react constants)
+const AGW_APP_ID = 'cm04asygd041fmry9zmcyn5o5';
+
+let _privyProvider = null;  // raw Privy cross-app EIP-1193 provider
+let _agwProvider = null;    // wrapped with AGW transformEIP1193Provider
+let _walletClient = null;   // viem WalletClient
+let _publicClient = null;   // viem PublicClient
+let _address = null;        // AGW smart contract wallet address
+let _signerAddress = null;  // underlying EOA address
 
 // ── helpers ────────────────────────────────────────────────────
 function persist(addr) {
@@ -23,29 +29,35 @@ function persist(addr) {
 
 // ── public API ─────────────────────────────────────────────────
 
-/** true when an injected provider exists */
-export function hasInjectedWallet() {
-  return typeof window !== 'undefined' && !!window.ethereum;
-}
-
-/** Connect via AGW — returns the smart-contract wallet address */
+/** Connect via AGW — opens the Abstract login popup (email/Google/passkeys) */
 export async function connectAGW() {
-  if (!window.ethereum) throw new Error('No wallet detected. Install MetaMask or another browser wallet.');
-
-  // Wrap the injected provider with AGW
-  _agwProvider = transformEIP1193Provider({
-    provider: window.ethereum,
-    chain: abstract,
+  // 1. Create Privy cross-app provider pointed at Abstract's AGW
+  _privyProvider = toPrivyWalletProvider({
+    providerAppId: AGW_APP_ID,
+    chains: [abstract],
+    chainId: abstract.id,
+    smartWalletMode: true,
   });
 
-  // Request accounts (triggers MetaMask popup)
-  const accounts = await _agwProvider.request({ method: 'eth_requestAccounts' });
-  if (!accounts?.length) throw new Error('No accounts returned');
+  // 2. Request accounts — this opens the AGW login popup
+  await _privyProvider.request({ method: 'eth_requestAccounts' });
+  const accounts = await _privyProvider.request({ method: 'eth_accounts' });
+  if (!accounts?.length) throw new Error('No accounts returned from AGW');
 
-  _address = accounts[0];       // AGW smart contract wallet
-  _signerAddress = accounts[1]; // underlying EOA
+  _signerAddress = accounts[0]; // EOA from Privy
 
-  // Build viem clients
+  // 3. Wrap with AGW's transformEIP1193Provider for smart contract wallet routing
+  _agwProvider = transformEIP1193Provider({
+    provider: _privyProvider,
+    chain: abstract,
+    isPrivyCrossApp: true,
+  });
+
+  // 4. Get AGW smart contract wallet address
+  const agwAccounts = await _agwProvider.request({ method: 'eth_accounts' });
+  _address = agwAccounts[0] || _signerAddress;
+
+  // 5. Build viem clients
   _walletClient = createWalletClient({
     account: _address,
     chain: abstract,
@@ -64,6 +76,10 @@ export async function connectAGW() {
 
 /** Disconnect (clear local state) */
 export function disconnectAGW() {
+  if (_privyProvider) {
+    try { _privyProvider.request({ method: 'wallet_revokePermissions' }); } catch (_) {}
+  }
+  _privyProvider = null;
   _agwProvider = null;
   _walletClient = null;
   _publicClient = null;
@@ -110,7 +126,11 @@ export function shortAddress(addr) {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
+/** Always return true — AGW works without an injected wallet */
+export function hasInjectedWallet() {
+  return true;
+}
+
 // ── re-hydrate from localStorage on load ──────────────────────
-// (just the address — actual provider reconnects on next connectAGW call)
 const saved = localStorage.getItem('pengu_wallet');
 if (saved) _address = saved;
