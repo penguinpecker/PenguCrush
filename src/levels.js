@@ -372,6 +372,10 @@ export function getLevel(n) {
   return LEVELS.find(l => l.level === n) || LEVELS[0];
 }
 
+export function hasLevel(n) {
+  return LEVELS.some(l => l.level === n);
+}
+
 export function getLevelCount() {
   return LEVELS.length;
 }

@@ -347,37 +347,70 @@ body[data-screen="game"] {
   height: 100%;
 }
 
-/* Level number — positioned inside the gold ring on the left */
+/* Level badge — stacked LEVEL + number (cartoon bold / 3D stroke like reference) */
 .level-popup-title {
   position: absolute;
-  top: 42%;
-  left: 15%;
+  top: 45%;
+  left: 28%;
   transform: translate(-50%, -50%);
-  font-family: 'Fredoka', sans-serif;
-  font-size: clamp(11px, 2vw, 18px);
-  font-weight: 800;
-  color: #1a5a7a;
-  text-shadow: 0 1px 2px rgba(255,255,255,0.5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   text-align: center;
-  line-height: 1.1;
+  line-height: 1;
+  gap: 0.08em;
+  font-family: 'Fredoka', sans-serif;
+}
+
+.level-popup-title-label {
+  font-weight: 800;
+  font-size: clamp(9px, 1.65vw, 13px);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #ffffff;
+  -webkit-text-stroke: 1.25px #3a2918;
+  text-shadow:
+    2px 2px 0 #2a1a0c,
+    3px 3px 0 #1a0e06,
+    0 1px 0 rgba(0, 0, 0, 0.25);
+}
+
+.level-popup-title-num {
+  font-weight: 800;
+  font-size: clamp(20px, 5vw, 42px);
+  letter-spacing: -0.02em;
+  line-height: 0.95;
+  background: linear-gradient(180deg, #fffef8 0%, #fff4b8 38%, #f0c840 72%, #c89410 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  paint-order: stroke fill;
+  -webkit-text-stroke: 2.5px #3a2918;
+  filter: drop-shadow(2px 3px 0 rgba(30, 18, 8, 0.85)) drop-shadow(1px 1px 0 rgba(58, 41, 24, 0.5));
 }
 
 .level-popup-title.fail {
+  display: block;
+  font-size: clamp(11px, 2vw, 18px);
+  font-weight: 800;
   color: #cc4444;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
+  line-height: 1.15;
 }
 
 /* Stars — positioned over the star outlines in the artwork */
 .level-popup-stars {
   position: absolute;
-  top: 28%;
-  left: 55%;
+  top: 31%;
+  left: 50.5%;
   transform: translate(-50%, -50%);
   display: flex;
   gap: clamp(4px, 1.5vw, 10px);
 }
 
 .level-popup-stars img {
-  width: clamp(28px, 5vw, 44px);
+  width: clamp(24px, 4.5vw, 38px);
   height: auto;
   filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
 }
@@ -394,11 +427,23 @@ body[data-screen="game"] {
 .level-popup-stars img:nth-child(2).earned { animation-delay: 0.15s; }
 .level-popup-stars img:nth-child(3).earned { animation-delay: 0.3s; }
 
+.level-popup-stars img:nth-child(1) {
+  transform: translateY(8px) rotate(-10deg) !important;
+}
+
+.level-popup-stars img:nth-child(2) {
+  transform: translateY(-1px) !important;
+}
+
+.level-popup-stars img:nth-child(3) {
+  transform: translateY(8px) rotate(10deg) !important;
+}
+
 /* Score — positioned over the frosted white panel */
 .level-popup-score {
   position: absolute;
-  top: 52%;
-  left: 55%;
+  top: 49%;
+  left: 50%;
   transform: translate(-50%, -50%);
   font-family: 'Fredoka', sans-serif;
   font-size: clamp(16px, 3vw, 26px);
@@ -409,8 +454,8 @@ body[data-screen="game"] {
 
 .level-popup-objective {
   position: absolute;
-  top: 64%;
-  left: 55%;
+  top: 56%;
+  left: 51%;
   transform: translate(-50%, -50%);
   font-family: 'Fredoka', sans-serif;
   font-size: clamp(10px, 1.6vw, 14px);
@@ -422,20 +467,20 @@ body[data-screen="game"] {
 /* Buttons — positioned over the 3 pill buttons at bottom */
 .level-popup-buttons {
   position: absolute;
-  bottom: 7%;
-  left: 50%;
+  bottom: 23%;
+  left: 50.5%;
   transform: translateX(-50%);
   display: flex;
-  gap: clamp(4px, 1.5vw, 12px);
+  gap: clamp(4px, 1.5vw, 11px);
   width: 88%;
   justify-content: center;
 }
 
 .level-popup-btn {
   font-family: 'Fredoka', sans-serif;
-  font-size: clamp(11px, 1.8vw, 16px);
+  font-size: clamp(11px, 1.8vw, 13px);
   font-weight: 800;
-  padding: clamp(5px, 1vw, 9px) clamp(10px, 2.2vw, 22px);
+  padding: clamp(3px, 1vw, 6px) clamp(10px, 2.2vw, 42px);
   border-radius: 20px;
   border: none;
   cursor: pointer;
@@ -474,4 +519,19 @@ body[data-screen="game"] {
 
 .level-popup-btn--next.hidden {
   display: none;
+}
+
+.level-popup-btn--next:disabled,
+.level-popup-btn--next.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: grayscale(0.25) brightness(0.95);
+  box-shadow: 0 2px 0 #1890a0;
+  transform: none;
+}
+
+.level-popup-btn--next:disabled:hover,
+.level-popup-btn--next.disabled:hover {
+  transform: none;
+  filter: grayscale(0.25) brightness(0.95);
 }

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { getLevel } from './levels.js';
+import { getLevel, hasLevel } from './levels.js';
 import { getWallet, ensureWallet, saveLevelResult } from './supabase.js';
 
 // ═══════════════════════════════════════════════════════════════
@@ -785,8 +785,8 @@ function showLevelPopup(won) {
   const durationMs = Math.round(performance.now() - gameStartTime);
 
   if (won) {
-    title.innerHTML = `Level ${levelNum}<br>Complete!`;
     title.classList.remove('fail');
+    title.innerHTML = `<span class="level-popup-title-label">LEVEL</span><span class="level-popup-title-num">${levelNum}</span>`;
 
     starsEl.innerHTML = '';
     for (let i = 0; i < 3; i++) {
@@ -799,7 +799,10 @@ function showLevelPopup(won) {
 
     scoreEl.textContent = score.toLocaleString();
     objEl.textContent = `${stars} star${stars !== 1 ? 's' : ''} earned`;
-    nextBtn.classList.toggle('hidden', levelNum >= 20);
+    nextBtn.classList.remove('hidden');
+    const canNext = hasLevel(levelNum + 1);
+    nextBtn.disabled = !canNext;
+    nextBtn.classList.toggle('disabled', !canNext);
   } else {
     title.innerHTML = 'Out of<br>Moves!';
     title.classList.add('fail');
@@ -814,13 +817,17 @@ function showLevelPopup(won) {
     scoreEl.textContent = score.toLocaleString();
     objEl.textContent = 'Try again!';
     nextBtn.classList.add('hidden');
+    nextBtn.disabled = false;
+    nextBtn.classList.remove('disabled');
   }
 
   // Save to localStorage (immediate fallback)
   const progress = JSON.parse(localStorage.getItem('pengucrush_progress') || '{}');
   const prev = progress[levelNum] || { stars: 0, best: 0 };
   progress[levelNum] = { stars: Math.max(prev.stars, stars), best: Math.max(prev.best, score) };
-  if (won && !progress[levelNum + 1] && levelNum < 20) progress[levelNum + 1] = { stars: 0, best: 0, unlocked: true };
+  if (won && !progress[levelNum + 1] && hasLevel(levelNum + 1)) {
+    progress[levelNum + 1] = { stars: 0, best: 0, unlocked: true };
+  }
   localStorage.setItem('pengucrush_progress', JSON.stringify(progress));
 
   // Save to Supabase (async, non-blocking)
@@ -852,7 +859,7 @@ function setupLevelPopupButtons() {
     window.location.href = `/?level=${levelNum}`;
   });
   document.getElementById('levelPopupNext').addEventListener('click', () => {
-    if (levelNum < 20) window.__pengu.goToLevel(levelNum + 1);
+    if (hasLevel(levelNum + 1)) window.__pengu.goToLevel(levelNum + 1);
   });
 }
 
