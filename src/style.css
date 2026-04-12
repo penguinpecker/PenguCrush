@@ -292,11 +292,16 @@ body[data-screen="game"] {
 
 /* ═══ Booster Bar ═══ */
 .booster-bar {
-  position: relative;
+  position: fixed;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
-  justify-content: center;
-  margin-top: 10px;
-  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  z-index: 20;
+  width: auto;
+  margin: 0;
 }
 
 .booster-tray-bg {
@@ -305,10 +310,9 @@ body[data-screen="game"] {
 
 .booster-slots {
   display: flex;
-  gap: 18px;
+  flex-direction: column;
+  gap: 10px;
   align-items: center;
-  justify-content: center;
-  width: 100%;
 }
 
 .booster-slot {
