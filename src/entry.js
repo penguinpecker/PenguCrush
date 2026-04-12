@@ -69,6 +69,7 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
     const page = btn.dataset.page;
     if (page === 'shop') {
       document.getElementById('shopOverlay')?.classList.add('active');
+      initShopBombPreview();
       return;
     }
     if (page === 'home') {
@@ -84,6 +85,63 @@ updateNav();
 // ═══════════════════════════════════════════════════
 // SHOP POPUP
 // ═══════════════════════════════════════════════════
+let shopBombInited = false;
+
+async function initShopBombPreview() {
+  if (shopBombInited) return;
+  shopBombInited = true;
+
+  const canvas = document.getElementById('shopBombCanvas');
+  if (!canvas) return;
+
+  const THREE = await import('three');
+  const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
+
+  const size = canvas.clientWidth || 100;
+  canvas.width = size * 2;
+  canvas.height = size * 2;
+
+  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+  renderer.setSize(size, size);
+  renderer.setPixelRatio(2);
+  renderer.setClearColor(0x000000, 0);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 100);
+  camera.position.set(0, 1.2, 3.5);
+  camera.lookAt(0, 0.3, 0);
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+  const dir = new THREE.DirectionalLight(0xffffff, 1.2);
+  dir.position.set(2, 3, 2);
+  scene.add(dir);
+  const rim = new THREE.DirectionalLight(0x88ccff, 0.5);
+  rim.position.set(-2, 1, -1);
+  scene.add(rim);
+
+  const loader = new GLTFLoader();
+  loader.load('/assets/boosters/color-bomb.glb', (gltf) => {
+    const model = gltf.scene;
+    // Center and scale
+    const box = new THREE.Box3().setFromObject(model);
+    const center = box.getCenter(new THREE.Vector3());
+    const sz = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(sz.x, sz.y, sz.z);
+    const scale = 1.8 / maxDim;
+    model.scale.setScalar(scale);
+    model.position.sub(center.multiplyScalar(scale));
+    model.position.y -= 0.1;
+    scene.add(model);
+
+    function animate() {
+      requestAnimationFrame(animate);
+      model.rotation.y += 0.012;
+      renderer.render(scene, camera);
+    }
+    animate();
+  });
+}
+
 document.getElementById('shopClose')?.addEventListener('click', () => {
   document.getElementById('shopOverlay')?.classList.remove('active');
 });

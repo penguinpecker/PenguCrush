@@ -720,9 +720,10 @@ body[data-screen="game"] {
 }
 
 .shop-item__icon {
-  font-size: clamp(28px, 4vw, 48px);
-  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
-  line-height: 1;
+  width: clamp(60px, 9vw, 100px);
+  height: clamp(60px, 9vw, 100px);
+  border-radius: 8px;
+  background: transparent;
 }
 
 .shop-item__name {
