@@ -280,7 +280,7 @@
   left: 50%;
   transform: translateX(-50%);
   z-index: 100;
-  width: min(280px, 42vw);
+  width: min(85px, 13vw);
   height: auto;
   pointer-events: auto;
   cursor: pointer;
