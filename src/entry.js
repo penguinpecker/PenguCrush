@@ -72,6 +72,11 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
       initShopBombPreview();
       return;
     }
+    if (page === 'leaderboard') {
+      document.getElementById('lbOverlay')?.classList.add('active');
+      loadLeaderboard();
+      return;
+    }
     if (page === 'home') {
       window.location.href = '/';
     } else {
@@ -81,6 +86,81 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
 });
 
 updateNav();
+
+// ═══════════════════════════════════════════════════
+// LEADERBOARD POPUP
+// ═══════════════════════════════════════════════════
+let lbDataLoaded = false;
+
+function shortAddr(addr) {
+  if (!addr) return '???';
+  return addr.slice(0, 6) + '...' + addr.slice(-4);
+}
+
+function buildRow(rank, wallet, xp) {
+  const cls = rank === 1 ? 'lb-row--gold' : rank === 2 ? 'lb-row--silver' : rank === 3 ? 'lb-row--bronze' : '';
+  return `<div class="lb-row ${cls}">
+    <div class="lb-rank">${rank}</div>
+    <div class="lb-penguin">🐧</div>
+    <div class="lb-addr">${shortAddr(wallet)}</div>
+    <div class="lb-xp">${xp.toLocaleString()} XP</div>
+  </div>`;
+}
+
+async function loadLeaderboard() {
+  const leftCol = document.getElementById('lbColLeft');
+  const rightCol = document.getElementById('lbColRight');
+  const loading = document.getElementById('lbLoading');
+  if (!leftCol || !rightCol) return;
+
+  loading?.classList.add('active');
+  leftCol.innerHTML = '';
+  rightCol.innerHTML = '';
+
+  try {
+    const { fetchLeaderboard } = await import('./supabase.js');
+    const data = await fetchLeaderboard(25);
+
+    loading?.classList.remove('active');
+
+    if (!data || data.length === 0) {
+      leftCol.innerHTML = '<div class="lb-row"><div class="lb-addr" style="text-align:center;width:100%">No players yet!</div></div>';
+      return;
+    }
+
+    // Split into 2 columns: 1-13 left, 14-25 right
+    const mid = Math.min(13, data.length);
+    for (let i = 0; i < data.length; i++) {
+      const row = buildRow(i + 1, data[i].wallet_address, data[i].total_score || 0);
+      if (i < mid) leftCol.innerHTML += row;
+      else rightCol.innerHTML += row;
+    }
+    lbDataLoaded = true;
+  } catch (err) {
+    loading?.classList.remove('active');
+    leftCol.innerHTML = '<div class="lb-row"><div class="lb-addr" style="text-align:center;width:100%">Failed to load</div></div>';
+    console.error('Leaderboard error:', err);
+  }
+}
+
+document.getElementById('lbClose')?.addEventListener('click', () => {
+  document.getElementById('lbOverlay')?.classList.remove('active');
+});
+document.getElementById('lbOverlay')?.addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) {
+    e.currentTarget.classList.remove('active');
+  }
+});
+
+// Tab switching
+document.querySelectorAll('.lb-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.lb-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    // Both tabs show same data for now — weekly filtering can be added later
+    loadLeaderboard();
+  });
+});
 
 // ═══════════════════════════════════════════════════
 // SHOP POPUP

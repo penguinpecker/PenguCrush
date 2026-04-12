@@ -634,6 +634,209 @@ body[data-screen="game"] {
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   LEADERBOARD POPUP
+   ═══════════════════════════════════════════════════════════════ */
+.lb-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 12, 24, 0.65);
+  backdrop-filter: blur(6px);
+}
+
+.lb-overlay.active {
+  display: flex;
+}
+
+.lb-popup {
+  position: relative;
+  width: min(880px, 94vw);
+  animation: shop-pop-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.lb-popup__frame {
+  display: block;
+  width: 100%;
+  height: auto;
+  pointer-events: none;
+}
+
+.lb-popup__close {
+  position: absolute;
+  top: 1%;
+  right: 1%;
+  width: 6%;
+  height: 10%;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  border-radius: 50%;
+  transition: transform 0.15s ease;
+}
+
+.lb-popup__close:hover {
+  transform: scale(1.15);
+}
+
+/* Tabs — positioned over the image's tab area */
+.lb-tabs {
+  position: absolute;
+  top: 14.5%;
+  left: 24%;
+  width: 52%;
+  height: 7%;
+  display: flex;
+  gap: 2%;
+}
+
+.lb-tab {
+  flex: 1;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: 'Fredoka', sans-serif;
+  font-size: clamp(10px, 1.4vw, 16px);
+  font-weight: 800;
+  color: transparent; /* text is in the image */
+  border-radius: 8px;
+  transition: background 0.2s ease;
+}
+
+.lb-tab:hover {
+  background: rgba(140, 220, 255, 0.15);
+}
+
+.lb-tab.active {
+  background: rgba(140, 220, 255, 0.1);
+}
+
+/* Content area — two columns of rows over the image's row area */
+.lb-content {
+  position: absolute;
+  top: 23%;
+  left: 5.5%;
+  width: 89%;
+  height: 72%;
+  display: flex;
+  gap: 2%;
+  overflow: hidden;
+}
+
+.lb-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(1px, 0.4vh, 3px);
+}
+
+/* Individual row */
+.lb-row {
+  display: flex;
+  align-items: center;
+  gap: clamp(3px, 0.6vw, 8px);
+  padding: clamp(2px, 0.5vh, 5px) clamp(4px, 0.8vw, 10px);
+  border-radius: 8px;
+  background: rgba(180, 220, 240, 0.3);
+  border: 1.5px solid rgba(100, 170, 200, 0.3);
+  flex: 1;
+  min-height: 0;
+}
+
+.lb-row--gold {
+  background: linear-gradient(90deg, rgba(255, 215, 80, 0.25), rgba(180, 220, 240, 0.3));
+  border-color: rgba(200, 170, 50, 0.5);
+}
+
+.lb-row--silver {
+  background: linear-gradient(90deg, rgba(200, 210, 220, 0.35), rgba(180, 220, 240, 0.3));
+  border-color: rgba(160, 170, 180, 0.5);
+}
+
+.lb-row--bronze {
+  background: linear-gradient(90deg, rgba(210, 160, 90, 0.25), rgba(180, 220, 240, 0.3));
+  border-color: rgba(180, 130, 60, 0.5);
+}
+
+.lb-rank {
+  width: clamp(18px, 2.8vw, 30px);
+  height: clamp(18px, 2.8vw, 30px);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Fredoka', sans-serif;
+  font-size: clamp(8px, 1.1vw, 13px);
+  font-weight: 800;
+  color: #fff;
+  background: linear-gradient(180deg, #6ab8d0, #4a98b0);
+  border: 2px solid #3a7890;
+  flex-shrink: 0;
+  text-shadow: 0 1px 1px rgba(0,0,0,0.3);
+}
+
+.lb-row--gold .lb-rank {
+  background: linear-gradient(180deg, #ffd84a, #d4a520);
+  border-color: #b8900a;
+}
+
+.lb-row--silver .lb-rank {
+  background: linear-gradient(180deg, #d0d8e0, #a0a8b0);
+  border-color: #808890;
+}
+
+.lb-row--bronze .lb-rank {
+  background: linear-gradient(180deg, #dca050, #b07830);
+  border-color: #906020;
+}
+
+.lb-penguin {
+  width: clamp(16px, 2.4vw, 26px);
+  height: clamp(16px, 2.4vw, 26px);
+  font-size: clamp(12px, 1.8vw, 20px);
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.lb-addr {
+  flex: 1;
+  font-family: 'Fredoka', sans-serif;
+  font-size: clamp(8px, 1.1vw, 13px);
+  font-weight: 600;
+  color: #1a4a6a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lb-xp {
+  font-family: 'Fredoka', sans-serif;
+  font-size: clamp(8px, 1.1vw, 13px);
+  font-weight: 800;
+  color: #0a5a3a;
+  white-space: nowrap;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.4);
+}
+
+.lb-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: 'Fredoka', sans-serif;
+  font-size: clamp(14px, 2vw, 20px);
+  font-weight: 700;
+  color: #3a8aaa;
+  display: none;
+}
+
+.lb-loading.active {
+  display: block;
+}
+
+/* ═══════════════════════════════════════════════════════════════
    SHOP POPUP
    ═══════════════════════════════════════════════════════════════ */
 .shop-overlay {

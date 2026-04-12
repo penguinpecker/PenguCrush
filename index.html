@@ -134,6 +134,23 @@
     </div>
   </div>
 
+  <!-- ═══ LEADERBOARD POPUP ═══ -->
+  <div class="lb-overlay" id="lbOverlay">
+    <div class="lb-popup">
+      <img src="/assets/ui/leaderboard-frame.png" class="lb-popup__frame" draggable="false" alt="" />
+      <button class="lb-popup__close" id="lbClose" aria-label="Close leaderboard"></button>
+      <div class="lb-tabs">
+        <button class="lb-tab active" data-tab="weekly">Weekly</button>
+        <button class="lb-tab" data-tab="alltime">All Time</button>
+      </div>
+      <div class="lb-content">
+        <div class="lb-col lb-col--left" id="lbColLeft"></div>
+        <div class="lb-col lb-col--right" id="lbColRight"></div>
+      </div>
+      <div class="lb-loading" id="lbLoading">Loading...</div>
+    </div>
+  </div>
+
   <!-- ═══ SHOP POPUP ═══ -->
   <div class="shop-overlay" id="shopOverlay">
     <div class="shop-popup">
