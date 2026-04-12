@@ -15,7 +15,7 @@ function showScreen(id) {
 
 window.__pengu = {
   goToMap() {
-    window.location.href = '/';
+    window.location.href = '/?page=map';
   },
   goToLevel(lvl) {
     window.location.href = '/?level=' + lvl;
@@ -25,21 +25,30 @@ window.__pengu = {
 let mapInited = false;
 let gameLoaded = false;
 
+function getPage() {
+  return new URLSearchParams(window.location.search).get('page') || 'home';
+}
+
 async function boot() {
   const level = getLevel();
+  const page = getPage();
+
   if (level) {
     showScreen('gameScreen');
     if (!gameLoaded) {
       gameLoaded = true;
       await import('./game.js');
     }
-  } else {
+  } else if (page === 'map') {
     showScreen('mapScreen');
     if (!mapInited) {
       mapInited = true;
       const { initMap } = await import('./map.js');
       initMap();
     }
+  } else {
+    // home, shop, leaderboard — show homeScreen for now
+    showScreen('homeScreen');
   }
 }
 
@@ -49,7 +58,7 @@ window.addEventListener('popstate', () => boot());
 // BOTTOM NAV BAR
 // ═══════════════════════════════════════════════════
 function updateNav() {
-  const page = getLevel() ? 'game' : (new URLSearchParams(window.location.search).get('page') || 'map');
+  const page = getLevel() ? 'game' : getPage();
   document.querySelectorAll('.nav-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.page === page);
   });
@@ -58,19 +67,32 @@ function updateNav() {
 document.querySelectorAll('.nav-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     const page = btn.dataset.page;
-    if (page === 'map') {
+    if (page === 'home') {
       window.location.href = '/';
-    } else if (page === 'home') {
-      window.location.href = '/?page=home';
-    } else if (page === 'shop') {
-      window.location.href = '/?page=shop';
-    } else if (page === 'leaderboard') {
-      window.location.href = '/?page=leaderboard';
+    } else {
+      window.location.href = '/?page=' + page;
     }
   });
 });
 
 updateNav();
+
+// ═══════════════════════════════════════════════════
+// HOME PLAY BUTTON → AGW CONNECT
+// ═══════════════════════════════════════════════════
+document.getElementById('homePlayBtn')?.addEventListener('click', async () => {
+  try {
+    const { connectAGW, getAGWAddress } = await import('./agw.js');
+    if (!getAGWAddress()) {
+      await connectAGW();
+    }
+    window.location.href = '/?page=map';
+  } catch (err) {
+    console.error('AGW connect error:', err);
+    // Still navigate to map even if wallet connect fails/cancelled
+    window.location.href = '/?page=map';
+  }
+});
 
 // ═══════════════════════════════════════════════════
 // LOADING SCREEN (runs once on first visit)
@@ -201,20 +223,28 @@ void (async () => {
     updateLoadingUI(0.66);
 
     const level = getLevel();
+    const page = getPage();
     if (level) {
       gameLoaded = true;
       await import('./game.js');
-    } else {
+    } else if (page === 'map') {
       mapInited = true;
       const { initMap } = await import('./map.js');
       initMap();
     }
+    // home screen needs no async loading
     updateLoadingUI(1);
 
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     await holdMinLoadingVideoPlayback(loadingVideo);
     finishLoadingOutro();
-    showScreen(level ? 'gameScreen' : 'mapScreen');
+    if (level) {
+      showScreen('gameScreen');
+    } else if (page === 'map') {
+      showScreen('mapScreen');
+    } else {
+      showScreen('homeScreen');
+    }
   } catch (err) {
     console.error(err);
     document.getElementById('loadingScreen')?.remove();
