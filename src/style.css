@@ -150,16 +150,82 @@ body[data-screen="game"] {
   background: transparent;
   border: none;
   cursor: pointer;
-  transition: transform 0.2s ease, filter 0.2s ease;
+  animation: play-breathe 2.5s ease-in-out infinite;
+  box-shadow:
+    0 0 30px 8px rgba(140, 220, 255, 0.3),
+    0 0 60px 15px rgba(100, 200, 255, 0.15),
+    inset 0 0 20px 5px rgba(180, 240, 255, 0.2);
+}
+
+/* Breathing pulse */
+@keyframes play-breathe {
+  0%, 100% {
+    transform: translate(-50%, -50%) scale(1);
+    box-shadow:
+      0 0 30px 8px rgba(140, 220, 255, 0.3),
+      0 0 60px 15px rgba(100, 200, 255, 0.15),
+      inset 0 0 20px 5px rgba(180, 240, 255, 0.2);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.06);
+    box-shadow:
+      0 0 45px 12px rgba(140, 220, 255, 0.5),
+      0 0 80px 25px rgba(100, 200, 255, 0.25),
+      inset 0 0 30px 8px rgba(180, 240, 255, 0.35);
+  }
+}
+
+/* Constant ice shimmer sweeping across */
+.home-play-btn::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse 100% 100% at 35% 30%,
+    rgba(255, 255, 255, 0.35) 0%,
+    rgba(180, 240, 255, 0.15) 30%,
+    transparent 60%
+  );
+  pointer-events: none;
+}
+
+.home-play-btn::after {
+  content: '';
+  position: absolute;
+  top: -10%;
+  left: -80%;
+  width: 50%;
+  height: 120%;
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    rgba(255, 255, 255, 0.4) 45%,
+    rgba(200, 245, 255, 0.55) 50%,
+    rgba(255, 255, 255, 0.4) 55%,
+    transparent 80%
+  );
+  transform: skewX(-18deg);
+  animation: play-shimmer 3s ease-in-out infinite;
+  pointer-events: none;
+  border-radius: 50%;
+}
+
+@keyframes play-shimmer {
+  0%   { left: -80%; opacity: 0; }
+  15%  { opacity: 1; }
+  85%  { opacity: 1; }
+  100% { left: 130%; opacity: 0; }
 }
 
 .home-play-btn:hover {
-  transform: translate(-50%, -50%) scale(1.08);
-  filter: drop-shadow(0 0 30px rgba(140, 220, 255, 0.6));
+  animation: play-breathe 1.5s ease-in-out infinite;
+  filter: drop-shadow(0 0 20px rgba(140, 220, 255, 0.5));
 }
 
 .home-play-btn:active {
   transform: translate(-50%, -50%) scale(0.95);
+  animation: none;
 }
 
 #app {
