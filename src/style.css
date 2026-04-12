@@ -691,6 +691,82 @@ body[data-screen="game"] {
   transform: scale(0.9);
 }
 
+/* Shop item grid — overlaid on the image card slots */
+.shop-items {
+  position: absolute;
+  top: 27%;
+  left: 10%;
+  width: 80%;
+  height: 65%;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 3% 3%;
+}
+
+.shop-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  border-radius: 10px;
+  transition: transform 0.15s ease;
+}
+
+.shop-item:hover {
+  transform: scale(1.04);
+}
+
+.shop-item__icon {
+  font-size: clamp(28px, 4vw, 48px);
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
+  line-height: 1;
+}
+
+.shop-item__name {
+  font-family: 'Fredoka', sans-serif;
+  font-size: clamp(9px, 1.3vw, 14px);
+  font-weight: 700;
+  color: #1a5a7a;
+  text-align: center;
+  line-height: 1.1;
+}
+
+.shop-item__price {
+  font-family: 'Fredoka', sans-serif;
+  font-size: clamp(10px, 1.5vw, 16px);
+  font-weight: 800;
+  color: #0a6a3a;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.5);
+}
+
+.shop-item__buy {
+  font-family: 'Fredoka', sans-serif;
+  font-size: clamp(8px, 1.1vw, 12px);
+  font-weight: 800;
+  padding: 3px 14px;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  background: linear-gradient(180deg, #5ce0e6, #30c0d0);
+  color: #fff;
+  box-shadow: 0 2px 0 #20a0b0;
+  letter-spacing: 0.5px;
+  transition: transform 0.1s ease, filter 0.1s ease;
+}
+
+.shop-item__buy:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.1);
+}
+
+.shop-item__buy:active {
+  transform: translateY(1px);
+  box-shadow: 0 1px 0 #20a0b0;
+}
+
 /* ═══════════════════════════════════════════════════════════════
    BOTTOM NAV BAR (image-based)
    ═══════════════════════════════════════════════════════════════ */
