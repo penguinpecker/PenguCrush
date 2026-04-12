@@ -273,6 +273,31 @@
 }
 .pop-close:hover { background: rgba(255,255,255,0.15); }
 
+/* ═══ Crush Pass Banner ═══ */
+.crush-pass {
+  position: fixed;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  width: min(280px, 42vw);
+  height: auto;
+  pointer-events: auto;
+  cursor: pointer;
+  filter: drop-shadow(0 4px 12px rgba(0, 30, 60, 0.3));
+  transition: transform 0.2s ease, filter 0.2s ease;
+}
+
+.crush-pass:hover {
+  transform: translateX(-50%) scale(1.05);
+  filter: drop-shadow(0 4px 20px rgba(100, 200, 255, 0.5))
+         drop-shadow(0 0 30px rgba(140, 220, 255, 0.3));
+}
+
+.crush-pass:active {
+  transform: translateX(-50%) scale(0.97);
+}
+
 /* ═══ AGW Wallet Button ═══ */
 .agw-btn {
   position: fixed;
