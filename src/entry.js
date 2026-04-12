@@ -67,6 +67,10 @@ function updateNav() {
 document.querySelectorAll('.nav-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     const page = btn.dataset.page;
+    if (page === 'shop') {
+      document.getElementById('shopOverlay')?.classList.add('active');
+      return;
+    }
     if (page === 'home') {
       window.location.href = '/';
     } else {
@@ -76,6 +80,18 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
 });
 
 updateNav();
+
+// ═══════════════════════════════════════════════════
+// SHOP POPUP
+// ═══════════════════════════════════════════════════
+document.getElementById('shopClose')?.addEventListener('click', () => {
+  document.getElementById('shopOverlay')?.classList.remove('active');
+});
+document.getElementById('shopOverlay')?.addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) {
+    e.currentTarget.classList.remove('active');
+  }
+});
 
 // ═══════════════════════════════════════════════════
 // HOME PLAY BUTTON → AGW CONNECT

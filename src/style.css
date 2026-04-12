@@ -634,6 +634,64 @@ body[data-screen="game"] {
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   SHOP POPUP
+   ═══════════════════════════════════════════════════════════════ */
+.shop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 12, 24, 0.65);
+  backdrop-filter: blur(6px);
+}
+
+.shop-overlay.active {
+  display: flex;
+}
+
+.shop-popup {
+  position: relative;
+  width: min(750px, 92vw);
+  animation: shop-pop-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes shop-pop-in {
+  0% { transform: scale(0.6); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.shop-popup__img {
+  display: block;
+  width: 100%;
+  height: auto;
+  pointer-events: none;
+}
+
+.shop-popup__close {
+  position: absolute;
+  top: 2%;
+  right: 1%;
+  width: 8%;
+  height: 14%;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  border-radius: 50%;
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.shop-popup__close:hover {
+  transform: scale(1.15);
+  filter: brightness(1.2);
+}
+
+.shop-popup__close:active {
+  transform: scale(0.9);
+}
+
+/* ═══════════════════════════════════════════════════════════════
    BOTTOM NAV BAR (image-based)
    ═══════════════════════════════════════════════════════════════ */
 .nav-bar {
