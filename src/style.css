@@ -421,9 +421,14 @@ body[data-screen="game"] {
   display: flex;
 }
 
+/* Frame art 2912×1440 → lock layout so % positions + inner UI scale together on all screens */
 .level-popup {
   position: relative;
-  width: min(600px, 92vw);
+  container-type: inline-size;
+  container-name: level-popup;
+  width: min(92vw, 600px, calc(85dvh * 91 / 45));
+  aspect-ratio: 91 / 45;
+  max-width: 100%;
   animation: popup-scale-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
@@ -433,9 +438,12 @@ body[data-screen="game"] {
 }
 
 .level-popup-bg {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
-  height: auto;
+  height: 100%;
+  object-fit: contain;
   pointer-events: none;
   filter: drop-shadow(0 12px 40px rgba(0, 0, 0, 0.4));
 }
@@ -466,7 +474,7 @@ body[data-screen="game"] {
 
 .level-popup-title-label {
   font-weight: 800;
-  font-size: clamp(9px, 1.65vw, 13px);
+  font-size: clamp(9px, 2.1cqw, 13px);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: #ffffff;
@@ -479,7 +487,7 @@ body[data-screen="game"] {
 
 .level-popup-title-num {
   font-weight: 800;
-  font-size: clamp(20px, 5vw, 42px);
+  font-size: clamp(20px, 7.2cqw, 42px);
   letter-spacing: -0.02em;
   line-height: 0.95;
   background: linear-gradient(180deg, #fffef8 0%, #fff4b8 38%, #f0c840 72%, #c89410 100%);
@@ -493,7 +501,7 @@ body[data-screen="game"] {
 
 .level-popup-title.fail {
   display: block;
-  font-size: clamp(11px, 2vw, 18px);
+  font-size: clamp(11px, 2.6cqw, 18px);
   font-weight: 800;
   color: #cc4444;
   text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
@@ -507,11 +515,11 @@ body[data-screen="game"] {
   left: 50.5%;
   transform: translate(-50%, -50%);
   display: flex;
-  gap: clamp(4px, 1.5vw, 10px);
+  gap: clamp(4px, 1.95cqw, 12px);
 }
 
 .level-popup-stars img {
-  width: clamp(24px, 4.5vw, 38px);
+  width: clamp(24px, 5.8cqw, 38px);
   height: auto;
   filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
 }
@@ -547,7 +555,7 @@ body[data-screen="game"] {
   left: 50%;
   transform: translate(-50%, -50%);
   font-family: 'Fredoka', sans-serif;
-  font-size: clamp(16px, 3vw, 26px);
+  font-size: clamp(16px, 4.1cqw, 26px);
   font-weight: 800;
   color: #0a3a5a;
   text-align: center;
@@ -559,7 +567,7 @@ body[data-screen="game"] {
   left: 51%;
   transform: translate(-50%, -50%);
   font-family: 'Fredoka', sans-serif;
-  font-size: clamp(10px, 1.6vw, 14px);
+  font-size: clamp(10px, 2.05cqw, 14px);
   font-weight: 600;
   color: #4a8aaa;
   text-align: center;
@@ -572,16 +580,22 @@ body[data-screen="game"] {
   left: 50.5%;
   transform: translateX(-50%);
   display: flex;
-  gap: clamp(4px, 1.5vw, 11px);
+  gap: clamp(4px, 1.9cqw, 11px);
   width: 88%;
+  max-width: 88%;
   justify-content: center;
+  align-items: center;
+  flex-wrap: nowrap;
+  padding: 0 18%;
 }
 
 .level-popup-btn {
+  flex: 1 1 0;
+  min-width: 0;
   font-family: 'Fredoka', sans-serif;
-  font-size: clamp(11px, 1.8vw, 13px);
+  font-size: clamp(11px, 2.15cqw, 13px);
   font-weight: 800;
-  padding: clamp(3px, 1vw, 6px) clamp(10px, 2.2vw, 42px);
+  padding: clamp(3px, 1.05cqw, 6px) clamp(6px, 7cqw, 40px);
   border-radius: 20px;
   border: none;
   cursor: pointer;

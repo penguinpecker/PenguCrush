@@ -5,8 +5,10 @@
 //  popup (email, Google, passkeys, etc.) and then wraps the
 //  provider with @abstract-foundation/agw-client so transactions
 //  route through the user's AGW smart contract wallet.
+//
+//  Local dev: Privy is not loaded until you connect for real — see
+//  useWalletBypass() (localhost / Vite dev / VITE_PRIVY_BYPASS).
 // ═══════════════════════════════════════════════════════════════
-import { toPrivyWalletProvider } from '@privy-io/cross-app-connect';
 import { transformEIP1193Provider } from '@abstract-foundation/agw-client';
 import { createPublicClient, createWalletClient, custom, http } from 'viem';
 import { abstract } from 'viem/chains';
@@ -14,12 +16,15 @@ import { abstract } from 'viem/chains';
 // Abstract's Privy provider app ID (from agw-react constants)
 const AGW_APP_ID = 'cm04asygd041fmry9zmcyn5o5';
 
+const DEFAULT_DEV_WALLET = '0x1111111111111111111111111111111111111111';
+
 let _privyProvider = null;  // raw Privy cross-app EIP-1193 provider
 let _agwProvider = null;    // wrapped with AGW transformEIP1193Provider
 let _walletClient = null;   // viem WalletClient
 let _publicClient = null;   // viem PublicClient
 let _address = null;        // AGW smart contract wallet address
 let _signerAddress = null;  // underlying EOA address
+let _devBypass = false;     // true when using local stub (no Privy)
 
 // ── helpers ────────────────────────────────────────────────────
 function persist(addr) {
@@ -27,10 +32,51 @@ function persist(addr) {
   else localStorage.removeItem('pengu_wallet');
 }
 
+/**
+ * Skip Privy / cross-app connect on local machines so the app loads without wallet infra.
+ * Set VITE_PRIVY_BYPASS=false in .env to force real Privy on localhost.
+ * Set VITE_PRIVY_BYPASS=true to force bypass even on non-local hosts (optional).
+ */
+export function useWalletBypass() {
+  try {
+    if (import.meta.env?.VITE_PRIVY_BYPASS === 'false') return false;
+    if (import.meta.env?.VITE_PRIVY_BYPASS === 'true') return true;
+    if (import.meta.env?.DEV) return true;
+  } catch (_) {}
+  if (typeof location === 'undefined') return false;
+  const h = location.hostname;
+  return h === 'localhost' || h === '127.0.0.1' || h === '[::1]';
+}
+
+function devWalletAddress() {
+  try {
+    const w = import.meta.env?.VITE_DEV_WALLET;
+    if (w && typeof w === 'string' && w.startsWith('0x') && w.length >= 10) return w;
+  } catch (_) {}
+  return DEFAULT_DEV_WALLET;
+}
+
 // ── public API ─────────────────────────────────────────────────
 
 /** Connect via AGW — opens the Abstract login popup (email/Google/passkeys) */
 export async function connectAGW() {
+  if (useWalletBypass()) {
+    _devBypass = true;
+    _privyProvider = null;
+    _agwProvider = null;
+    _walletClient = null;
+    _signerAddress = null;
+    _publicClient = null;
+    const addr = devWalletAddress();
+    _address = addr;
+    persist(addr);
+    console.log('🐧 AGW dev bypass — no Privy; wallet:', addr);
+    return addr;
+  }
+
+  _devBypass = false;
+  const { toPrivyWalletProvider } = await import('@privy-io/cross-app-connect');
+
   // 1. Create Privy cross-app provider pointed at Abstract's AGW
   _privyProvider = toPrivyWalletProvider({
     providerAppId: AGW_APP_ID,
@@ -85,12 +131,18 @@ export function disconnectAGW() {
   _publicClient = null;
   _address = null;
   _signerAddress = null;
+  _devBypass = false;
   persist(null);
 }
 
 /** Get current AGW address (or null) */
 export function getAGWAddress() {
   return _address;
+}
+
+/** True when using the local dev stub (no on-chain signer) */
+export function isDevWalletBypass() {
+  return !!_devBypass;
 }
 
 /** Get the signer EOA address */
@@ -126,11 +178,14 @@ export function shortAddress(addr) {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
-/** Always return true — AGW works without an injected wallet */
+/** Always true — AGW / dev bypass do not require an injected browser wallet */
 export function hasInjectedWallet() {
   return true;
 }
 
 // ── re-hydrate from localStorage on load ──────────────────────
 const saved = localStorage.getItem('pengu_wallet');
-if (saved) _address = saved;
+if (saved) {
+  _address = saved;
+  if (useWalletBypass()) _devBypass = true;
+}
