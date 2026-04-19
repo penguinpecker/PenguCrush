@@ -3,6 +3,7 @@ import './map.css';
 import { getAGWAddress, isSignedIn, connectAGW, signInWithAGW } from './agw.js';
 import * as Inventory from './inventory.js';
 import { isLevelUnlocked } from './progress.js';
+import './dev-stars.js'; // adds window.__pengu.starDev() — no UI unless enabled
 
 // ── Current level routing (internal, not in the URL bar) ───────
 // The URL never carries ?level=N anymore — the level is stored in
@@ -61,7 +62,7 @@ function showHomeGateHint() {
   showHomeGateHint._t = setTimeout(() => { hint.hidden = true; }, 4000);
 }
 
-window.__pengu = {
+Object.assign(window.__pengu ||= {}, {
   goToMap() {
     clearCurrentLevel();
     window.location.href = '/?page=map';
@@ -70,7 +71,7 @@ window.__pengu = {
     setCurrentLevel(lvl);
     window.location.href = '/?page=play';
   },
-};
+});
 
 let mapInited = false;
 let gameLoaded = false;

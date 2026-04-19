@@ -146,6 +146,11 @@
 .popup-frame {
   position: relative;
   width: min(650px, 88vw);
+  /* Inline-size container so children can size themselves as a % of
+     the frame itself (via cqw units) instead of the viewport. This
+     keeps stars/text correctly scaled on every screen size. */
+  container-type: inline-size;
+  container-name: popup-frame;
   animation: popup-enter 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 @keyframes popup-enter {
@@ -170,31 +175,33 @@
   line-height: 1;
 }
 .pop-level-label {
-  font-size: clamp(8px, 1.1vw, 13px);
+  font-size: clamp(8px, 2.00cqw, 13px);
   font-weight: 600;
   color: rgba(255,255,255,0.9);
   text-shadow: 0 1px 3px rgba(0,60,100,0.5);
 }
 .pop-level-num {
-  font-size: clamp(24px, 4vw, 44px);
+  font-size: clamp(24px, 6.77cqw, 44px);
   font-weight: 800;
   color: #fff;
   text-shadow: 0 2px 6px rgba(0,60,100,0.6);
 }
 
 .pop-stars {
-  /* Stars overlay the 3 baked-in empty-star sockets in popup-frame.png.
-     Socket centers in art: ~40%, 50%, 60% of frame width (≈50% spacing).
-     Size ~12% of frame width so the gold star fully covers the outline. */
+  /* Position and sizing are % of the popup frame via cqw units —
+     stay visually identical on every viewport. Tuned values from
+     dev-stars.js at desktop (frame 650px) scale linearly to any
+     frame size. */
   position: absolute;
-  top: 34%;
-  left: 50%;
+  top: 34.1%;
+  left: 51.6%;
   transform: translate(-50%, -50%);
   display: flex;
-  gap: clamp(8px, 2.6vw, 20px);
+  gap: 3.08cqw;
 }
 .pop-star {
-  width: clamp(42px, 9.5vw, 78px);
+  width: 9.78cqw;
+  min-width: 22px; /* floor for very tiny viewports */
   height: auto;
   filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
   transition: all 0.3s;
@@ -208,10 +215,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: clamp(12px, 2.5vw, 30px);
+  gap: clamp(12px, 4.62cqw, 30px);
 }
 .pop-obj-score, .pop-obj-moves {
-  font-size: clamp(12px, 1.7vw, 20px);
+  font-size: clamp(12px, 3.08cqw, 20px);
   font-weight: 700;
   color: #1a4a6a;
 }
@@ -225,7 +232,7 @@
   top: 59%;
   left: 38.5%;
   transform: translate(-50%, -50%);
-  font-size: clamp(10px, 1.3vw, 15px);
+  font-size: clamp(10px, 2.31cqw, 15px);
   font-weight: 600;
   color: #4a7a9a;
   white-space: nowrap;
@@ -240,7 +247,7 @@
   border: none;
   color: #fff;
   font-family: 'Fredoka', sans-serif;
-  font-size: clamp(20px, 3.2vw, 36px);
+  font-size: clamp(20px, 5.54cqw, 36px);
   font-weight: 800;
   letter-spacing: 4px;
   cursor: pointer;
@@ -261,7 +268,7 @@
   background: none; border: none;
   color: #2a6a8a;
   font-family: 'Fredoka', sans-serif;
-  font-size: clamp(9px, 1.1vw, 13px);
+  font-size: clamp(9px, 2.00cqw, 13px);
   font-weight: 700;
   cursor: pointer;
   white-space: nowrap;

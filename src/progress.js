@@ -75,6 +75,10 @@ export async function isLevelUnlockedSupabase(levelN) {
  */
 export async function isLevelUnlocked(levelN) {
   if (levelN <= 1) return true;
+  // Level 99 is the debug/test level (see src/levels.js) — 2 moves,
+  // low target, used to quickly reach the end-of-level popup for UI work.
+  // It's never shown on the map so only a manual goToLevel(99) hits it.
+  if (levelN === 99) return true;
   const chain = await isLevelUnlockedOnchain(levelN);
   if (chain === true) return true;
   // chain === false  → explicit deny from chain; still consult Supabase as a backup
