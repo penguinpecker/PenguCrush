@@ -827,12 +827,19 @@ function showLevelPopup(won) {
     title.classList.remove('fail');
     title.innerHTML = `<span class="level-popup-title-label">LEVEL</span><span class="level-popup-title-num">${levelNum}</span>`;
 
+    // level-popup-frame.png has three empty stars baked into the art,
+    // so only render a gold overlay for each EARNED star. Empty slots
+    // show the baked-in star cleanly — no doubled outlines.
     starsEl.innerHTML = '';
     for (let i = 0; i < 3; i++) {
       const img = document.createElement('img');
-      img.src = i < stars ? '/assets/ui/star-gold.png' : '/assets/ui/star-empty.png';
-      if (i < stars) img.classList.add('earned');
-      img.style.animationDelay = i < stars ? `${i * 0.15}s` : '0s';
+      if (i < stars) {
+        img.src = '/assets/ui/star-gold.png';
+        img.classList.add('earned');
+        img.style.animationDelay = `${i * 0.15}s`;
+      } else {
+        img.style.visibility = 'hidden';
+      }
       starsEl.appendChild(img);
     }
 
@@ -846,10 +853,12 @@ function showLevelPopup(won) {
     title.innerHTML = 'Out of<br>Moves!';
     title.classList.add('fail');
 
+    // Failure: all three slots empty → no overlays needed, baked-in
+    // stars on the popup frame show through.
     starsEl.innerHTML = '';
     for (let i = 0; i < 3; i++) {
       const img = document.createElement('img');
-      img.src = '/assets/ui/star-empty.png';
+      img.style.visibility = 'hidden';
       starsEl.appendChild(img);
     }
 

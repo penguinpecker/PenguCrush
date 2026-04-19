@@ -183,15 +183,18 @@
 }
 
 .pop-stars {
+  /* Stars overlay the 3 baked-in empty-star sockets in popup-frame.png.
+     Socket centers in art: ~40%, 50%, 60% of frame width (≈50% spacing).
+     Size ~12% of frame width so the gold star fully covers the outline. */
   position: absolute;
   top: 34%;
-  left: 49%;
+  left: 50%;
   transform: translate(-50%, -50%);
   display: flex;
-  gap: clamp(4px, 2.1vw, 12px);
+  gap: clamp(8px, 2.6vw, 20px);
 }
 .pop-star {
-  width: clamp(28.6px, 5.4vw, 55px);
+  width: clamp(42px, 9.5vw, 78px);
   height: auto;
   filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
   transition: all 0.3s;

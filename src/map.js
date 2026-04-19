@@ -306,8 +306,17 @@ export function initMap() {
     currentPopupLevel = lv;
     const cfg = getLevel(lv.id);
     document.getElementById('popupLevelNum').textContent = lv.id;
+    // The popup-frame art already has three empty stars baked in.
+    // Only show a gold star on top for each EARNED star — leave the
+    // slots without an earned star empty so the baked-in star shows
+    // through cleanly.
     document.querySelectorAll('.pop-star').forEach((img, i) => {
-      img.src = i < lv.stars ? '/assets/ui/star-gold.png' : '/assets/ui/star-empty.png';
+      if (i < lv.stars) {
+        img.src = '/assets/ui/star-gold.png';
+        img.style.visibility = 'visible';
+      } else {
+        img.style.visibility = 'hidden';
+      }
     });
     document.getElementById('popupTarget').textContent = cfg.targetScore.toLocaleString();
     document.getElementById('popupMoves').textContent = cfg.moves;

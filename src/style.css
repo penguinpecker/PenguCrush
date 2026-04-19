@@ -572,18 +572,19 @@ body[data-screen="game"] {
   line-height: 1.15;
 }
 
-/* Stars — positioned over the star outlines in the artwork */
+/* Stars — gold overlays sized to fully cover the baked-in empty
+   sockets (~180px in the 2048px source art → ~10.5% of frame). */
 .level-popup-stars {
   position: absolute;
   top: 31%;
   left: 50.5%;
   transform: translate(-50%, -50%);
   display: flex;
-  gap: clamp(4px, 1.95cqw, 12px);
+  gap: clamp(6px, 2.8cqw, 18px);
 }
 
 .level-popup-stars img {
-  width: clamp(24px, 5.8cqw, 38px);
+  width: clamp(36px, 10.5cqw, 68px);
   height: auto;
   filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
 }
