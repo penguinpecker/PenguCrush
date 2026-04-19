@@ -2,6 +2,7 @@ import './style.css';
 import './map.css';
 import { getAGWAddress, isSignedIn, connectAGW, signInWithAGW } from './agw.js';
 import * as Inventory from './inventory.js';
+import { isLevelUnlocked } from './progress.js';
 
 function getLevel() {
   return new URLSearchParams(window.location.search).get('level');
@@ -56,6 +57,21 @@ async function boot() {
   }
 
   if (level) {
+    const lvlNum = parseInt(level, 10);
+    // On-chain gate: level N>1 requires stars > 0 on level N-1 recorded
+    // on the PenguCrush contract. localStorage is not trusted.
+    const allowed = Number.isInteger(lvlNum) && lvlNum >= 1 && await isLevelUnlocked(lvlNum);
+    if (!allowed) {
+      console.warn(`Level ${level} is locked for this wallet — redirecting to map`);
+      history.replaceState(null, '', '/?page=map');
+      showScreen('mapScreen');
+      if (!mapInited) {
+        mapInited = true;
+        const { initMap } = await import('./map.js');
+        initMap();
+      }
+      return;
+    }
     showScreen('gameScreen');
     if (!gameLoaded) {
       gameLoaded = true;
@@ -451,22 +467,43 @@ void (async () => {
 
     const level = getLevel();
     const page = getPage();
+
+    // Session gate — non-home routes require wallet + signature
+    const sessionOk = hasSession();
+    // Level gate — chain-verified unlock for level > 1
+    let levelAllowed = !level;
     if (level) {
+      const lvlNum = parseInt(level, 10);
+      levelAllowed = sessionOk && Number.isInteger(lvlNum) && lvlNum >= 1 && await isLevelUnlocked(lvlNum);
+      if (!levelAllowed) {
+        console.warn(`Level ${level} is locked — redirecting`);
+      }
+    }
+    const redirectToMap = (level && !levelAllowed) || ((level || page === 'map') && !sessionOk);
+
+    if (levelAllowed && level) {
       gameLoaded = true;
       await import('./game.js');
-    } else if (page === 'map') {
+    } else if ((page === 'map' || redirectToMap) && sessionOk) {
       mapInited = true;
       const { initMap } = await import('./map.js');
       initMap();
     }
-    // home screen needs no async loading
     updateLoadingUI(1);
 
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     await holdMinLoadingVideoPlayback(loadingVideo);
     finishLoadingOutro();
-    if (level) {
+
+    if (!sessionOk && (level || page === 'map')) {
+      history.replaceState(null, '', '/');
+      showScreen('homeScreen');
+      showHomeGateHint();
+    } else if (levelAllowed && level) {
       showScreen('gameScreen');
+    } else if (level && !levelAllowed) {
+      history.replaceState(null, '', '/?page=map');
+      showScreen('mapScreen');
     } else if (page === 'map') {
       showScreen('mapScreen');
     } else {

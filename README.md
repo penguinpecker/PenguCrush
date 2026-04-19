@@ -63,6 +63,12 @@ The proxy exposes the full `PenguCrush` interface — score tracking _and_ activ
 
 Every on-chain call is fire-and-forget via `safeWrite()` in `src/onchain.js`. Failures log to the console but do not block the UI.
 
+### Level-unlock gate
+
+`?level=N` in the URL is **not trusted**. Before loading `game.js`, the boot flow calls `isLevelUnlocked(N)` in `src/progress.js`, which reads `getBestResult(wallet, N-1)` from the `PenguCrush` contract. A level unlocks only when the chain has recorded `stars > 0` on the previous level for the connected wallet. Level 1 is always open.
+
+Tampering with `localStorage.pengucrush_progress` no longer bypasses the gate — the chain is the source of truth.
+
 ### Kill switch
 
 Set `VITE_ONCHAIN_DISABLED=true` in `.env.local` to silence all on-chain writes (handy for running the game without popping the AGW tx prompt in dev).
