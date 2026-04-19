@@ -88,4 +88,4 @@ ehthumbs.db
 Desktop.ini
 
 # local backup of uncompressed assets (not shipped)
-public/assets_ORIGINAL/
+assets_ORIGINAL_BACKUP/
