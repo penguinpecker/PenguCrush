@@ -1,6 +1,7 @@
 import './style.css';
 import './map.css';
 import { getAGWAddress, isSignedIn, connectAGW, signInWithAGW } from './agw.js';
+import * as Inventory from './inventory.js';
 
 function getLevel() {
   return new URLSearchParams(window.location.search).get('level');
@@ -254,6 +255,27 @@ async function initShopBombPreview() {
     animate();
   });
 }
+
+// Shop BUY handlers — increment booster inventory, flash confirmation.
+// Real payment rails are out of scope here; the purchase is granted client-
+// side and persisted so the booster shows up in-game immediately.
+document.querySelectorAll('.shop-item').forEach(itemEl => {
+  const itemType = itemEl.dataset.item; // e.g. 'colorBomb'
+  const buyBtn = itemEl.querySelector('.shop-item__buy');
+  const labelEl = buyBtn?.querySelector('.shop-item__buy-label');
+  if (!buyBtn || !itemType) return;
+  buyBtn.addEventListener('click', () => {
+    if (buyBtn.disabled) return;
+    buyBtn.disabled = true;
+    const origLabel = labelEl ? labelEl.textContent : null;
+    const newCount = Inventory.addBooster(itemType, 1);
+    if (labelEl) labelEl.textContent = `+1 (${newCount})`;
+    setTimeout(() => {
+      if (labelEl && origLabel) labelEl.textContent = origLabel;
+      buyBtn.disabled = false;
+    }, 1400);
+  });
+});
 
 document.getElementById('shopClose')?.addEventListener('click', () => {
   document.getElementById('shopOverlay')?.classList.remove('active');

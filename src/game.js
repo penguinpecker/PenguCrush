@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { createGLTFLoader } from './gltf-loader.js';
 import { getLevel, hasLevel } from './levels.js';
 import { getWallet, ensureWallet, saveLevelResult } from './supabase.js';
+import * as Inventory from './inventory.js';
 
 // ═══════════════════════════════════════════════════════════════
 //  LEVEL CONFIG — driven by ?level=N URL param
@@ -42,10 +43,25 @@ const BLOCKER_GLB_PATHS = {
 };
 const blockerGlbCache = {};
 
-// Booster state
+// Booster state — hydrated from the wallet-scoped inventory so purchases and
+// unused charges carry over between sessions.
 let activeBooster = null; // null or 'row' | 'col' | 'colorBomb' | 'hammer' | 'shuffle'
-const boosterCharges = {}; // { row: 1, col: 1, ... }
-for (const b of CONFIG.boosters) boosterCharges[b] = 1;
+const boosterCharges = {}; // { row: N, col: N, ... } — reflects inventory
+function rehydrateBoosterCharges() {
+  const inv = Inventory.getAllBoosters();
+  for (const b of CONFIG.boosters) boosterCharges[b] = inv[b] || 0;
+}
+rehydrateBoosterCharges();
+// Attempt a cloud pull once on load; if it finds greater values, the inventory
+// change event will re-hydrate and update the UI.
+Inventory.hydrateFromCloud().then(() => {
+  rehydrateBoosterCharges();
+  updateBoosterUI();
+}).catch(() => {});
+Inventory.onInventoryChange(() => {
+  rehydrateBoosterCharges();
+  updateBoosterUI();
+});
 
 const TYPE_FIX = {
   ice:       { rx: 0, ry: 0, rz: 0, scale: 0.85 },
@@ -1015,9 +1031,11 @@ async function useBoosterShuffle() {
 }
 
 function consumeBooster(type) {
-  boosterCharges[type]--;
+  // Persist consumption to the wallet inventory (localStorage + cloud best-effort).
+  const remaining = Inventory.consumeBooster(type);
+  boosterCharges[type] = remaining;
   updateBoosterUI();
-  if (boosterCharges[type] <= 0) activeBooster = null;
+  if (remaining <= 0) activeBooster = null;
 }
 
 function updateBoosterUI() {

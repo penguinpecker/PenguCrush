@@ -1,5 +1,6 @@
 import { getLevel, getLevelCount } from './levels.js';
 import { getWallet, fetchPlayerProgress, buildMapProgress, connectAGW, disconnectAGW, shortAddress, hasInjectedWallet, signInWithAGW, isSignedIn } from './supabase.js';
+import * as Inventory from './inventory.js';
 
 const IMG_W = 2748, IMG_H = 1536;
 const IMG_RATIO = IMG_W / IMG_H;
@@ -394,8 +395,33 @@ export function initMap() {
     return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   }
 
+  function formatSpinCooldown(ms) {
+    const h = Math.floor(ms / 3600000);
+    const m = Math.floor((ms % 3600000) / 60000);
+    return h > 0 ? `${h}h ${m}m` : `${m}m`;
+  }
+
+  function refreshSpinButtonState() {
+    if (!dailySpinBtn) return;
+    const can = Inventory.canSpinDaily();
+    dailySpinBtn.disabled = !can || dailySpinning;
+    dailySpinBtn.textContent = can ? 'SPIN' : 'COME BACK TOMORROW';
+    if (!can && dailyResult && !dailySpinning) {
+      const wait = Inventory.nextSpinAvailableIn();
+      const last = Inventory.getInventory().dailySpinHistory.slice(-1)[0];
+      dailyResult.textContent = last
+        ? `Already spun today — you won: ${last.reward}. Next spin in ${formatSpinCooldown(wait)}.`
+        : `You can spin again in ${formatSpinCooldown(wait)}.`;
+      dailyResult.hidden = false;
+    }
+  }
+
   function spinDailyWheel() {
     if (!dailySpinEl || dailySpinning) return;
+    if (!Inventory.canSpinDaily()) {
+      refreshSpinButtonState();
+      return;
+    }
     const targetIndex = Math.floor(Math.random() * DAILY_SEGMENTS);
     const spins = prefersReducedMotion() ? 1 : 5;
     const current = normDeg360(dailyWheelRotation);
@@ -418,12 +444,16 @@ export function initMap() {
 
     const done = () => {
       dailySpinning = false;
-      dailySpinBtn.disabled = false;
+      const won = sliceIndexUnderPointer(dailyWheelRotation);
+      const rewardText = DAILY_REWARDS[won];
+      const effect = Inventory.applyDailyReward(rewardText);
       if (dailyResult) {
-        const won = sliceIndexUnderPointer(dailyWheelRotation);
-        dailyResult.textContent = `You won: ${DAILY_REWARDS[won]}`;
+        let suffix = '';
+        if (effect.type === 'booster') suffix = ` (+1 ${effect.booster})`;
+        dailyResult.textContent = `You won: ${rewardText}${suffix}`;
         dailyResult.hidden = false;
       }
+      refreshSpinButtonState();
     };
 
     if (duration < 0.1) {
@@ -446,6 +476,7 @@ export function initMap() {
   dailyOpen?.addEventListener('click', e => {
     e.stopPropagation();
     openDailyWheel();
+    refreshSpinButtonState();
   });
   dailyClose?.addEventListener('click', () => closeDailyWheel());
   dailyOverlay?.querySelector('.daily-wheel-overlay__backdrop')?.addEventListener('click', () => closeDailyWheel());

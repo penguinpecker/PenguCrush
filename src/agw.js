@@ -35,14 +35,21 @@ function clearSignIn() { localStorage.removeItem(SIGNIN_KEY); }
 function buildSignInMessage(addr) {
   const nonce = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
   const issuedAt = new Date().toISOString();
+  // SIWE-style: include origin so the wallet UI shows what site is asking.
+  // Works the same on https://www.pengucrush.com, https://pengucrush.com, and localhost.
+  const origin = typeof location !== 'undefined' ? location.origin : 'https://www.pengucrush.com';
+  const host = typeof location !== 'undefined' ? location.host : 'www.pengucrush.com';
   return {
     nonce,
     issuedAt,
+    origin,
     text:
-      'Welcome to PenguCrush!\n\n' +
-      'Sign this message to verify you control this wallet. ' +
+      `${host} wants you to sign in with your Abstract Global Wallet.\n\n` +
+      'Welcome to PenguCrush! Sign this message to verify you control this wallet. ' +
       'This is off-chain and costs no gas.\n\n' +
+      `URI: ${origin}\n` +
       `Wallet: ${addr}\n` +
+      `Chain ID: 2741\n` +
       `Issued: ${issuedAt}\n` +
       `Nonce: ${nonce}`,
   };
