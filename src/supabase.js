@@ -9,7 +9,7 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // ═══════════════════════════════════════════════════
 //  WALLET — powered by Abstract Global Wallet (AGW)
 // ═══════════════════════════════════════════════════
-import { connectAGW, disconnectAGW, getAGWAddress, shortAddress, hasInjectedWallet } from './agw.js';
+import { connectAGW, disconnectAGW, getAGWAddress, shortAddress, hasInjectedWallet, signInWithAGW, isSignedIn } from './agw.js';
 
 export function getWallet() {
   return getAGWAddress();
@@ -26,7 +26,7 @@ export async function ensureWallet() {
   }
 }
 
-export { connectAGW, disconnectAGW, shortAddress, hasInjectedWallet };
+export { connectAGW, disconnectAGW, shortAddress, hasInjectedWallet, signInWithAGW, isSignedIn };
 
 // ═══════════════════════════════════════════════════
 //  READ — fetch player progress from Supabase

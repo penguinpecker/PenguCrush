@@ -154,6 +154,31 @@ body[data-screen="game"] {
   transition: transform 0.2s ease;
 }
 
+.home-gate-hint {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + min(115px, 15vw));
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 8px 18px;
+  background: rgba(10, 30, 50, 0.55);
+  color: #e8f8ff;
+  font-family: 'Fredoka', sans-serif;
+  font-weight: 700;
+  font-size: clamp(13px, 1.6vw, 16px);
+  border-radius: 999px;
+  letter-spacing: 0.3px;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+  text-align: center;
+  animation: gate-hint-pulse 2s ease-in-out infinite;
+}
+@keyframes gate-hint-pulse {
+  0%, 100% { filter: drop-shadow(0 0 6px rgba(120, 220, 255, 0.3)); }
+  50% { filter: drop-shadow(0 0 18px rgba(120, 220, 255, 0.7)); }
+}
+
+
 /* Ice shine — only on hover */
 .home-play-btn::before {
   content: '';

@@ -1,31 +1,31 @@
 import { getLevel, getLevelCount } from './levels.js';
-import { getWallet, fetchPlayerProgress, buildMapProgress, connectAGW, disconnectAGW, shortAddress, hasInjectedWallet } from './supabase.js';
+import { getWallet, fetchPlayerProgress, buildMapProgress, connectAGW, disconnectAGW, shortAddress, hasInjectedWallet, signInWithAGW, isSignedIn } from './supabase.js';
 
-const IMG_W = 2000, IMG_H = 1116;
+const IMG_W = 2748, IMG_H = 1536;
 const IMG_RATIO = IMG_W / IMG_H;
 
 // Node positions on the map artwork (x/y percentages)
 const NODE_POSITIONS = [
-  { id: 1,  x: 11.8, y: 87.9 },
-  { id: 2,  x: 21.3, y: 84.9 },
-  { id: 3,  x: 29.7, y: 81.7 },
-  { id: 4,  x: 34.9, y: 73.3 },
-  { id: 5,  x: 21.8, y: 61.0 },
-  { id: 6,  x: 16.0, y: 52.1 },
-  { id: 7,  x: 21.1, y: 42.7 },
-  { id: 8,  x: 29.2, y: 39.9 },
-  { id: 9,  x: 38.4, y: 41.8 },
-  { id: 10, x: 46.0, y: 47.8 },
-  { id: 11, x: 52.5, y: 55.9 },
-  { id: 12, x: 63.5, y: 73.9 },
-  { id: 13, x: 71.5, y: 79.9 },
-  { id: 14, x: 79.8, y: 81.0 },
-  { id: 15, x: 87.8, y: 76.7 },
-  { id: 16, x: 90.8, y: 64.0 },
-  { id: 17, x: 84.8, y: 54.5 },
-  { id: 18, x: 76.8, y: 49.4 },
-  { id: 19, x: 71.3, y: 42.4 },
-  { id: 20, x: 75.4, y: 34.4 },
+  { id: 1,  x: 11.7, y: 88.3 },
+  { id: 2,  x: 18.5, y: 84.6 },
+  { id: 3,  x: 24.7, y: 77.5 },
+  { id: 4,  x: 25.2, y: 67.0 },
+  { id: 5,  x: 19.7, y: 56.1 },
+  { id: 6,  x: 23.5, y: 46.2 },
+  { id: 7,  x: 29.6, y: 39.5 },
+  { id: 8,  x: 37.0, y: 36.2 },
+  { id: 9,  x: 44.3, y: 36.1 },
+  { id: 10, x: 51.3, y: 39.1 },
+  { id: 11, x: 56.5, y: 45.2 },
+  { id: 12, x: 65.0, y: 56.1 },
+  { id: 13, x: 67.2, y: 66.6 },
+  { id: 14, x: 73.1, y: 73.7 },
+  { id: 15, x: 80.3, y: 75.0 },
+  { id: 16, x: 87.2, y: 69.7 },
+  { id: 17, x: 87.6, y: 59.4 },
+  { id: 18, x: 82.7, y: 51.7 },
+  { id: 19, x: 77.5, y: 45.2 },
+  { id: 20, x: 81.2, y: 36.8 },
 ];
 
 function loadProgress() {
@@ -144,13 +144,78 @@ export function initMap() {
   const stage = document.getElementById('mapStage');
   const nodesContainer = document.getElementById('mapNodes');
 
+  let sceneW = window.innerWidth, sceneH = window.innerHeight;
   function resizeStage() {
     const vw = window.innerWidth, vh = window.innerHeight;
-    const w = Math.max(vw, vh * IMG_RATIO);
-    const h = Math.max(vh, vw / IMG_RATIO);
-    stage.style.setProperty('--scene-w', w + 'px');
-    stage.style.setProperty('--scene-h', h + 'px');
+    sceneW = Math.max(vw, vh * IMG_RATIO);
+    sceneH = Math.max(vh, vw / IMG_RATIO);
+    stage.style.setProperty('--scene-w', sceneW + 'px');
+    stage.style.setProperty('--scene-h', sceneH + 'px');
+    clampPan();
   }
+
+  // ── Drag-to-pan the map scene ──────────────────────
+  let panX = 0, panY = 0;
+  let isPanning = false, hasDragged = false;
+  let pointerStartX = 0, pointerStartY = 0;
+  let panStartX = 0, panStartY = 0;
+  const DRAG_THRESHOLD = 6;
+
+  function clampPan() {
+    const maxX = Math.max(0, (sceneW - window.innerWidth) / 2);
+    const maxY = Math.max(0, (sceneH - window.innerHeight) / 2);
+    panX = Math.max(-maxX, Math.min(maxX, panX));
+    panY = Math.max(-maxY, Math.min(maxY, panY));
+    stage.style.setProperty('--pan-x', panX + 'px');
+    stage.style.setProperty('--pan-y', panY + 'px');
+  }
+
+  stage.addEventListener('pointerdown', e => {
+    if (e.shiftKey) return; // reserved for dev node-drag
+    if (e.button !== undefined && e.button !== 0) return;
+    isPanning = true;
+    hasDragged = false;
+    pointerStartX = e.clientX;
+    pointerStartY = e.clientY;
+    panStartX = panX;
+    panStartY = panY;
+    // Defer setPointerCapture until we actually start panning — otherwise
+    // clicks on inner buttons (level nodes, daily wheel) get swallowed.
+  });
+
+  stage.addEventListener('pointermove', e => {
+    if (!isPanning) return;
+    const dx = e.clientX - pointerStartX;
+    const dy = e.clientY - pointerStartY;
+    if (!hasDragged && Math.hypot(dx, dy) > DRAG_THRESHOLD) {
+      hasDragged = true;
+      stage.classList.add('panning');
+      try { stage.setPointerCapture(e.pointerId); } catch (_) {}
+    }
+    if (hasDragged) {
+      panX = panStartX + dx;
+      panY = panStartY + dy;
+      clampPan();
+    }
+  });
+
+  function endPan(e) {
+    if (!isPanning) return;
+    isPanning = false;
+    if (hasDragged) {
+      try { stage.releasePointerCapture(e.pointerId); } catch (_) {}
+      stage.classList.remove('panning');
+      const suppress = ev => {
+        ev.stopPropagation();
+        ev.preventDefault();
+      };
+      stage.addEventListener('click', suppress, { capture: true, once: true });
+      setTimeout(() => stage.removeEventListener('click', suppress, true), 0);
+    }
+  }
+  stage.addEventListener('pointerup', endPan);
+  stage.addEventListener('pointercancel', endPan);
+
   resizeStage();
   window.addEventListener('resize', resizeStage);
 
@@ -171,16 +236,55 @@ export function initMap() {
     }
   }
   updateAgwBtn();
+
+  // ── Disconnect confirm dialog ────────────────────────
+  const disconnectOverlay = document.getElementById('disconnectConfirm');
+  const disconnectCancelBtn = document.getElementById('disconnectCancel');
+  const disconnectOkBtn = document.getElementById('disconnectOk');
+
+  function openDisconnectConfirm() {
+    disconnectOverlay?.classList.add('active');
+    disconnectOverlay?.setAttribute('aria-hidden', 'false');
+  }
+  function closeDisconnectConfirm() {
+    disconnectOverlay?.classList.remove('active');
+    disconnectOverlay?.setAttribute('aria-hidden', 'true');
+  }
+
+  disconnectCancelBtn?.addEventListener('click', closeDisconnectConfirm);
+  disconnectOverlay?.addEventListener('click', e => {
+    if (e.target === disconnectOverlay) closeDisconnectConfirm();
+  });
+  disconnectOkBtn?.addEventListener('click', () => {
+    disconnectAGW();
+    closeDisconnectConfirm();
+    window.location.href = '/';
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && disconnectOverlay?.classList.contains('active')) {
+      closeDisconnectConfirm();
+    }
+  });
+
   agwBtn.addEventListener('click', async () => {
     if (getWallet()) {
-      disconnectAGW();
-      updateAgwBtn();
+      openDisconnectConfirm();
       return;
     }
     agwBtn.textContent = 'Connecting…';
     agwBtn.disabled = true;
     try {
       await connectAGW();
+      agwBtn.textContent = 'Sign in…';
+      try {
+        await signInWithAGW();
+      } catch (sigErr) {
+        console.warn('AGW sign-in rejected:', sigErr);
+        disconnectAGW();
+        updateAgwBtn();
+        alert('Signature required to sign in. Please try again.');
+        return;
+      }
       updateAgwBtn();
       loadProgress(); // refresh map with wallet data
     } catch (err) {

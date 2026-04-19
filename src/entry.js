@@ -1,8 +1,13 @@
 import './style.css';
 import './map.css';
+import { getAGWAddress, isSignedIn, connectAGW, signInWithAGW } from './agw.js';
 
 function getLevel() {
   return new URLSearchParams(window.location.search).get('level');
+}
+
+function hasSession() {
+  return !!getAGWAddress() && isSignedIn();
 }
 
 function showScreen(id) {
@@ -11,6 +16,14 @@ function showScreen(id) {
     s.classList.toggle('screen--active', s.id === id);
   });
   document.body.dataset.screen = id.replace('Screen', '');
+}
+
+function showHomeGateHint() {
+  const hint = document.getElementById('homeGateHint');
+  if (!hint) return;
+  hint.hidden = false;
+  clearTimeout(showHomeGateHint._t);
+  showHomeGateHint._t = setTimeout(() => { hint.hidden = true; }, 4000);
 }
 
 window.__pengu = {
@@ -33,6 +46,14 @@ async function boot() {
   const level = getLevel();
   const page = getPage();
 
+  // Gate non-home routes on active session (wallet + signature)
+  if ((level || page === 'map') && !hasSession()) {
+    showScreen('homeScreen');
+    showHomeGateHint();
+    history.replaceState(null, '', '/');
+    return;
+  }
+
   if (level) {
     showScreen('gameScreen');
     if (!gameLoaded) {
@@ -47,7 +68,6 @@ async function boot() {
       initMap();
     }
   } else {
-    // home, shop, leaderboard — show homeScreen for now
     showScreen('homeScreen');
   }
 }
@@ -67,6 +87,14 @@ function updateNav() {
 document.querySelectorAll('.nav-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     const page = btn.dataset.page;
+    // Gate everything except home behind an active session
+    if (page !== 'home' && !hasSession()) {
+      showScreen('homeScreen');
+      showHomeGateHint();
+      history.replaceState(null, '', '/');
+      updateNav();
+      return;
+    }
     if (page === 'shop') {
       document.getElementById('shopOverlay')?.classList.add('active');
       initShopBombPreview();
@@ -239,17 +267,35 @@ document.getElementById('shopOverlay')?.addEventListener('click', (e) => {
 // ═══════════════════════════════════════════════════
 // HOME PLAY BUTTON → AGW CONNECT
 // ═══════════════════════════════════════════════════
-document.getElementById('homePlayBtn')?.addEventListener('click', async () => {
+const homePlayBtn = document.getElementById('homePlayBtn');
+
+homePlayBtn?.addEventListener('click', async () => {
+  if (homePlayBtn.disabled) return;
+  homePlayBtn.disabled = true;
   try {
-    const { connectAGW, getAGWAddress } = await import('./agw.js');
+    if (hasSession()) {
+      window.location.href = '/?page=map';
+      return;
+    }
     if (!getAGWAddress()) {
       await connectAGW();
     }
+    if (!isSignedIn()) {
+      await signInWithAGW();
+    }
     window.location.href = '/?page=map';
   } catch (err) {
-    console.error('AGW connect error:', err);
-    // Still navigate to map even if wallet connect fails/cancelled
-    window.location.href = '/?page=map';
+    console.error('AGW connect/sign-in error:', err);
+    const msg = String(err?.message || err || '');
+    if (/popup|blocked|window/i.test(msg)) {
+      alert('The AGW login popup was blocked. Please allow popups for this site and try again.');
+    } else if (/reject|denied|cancel/i.test(msg)) {
+      // User cancelled — no alert needed
+    } else {
+      alert('Wallet connect failed: ' + msg);
+    }
+  } finally {
+    homePlayBtn.disabled = false;
   }
 });
 

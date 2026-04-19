@@ -1,22 +1,18 @@
 // ═══════════════════════════════════════════════════════════════
 //  AGW — Abstract Global Wallet integration (vanilla JS)
 //
-//  Uses @privy-io/cross-app-connect to open the real AGW login
-//  popup (email, Google, passkeys, etc.) and then wraps the
-//  provider with @abstract-foundation/agw-client so transactions
-//  route through the user's AGW smart contract wallet.
-//
-//  Local dev: Privy is not loaded until you connect for real — see
-//  useWalletBypass() (localhost / Vite dev / VITE_PRIVY_BYPASS).
+//  Opens the real AGW login popup (email, Google, passkeys, etc.)
+//  via @privy-io/cross-app-connect and wraps the provider with
+//  @abstract-foundation/agw-client so signatures + transactions
+//  route through the user's AGW smart contract wallet (EIP-1271).
 // ═══════════════════════════════════════════════════════════════
 import { transformEIP1193Provider } from '@abstract-foundation/agw-client';
 import { createPublicClient, createWalletClient, custom, http } from 'viem';
 import { abstract } from 'viem/chains';
+import { toPrivyWalletProvider } from '@privy-io/cross-app-connect';
 
 // Abstract's Privy provider app ID (from agw-react constants)
 const AGW_APP_ID = 'cm04asygd041fmry9zmcyn5o5';
-
-const DEFAULT_DEV_WALLET = '0x1111111111111111111111111111111111111111';
 
 let _privyProvider = null;  // raw Privy cross-app EIP-1193 provider
 let _agwProvider = null;    // wrapped with AGW transformEIP1193Provider
@@ -24,7 +20,9 @@ let _walletClient = null;   // viem WalletClient
 let _publicClient = null;   // viem PublicClient
 let _address = null;        // AGW smart contract wallet address
 let _signerAddress = null;  // underlying EOA address
-let _devBypass = false;     // true when using local stub (no Privy)
+
+const SIGNIN_KEY = 'pengu_siwe';
+const SIGNIN_TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7 days
 
 // ── helpers ────────────────────────────────────────────────────
 function persist(addr) {
@@ -32,69 +30,70 @@ function persist(addr) {
   else localStorage.removeItem('pengu_wallet');
 }
 
-/**
- * Skip Privy / cross-app connect on local machines so the app loads without wallet infra.
- * Set VITE_PRIVY_BYPASS=false in .env to force real Privy on localhost.
- * Set VITE_PRIVY_BYPASS=true to force bypass even on non-local hosts (optional).
- */
-export function useWalletBypass() {
-  try {
-    if (import.meta.env?.VITE_PRIVY_BYPASS === 'false') return false;
-    if (import.meta.env?.VITE_PRIVY_BYPASS === 'true') return true;
-    if (import.meta.env?.DEV) return true;
-  } catch (_) {}
-  if (typeof location === 'undefined') return false;
-  const h = location.hostname;
-  return h === 'localhost' || h === '127.0.0.1' || h === '[::1]';
+function clearSignIn() { localStorage.removeItem(SIGNIN_KEY); }
+
+function buildSignInMessage(addr) {
+  const nonce = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+  const issuedAt = new Date().toISOString();
+  return {
+    nonce,
+    issuedAt,
+    text:
+      'Welcome to PenguCrush!\n\n' +
+      'Sign this message to verify you control this wallet. ' +
+      'This is off-chain and costs no gas.\n\n' +
+      `Wallet: ${addr}\n` +
+      `Issued: ${issuedAt}\n` +
+      `Nonce: ${nonce}`,
+  };
 }
 
-function devWalletAddress() {
+export function isSignedIn() {
   try {
-    const w = import.meta.env?.VITE_DEV_WALLET;
-    if (w && typeof w === 'string' && w.startsWith('0x') && w.length >= 10) return w;
-  } catch (_) {}
-  return DEFAULT_DEV_WALLET;
+    const raw = localStorage.getItem(SIGNIN_KEY);
+    if (!raw) return false;
+    const { address, issuedAt } = JSON.parse(raw);
+    if (!address || !_address) return false;
+    if (address.toLowerCase() !== _address.toLowerCase()) return false;
+    if (issuedAt && Date.now() - new Date(issuedAt).getTime() > SIGNIN_TTL_MS) {
+      clearSignIn();
+      return false;
+    }
+    return true;
+  } catch (_) { return false; }
 }
 
 // ── public API ─────────────────────────────────────────────────
 
-/** Connect via AGW — opens the Abstract login popup (email/Google/passkeys) */
-export async function connectAGW() {
-  if (useWalletBypass()) {
-    _devBypass = true;
-    _privyProvider = null;
-    _agwProvider = null;
-    _walletClient = null;
-    _signerAddress = null;
-    _publicClient = null;
-    const addr = devWalletAddress();
-    _address = addr;
-    persist(addr);
-    console.log('🐧 AGW dev bypass — no Privy; wallet:', addr);
-    return addr;
-  }
-
-  _devBypass = false;
-  const { toPrivyWalletProvider } = await import('@privy-io/cross-app-connect');
-
-  // 1. Create Privy cross-app provider pointed at Abstract's AGW
+/** Lazily create the Privy cross-app provider so it's ready when the user clicks. */
+function ensurePrivyProvider() {
+  if (_privyProvider) return _privyProvider;
   _privyProvider = toPrivyWalletProvider({
     providerAppId: AGW_APP_ID,
     chains: [abstract],
     chainId: abstract.id,
     smartWalletMode: true,
   });
+  return _privyProvider;
+}
 
-  // 2. Request accounts — this opens the AGW login popup
-  await _privyProvider.request({ method: 'eth_requestAccounts' });
-  const accounts = await _privyProvider.request({ method: 'eth_accounts' });
+/** Connect via AGW — opens the Abstract login popup (email/Google/passkeys) */
+export async function connectAGW() {
+  if (_walletClient && _address) return _address; // idempotent
+
+  // 1. Ensure Privy cross-app provider exists pointed at Abstract's AGW
+  const privy = ensurePrivyProvider();
+
+  // 2. Request accounts — this opens the AGW login popup (must be synchronous from user gesture)
+  await privy.request({ method: 'eth_requestAccounts' });
+  const accounts = await privy.request({ method: 'eth_accounts' });
   if (!accounts?.length) throw new Error('No accounts returned from AGW');
 
   _signerAddress = accounts[0]; // EOA from Privy
 
   // 3. Wrap with AGW's transformEIP1193Provider for smart contract wallet routing
   _agwProvider = transformEIP1193Provider({
-    provider: _privyProvider,
+    provider: privy,
     chain: abstract,
     isPrivyCrossApp: true,
   });
@@ -120,10 +119,38 @@ export async function connectAGW() {
   return _address;
 }
 
-/** Disconnect (clear local state) */
+// Pre-create the Privy provider on module load so the popup opens instantly on click,
+// without a network fetch stealing the user-gesture context.
+try { ensurePrivyProvider(); } catch (err) { console.warn('Privy init deferred:', err); }
+
+/** Sign the SIWE message via AGW (EIP-1271). Opens the real AGW signature popup. */
+export async function signInWithAGW() {
+  if (!_walletClient || !_address) {
+    await connectAGW();
+  }
+  const { nonce, issuedAt, text } = buildSignInMessage(_address);
+
+  // Routed through AGW transformEIP1193Provider → smart-wallet signMessage (EIP-1271)
+  const signature = await _walletClient.signMessage({
+    account: _address,
+    message: text,
+  });
+
+  localStorage.setItem(SIGNIN_KEY, JSON.stringify({
+    address: _address, signature, nonce, issuedAt,
+  }));
+  return signature;
+}
+
+/** Disconnect (clear local state + revoke permissions) */
 export function disconnectAGW() {
   if (_privyProvider) {
-    try { _privyProvider.request({ method: 'wallet_revokePermissions' }); } catch (_) {}
+    try {
+      _privyProvider.request({
+        method: 'wallet_revokePermissions',
+        params: [{ eth_accounts: {} }],
+      });
+    } catch (_) {}
   }
   _privyProvider = null;
   _agwProvider = null;
@@ -131,18 +158,13 @@ export function disconnectAGW() {
   _publicClient = null;
   _address = null;
   _signerAddress = null;
-  _devBypass = false;
   persist(null);
+  clearSignIn();
 }
 
 /** Get current AGW address (or null) */
 export function getAGWAddress() {
   return _address;
-}
-
-/** True when using the local dev stub (no on-chain signer) */
-export function isDevWalletBypass() {
-  return !!_devBypass;
 }
 
 /** Get the signer EOA address */
@@ -178,14 +200,13 @@ export function shortAddress(addr) {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
-/** Always true — AGW / dev bypass do not require an injected browser wallet */
+/** Always true — AGW cross-app popup does not require an injected browser wallet */
 export function hasInjectedWallet() {
   return true;
 }
 
-// ── re-hydrate from localStorage on load ──────────────────────
+// ── re-hydrate address from localStorage on load ──────────────
+// (Wallet client is NOT restored; user must reconnect to sign/transact.
+//  But isSignedIn() can still be true if a valid signature is cached.)
 const saved = localStorage.getItem('pengu_wallet');
-if (saved) {
-  _address = saved;
-  if (useWalletBypass()) _devBypass = true;
-}
+if (saved) _address = saved;

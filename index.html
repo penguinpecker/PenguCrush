@@ -4,6 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PenguCrush</title>
+  <script>
+    // Polyfill Node's `global` for npm packages (e.g. buffer via Privy) that
+    // expect it in the browser. Must run before any module script.
+    window.global ||= window;
+  </script>
   <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/src/style.css" />
 </head>
@@ -47,8 +52,10 @@
         <source src="/assets/ui/home-video.mp4" type="video/mp4" />
       </video>
       <button class="home-play-btn" id="homePlayBtn" aria-label="Connect Wallet and Play"></button>
+      <p class="home-gate-hint" id="homeGateHint" hidden>Connect your wallet to continue</p>
     </div>
   </div>
+
 
   <!-- ═══ MAP SCREEN ═══ -->
   <div id="mapScreen" class="screen screen--hidden">
@@ -57,6 +64,18 @@
 
     <!-- AGW wallet button -->
     <button class="agw-btn" id="agwBtn">Connect Wallet</button>
+
+    <!-- Disconnect confirm dialog -->
+    <div class="confirm-overlay" id="disconnectConfirm" aria-hidden="true">
+      <div class="confirm-card" role="dialog" aria-modal="true" aria-labelledby="disconnectTitle">
+        <h3 class="confirm-title" id="disconnectTitle">Disconnect wallet?</h3>
+        <p class="confirm-msg">You'll need to reconnect and sign in again to save progress.</p>
+        <div class="confirm-actions">
+          <button type="button" class="confirm-btn confirm-btn--cancel" id="disconnectCancel">Cancel</button>
+          <button type="button" class="confirm-btn confirm-btn--ok" id="disconnectOk">Disconnect</button>
+        </div>
+      </div>
+    </div>
 
     <div class="map-stage" id="mapStage">
       <div class="map-scene">
