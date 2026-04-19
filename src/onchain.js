@@ -1,30 +1,20 @@
 // ═══════════════════════════════════════════════════════════════
 //  ON-CHAIN ACTIVITY — writes to Abstract from the user's AGW
 //
-//  Target contract: PenguCrush (UUPS upgradeable). One proxy address
-//  handles level submissions AND booster/spin activity events, so
-//  new actions can be added later by upgrading the implementation
-//  without changing this file's address or players' history.
-//
-//  Until the new PenguCrush proxy is deployed, level submissions
-//  fall back to the existing PenguCrushScores contract so the
-//  existing leaderboard keeps working.
+//  Target contract: PenguCrush (UUPS upgradeable proxy). One address
+//  handles level submissions AND activity events (booster used,
+//  booster purchased, daily spin, session ping). New actions are
+//  added by upgrading the implementation — the proxy address and
+//  all player history stay the same.
 // ═══════════════════════════════════════════════════════════════
 
 import { getWalletClient, getAGWAddress } from './agw.js';
 import { abstract } from 'viem/chains';
-import legacyScoresAbiJson from '../contracts/PenguCrushScoresABI.json';
 import penguCrushAbiJson from '../contracts/PenguCrushABI.json';
 
-// ── Contract addresses ────────────────────────────────────────
-// Unified UUPS proxy on Abstract Mainnet (deployed 2026-04-19).
-// Implementation at 0x976321C3724D01004a37f6E3Ce885cC28ea7f068.
-const PENGUCRUSH_ADDRESS = '0xAF2ED337AAF8c3FF4AF5600C15F1C8C7042ec517';
+/** Unified UUPS proxy on Abstract Mainnet (chain 2741). */
+export const PENGUCRUSH_ADDRESS = '0xAF2ED337AAF8c3FF4AF5600C15F1C8C7042ec517';
 
-// Legacy scores contract still live on Abstract Mainnet.
-const LEGACY_SCORES_ADDRESS = '0x2ef63Ee603a6944396AA97DA35835807F96BA089';
-
-const legacyScoresAbi = Array.isArray(legacyScoresAbiJson) ? legacyScoresAbiJson : legacyScoresAbiJson.abi || [];
 const penguCrushAbi = Array.isArray(penguCrushAbiJson) ? penguCrushAbiJson : penguCrushAbiJson.abi || [];
 
 // ── Kill switch ───────────────────────────────────────────────
@@ -37,13 +27,20 @@ function log(label, hash) {
   if (hash) console.log(`🔗 onchain ${label}:`, hash);
 }
 
-async function safeWrite(label, fn) {
+async function safeWrite(label, functionName, args) {
   if (isDisabled()) return null;
   const client = getWalletClient();
   const account = getAGWAddress();
   if (!client || !account) return null;
   try {
-    const hash = await fn(client, account);
+    const hash = await client.writeContract({
+      address: PENGUCRUSH_ADDRESS,
+      abi: penguCrushAbi,
+      functionName,
+      args,
+      account,
+      chain: abstract,
+    });
     log(label, hash);
     return hash;
   } catch (err) {
@@ -54,78 +51,29 @@ async function safeWrite(label, fn) {
 
 // ── Public API ────────────────────────────────────────────────
 
-export async function logLevelOnchain({ level, score, stars, movesUsed }) {
-  return safeWrite('level', (client, account) =>
-    client.writeContract({
-      address: PENGUCRUSH_ADDRESS || LEGACY_SCORES_ADDRESS,
-      abi: PENGUCRUSH_ADDRESS ? penguCrushAbi : legacyScoresAbi,
-      functionName: 'submitScore',
-      args: [
-        Number(level),
-        Number(score),
-        Number(stars),
-        Number(movesUsed),
-      ],
-      account,
-      chain: abstract,
-    })
-  );
+export function logLevelOnchain({ level, score, stars, movesUsed }) {
+  return safeWrite('level', 'submitScore',
+    [Number(level), Number(score), Number(stars), Number(movesUsed)]);
 }
 
-export async function logBoosterUseOnchain(boosterType) {
-  if (!PENGUCRUSH_ADDRESS) return null;
-  return safeWrite('booster-use', (client, account) =>
-    client.writeContract({
-      address: PENGUCRUSH_ADDRESS,
-      abi: penguCrushAbi,
-      functionName: 'logBoosterUsed',
-      args: [stringToBytes32(boosterType)],
-      account,
-      chain: abstract,
-    })
-  );
+export function logBoosterUseOnchain(boosterType) {
+  return safeWrite('booster-use', 'logBoosterUsed',
+    [stringToBytes32(boosterType)]);
 }
 
-export async function logBoosterPurchaseOnchain(boosterType, qty) {
-  if (!PENGUCRUSH_ADDRESS) return null;
-  return safeWrite('booster-buy', (client, account) =>
-    client.writeContract({
-      address: PENGUCRUSH_ADDRESS,
-      abi: penguCrushAbi,
-      functionName: 'logBoosterPurchased',
-      args: [stringToBytes32(boosterType), Number(qty)],
-      account,
-      chain: abstract,
-    })
-  );
+export function logBoosterPurchaseOnchain(boosterType, qty) {
+  return safeWrite('booster-buy', 'logBoosterPurchased',
+    [stringToBytes32(boosterType), Number(qty)]);
 }
 
-export async function logDailySpinOnchain(rewardText) {
-  if (!PENGUCRUSH_ADDRESS) return null;
-  return safeWrite('daily-spin', (client, account) =>
-    client.writeContract({
-      address: PENGUCRUSH_ADDRESS,
-      abi: penguCrushAbi,
-      functionName: 'logDailySpin',
-      args: [stringToBytes32(rewardText)],
-      account,
-      chain: abstract,
-    })
-  );
+export function logDailySpinOnchain(rewardText) {
+  return safeWrite('daily-spin', 'logDailySpin',
+    [stringToBytes32(rewardText)]);
 }
 
-export async function logSessionPingOnchain(tag) {
-  if (!PENGUCRUSH_ADDRESS) return null;
-  return safeWrite('session-ping', (client, account) =>
-    client.writeContract({
-      address: PENGUCRUSH_ADDRESS,
-      abi: penguCrushAbi,
-      functionName: 'logSessionPing',
-      args: [stringToBytes32(tag)],
-      account,
-      chain: abstract,
-    })
-  );
+export function logSessionPingOnchain(tag) {
+  return safeWrite('session-ping', 'logSessionPing',
+    [stringToBytes32(tag)]);
 }
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -135,5 +83,3 @@ function stringToBytes32(s) {
   const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
   return '0x' + hex.padEnd(64, '0');
 }
-
-export { PENGUCRUSH_ADDRESS, LEGACY_SCORES_ADDRESS };

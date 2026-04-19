@@ -1,0 +1,200 @@
+{
+  "manifestVersion": "3.2",
+  "proxies": [
+    {
+      "address": "0xAF2ED337AAF8c3FF4AF5600C15F1C8C7042ec517",
+      "txHash": "0x5e00288f2c66035903c0e5522bb60e564f41119bd8753fa33524f32b7461919f",
+      "kind": "uups"
+    }
+  ],
+  "impls": {
+    "1526709d027c6de82b26e1e4fe19b76123c0f05b8cfb7c50bf205f916b73442d": {
+      "address": "0x976321C3724D01004a37f6E3Ce885cC28ea7f068",
+      "txHash": "0xcbcf9133465653f10b5161aa3f8124829ac63cb66961beb3049f4a3f4bb4bde8",
+      "layout": {
+        "solcVersion": "0.8.24",
+        "storage": [
+          {
+            "contract": "PenguCrush",
+            "label": "maxLevel",
+            "type": "t_uint16",
+            "src": "contracts/PenguCrush.sol:54"
+          },
+          {
+            "contract": "PenguCrush",
+            "label": "paused",
+            "type": "t_bool",
+            "src": "contracts/PenguCrush.sol:54"
+          },
+          {
+            "contract": "PenguCrush",
+            "label": "bestResults",
+            "type": "t_mapping(t_address,t_mapping(t_uint16,t_struct(LevelResult)1735_storage))",
+            "src": "contracts/PenguCrush.sol:54"
+          },
+          {
+            "contract": "PenguCrush",
+            "label": "playerStats",
+            "type": "t_mapping(t_address,t_struct(PlayerStats)1748_storage)",
+            "src": "contracts/PenguCrush.sol:57"
+          },
+          {
+            "contract": "PenguCrush",
+            "label": "attempts",
+            "type": "t_mapping(t_address,t_mapping(t_uint16,t_uint32))",
+            "src": "contracts/PenguCrush.sol:59"
+          },
+          {
+            "contract": "PenguCrush",
+            "label": "players",
+            "type": "t_array(t_address)dyn_storage",
+            "src": "contracts/PenguCrush.sol:62"
+          },
+          {
+            "contract": "PenguCrush",
+            "label": "isRegistered",
+            "type": "t_mapping(t_address,t_bool)",
+            "src": "contracts/PenguCrush.sol:63"
+          },
+          {
+            "contract": "PenguCrush",
+            "label": "authorizedSubmitters",
+            "type": "t_mapping(t_address,t_bool)",
+            "src": "contracts/PenguCrush.sol:65"
+          },
+          {
+            "contract": "PenguCrush",
+            "label": "__gap",
+            "type": "t_array(t_uint256)45_storage",
+            "src": "contracts/PenguCrush.sol:70"
+          }
+        ],
+        "types": {
+          "t_uint16": {
+            "label": "uint16"
+          },
+          "t_bool": {
+            "label": "bool"
+          },
+          "t_mapping(t_address,t_mapping(t_uint16,t_struct(LevelResult)1735_storage))": {
+            "label": "mapping(address => mapping(uint16 => struct PenguCrush.LevelResult))"
+          },
+          "t_address": {
+            "label": "address"
+          },
+          "t_mapping(t_uint16,t_struct(LevelResult)1735_storage)": {
+            "label": "mapping(uint16 => struct PenguCrush.LevelResult)"
+          },
+          "t_struct(LevelResult)1735_storage": {
+            "label": "struct PenguCrush.LevelResult",
+            "members": [
+              {
+                "label": "level",
+                "type": "t_uint16"
+              },
+              {
+                "label": "score",
+                "type": "t_uint32"
+              },
+              {
+                "label": "stars",
+                "type": "t_uint8"
+              },
+              {
+                "label": "movesUsed",
+                "type": "t_uint16"
+              },
+              {
+                "label": "timestamp",
+                "type": "t_uint64"
+              }
+            ]
+          },
+          "t_uint32": {
+            "label": "uint32"
+          },
+          "t_uint8": {
+            "label": "uint8"
+          },
+          "t_uint64": {
+            "label": "uint64"
+          },
+          "t_mapping(t_address,t_struct(PlayerStats)1748_storage)": {
+            "label": "mapping(address => struct PenguCrush.PlayerStats)"
+          },
+          "t_struct(PlayerStats)1748_storage": {
+            "label": "struct PenguCrush.PlayerStats",
+            "members": [
+              {
+                "label": "highestLevel",
+                "type": "t_uint16"
+              },
+              {
+                "label": "totalScore",
+                "type": "t_uint32"
+              },
+              {
+                "label": "totalStars",
+                "type": "t_uint16"
+              },
+              {
+                "label": "gamesPlayed",
+                "type": "t_uint32"
+              },
+              {
+                "label": "firstPlayedAt",
+                "type": "t_uint64"
+              },
+              {
+                "label": "lastPlayedAt",
+                "type": "t_uint64"
+              }
+            ]
+          },
+          "t_mapping(t_address,t_mapping(t_uint16,t_uint32))": {
+            "label": "mapping(address => mapping(uint16 => uint32))"
+          },
+          "t_mapping(t_uint16,t_uint32)": {
+            "label": "mapping(uint16 => uint32)"
+          },
+          "t_array(t_address)dyn_storage": {
+            "label": "address[]"
+          },
+          "t_mapping(t_address,t_bool)": {
+            "label": "mapping(address => bool)"
+          },
+          "t_array(t_uint256)45_storage": {
+            "label": "uint256[45]"
+          },
+          "t_uint256": {
+            "label": "uint256"
+          }
+        },
+        "namespaces": {
+          "erc7201:openzeppelin.storage.Ownable": [
+            {
+              "contract": "OwnableUpgradeable",
+              "label": "_owner",
+              "type": "t_address",
+              "src": "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol:24"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Initializable": [
+            {
+              "contract": "Initializable",
+              "label": "_initialized",
+              "type": "t_uint64",
+              "src": "@openzeppelin/contracts/proxy/utils/Initializable.sol:69"
+            },
+            {
+              "contract": "Initializable",
+              "label": "_initializing",
+              "type": "t_bool",
+              "src": "@openzeppelin/contracts/proxy/utils/Initializable.sol:73"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

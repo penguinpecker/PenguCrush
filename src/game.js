@@ -878,7 +878,7 @@ function showLevelPopup(won) {
       else console.warn('🐧 Supabase save failed:', res);
     });
 
-    // On-chain: submitScore to PenguCrushScores on Abstract (best-effort).
+    // On-chain: submitScore to the PenguCrush proxy on Abstract (best-effort).
     // Only write for completed runs so failed attempts don't clutter history.
     if (won) {
       logLevelOnchain({ level: levelNum, score, stars, movesUsed });
