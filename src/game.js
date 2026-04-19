@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { createGLTFLoader } from './gltf-loader.js';
 import { getLevel, hasLevel } from './levels.js';
 import { getWallet, ensureWallet, saveLevelResult } from './supabase.js';
 
@@ -124,7 +124,7 @@ function gridToWorld(row, col) {
 // ═══════════════════════════════════════════════════════════════
 //  GLB LOADER
 // ═══════════════════════════════════════════════════════════════
-const loader = new GLTFLoader();
+const loader = createGLTFLoader();
 const glbCache = {};
 
 async function loadGLB(url) {

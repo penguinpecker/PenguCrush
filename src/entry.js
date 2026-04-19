@@ -207,7 +207,7 @@ async function initShopBombPreview() {
   if (!canvas) return;
 
   const THREE = await import('three');
-  const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
+  const { createGLTFLoader } = await import('./gltf-loader.js');
 
   const size = Math.max(1, Math.round(canvas.clientWidth || 50));
   canvas.width = size * 2;
@@ -231,7 +231,7 @@ async function initShopBombPreview() {
   rim.position.set(-2, 1, -1);
   scene.add(rim);
 
-  const loader = new GLTFLoader();
+  const loader = createGLTFLoader();
   loader.load('/assets/boosters/color-bomb.glb', (gltf) => {
     const model = gltf.scene;
     // Center and scale
