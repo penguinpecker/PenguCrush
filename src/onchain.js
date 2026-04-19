@@ -17,8 +17,9 @@ import legacyScoresAbiJson from '../contracts/PenguCrushScoresABI.json';
 import penguCrushAbiJson from '../contracts/PenguCrushABI.json';
 
 // ── Contract addresses ────────────────────────────────────────
-// New unified proxy — fill in after `deploy-pengucrush.cjs` runs.
-const PENGUCRUSH_ADDRESS = null;
+// Unified UUPS proxy on Abstract Mainnet (deployed 2026-04-19).
+// Implementation at 0x976321C3724D01004a37f6E3Ce885cC28ea7f068.
+const PENGUCRUSH_ADDRESS = '0xAF2ED337AAF8c3FF4AF5600C15F1C8C7042ec517';
 
 // Legacy scores contract still live on Abstract Mainnet.
 const LEGACY_SCORES_ADDRESS = '0x2ef63Ee603a6944396AA97DA35835807F96BA089';

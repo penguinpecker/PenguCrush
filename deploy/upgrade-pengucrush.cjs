@@ -8,7 +8,7 @@ const { vars } = require("hardhat/config");
 //
 // The proxy address stays the same; only the implementation bytecode
 // changes. Player data, leaderboards, and event history are preserved.
-const PROXY_ADDRESS = "0x0000000000000000000000000000000000000000"; // TODO: fill in after deploy
+const PROXY_ADDRESS = "0xAF2ED337AAF8c3FF4AF5600C15F1C8C7042ec517";
 
 module.exports = async function (hre) {
   if (PROXY_ADDRESS === "0x0000000000000000000000000000000000000000") {
