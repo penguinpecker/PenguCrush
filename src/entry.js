@@ -340,6 +340,40 @@ document.getElementById('shopOverlay')?.addEventListener('click', (e) => {
 });
 
 // ═══════════════════════════════════════════════════
+// LEAVE-LEVEL BUTTON (game screen back to map)
+// ═══════════════════════════════════════════════════
+const leaveOverlay = document.getElementById('leaveConfirm');
+const leaveCancelBtn = document.getElementById('leaveCancel');
+const leaveOkBtn = document.getElementById('leaveOk');
+const gameBackBtn = document.getElementById('gameBackBtn');
+
+function openLeaveConfirm() {
+  leaveOverlay?.classList.add('active');
+  leaveOverlay?.setAttribute('aria-hidden', 'false');
+}
+function closeLeaveConfirm() {
+  leaveOverlay?.classList.remove('active');
+  leaveOverlay?.setAttribute('aria-hidden', 'true');
+}
+
+gameBackBtn?.addEventListener('click', openLeaveConfirm);
+leaveCancelBtn?.addEventListener('click', closeLeaveConfirm);
+leaveOverlay?.addEventListener('click', e => {
+  if (e.target === leaveOverlay) closeLeaveConfirm();
+});
+leaveOkBtn?.addEventListener('click', () => {
+  closeLeaveConfirm();
+  window.__pengu.goToMap();
+});
+document.addEventListener('keydown', e => {
+  if (document.body.dataset.screen !== 'game') return;
+  if (e.key === 'Escape') {
+    if (leaveOverlay?.classList.contains('active')) closeLeaveConfirm();
+    else openLeaveConfirm();
+  }
+});
+
+// ═══════════════════════════════════════════════════
 // HOME PLAY BUTTON → AGW CONNECT
 // ═══════════════════════════════════════════════════
 const homePlayBtn = document.getElementById('homePlayBtn');

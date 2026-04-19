@@ -157,6 +157,10 @@
 
   <!-- ═══ GAME SCREEN ═══ -->
   <div id="gameScreen" class="screen screen--hidden">
+    <button class="game-back-btn" id="gameBackBtn" aria-label="Leave level and return to map">
+      <span class="game-back-btn__arrow" aria-hidden="true">◀</span>
+      <span class="game-back-btn__label">Map</span>
+    </button>
     <div id="app" class="app">
       <img src="/assets/hud/logo.png" class="logo" alt="PenguCrush" />
       <div class="hud">
@@ -175,6 +179,18 @@
       <div class="booster-bar" id="boosterBar"></div>
     </div>
     <div class="msg" id="msg"></div>
+
+    <!-- Leave-level confirm dialog -->
+    <div class="confirm-overlay" id="leaveConfirm" aria-hidden="true">
+      <div class="confirm-card" role="dialog" aria-modal="true" aria-labelledby="leaveTitle">
+        <h3 class="confirm-title" id="leaveTitle">Leave this level?</h3>
+        <p class="confirm-msg">Your progress on this level will not be saved.</p>
+        <div class="confirm-actions">
+          <button type="button" class="confirm-btn confirm-btn--cancel" id="leaveCancel">Keep Playing</button>
+          <button type="button" class="confirm-btn confirm-btn--ok" id="leaveOk">Leave</button>
+        </div>
+      </div>
+    </div>
 
     <!-- Level Complete / Fail Popup -->
     <div class="level-popup-overlay" id="levelPopup">

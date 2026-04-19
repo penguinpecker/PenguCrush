@@ -254,6 +254,45 @@ body[data-screen="game"] {
   margin-top: 0;
 }
 
+/* ═══ Back-to-map button on the game screen ═══ */
+.game-back-btn {
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  z-index: 120;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'Fredoka', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  padding: 9px 16px 9px 12px;
+  border-radius: 22px;
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+  color: #0a3a5a;
+  background: linear-gradient(180deg, #d8f2fb, #9cd6ea);
+  box-shadow: 0 3px 0 #4f98b2, 0 6px 14px rgba(0, 40, 80, 0.25);
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+.game-back-btn__arrow {
+  font-size: 12px;
+  line-height: 1;
+  margin-top: 1px;
+}
+.game-back-btn__label {
+  line-height: 1;
+}
+.game-back-btn:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.08);
+}
+.game-back-btn:active {
+  transform: translateY(1px);
+  box-shadow: 0 1px 0 #4f98b2, 0 3px 8px rgba(0, 40, 80, 0.2);
+}
+
 .logo {
   width: 440px;
   height: auto;
