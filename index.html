@@ -62,6 +62,51 @@
       <div class="map-scene">
         <img src="/assets/map/map-bg.png" class="map-img" draggable="false" />
         <div class="map-nodes" id="mapNodes"></div>
+        <button type="button" class="daily-wheel-btn" id="dailyWheelOpen" aria-label="Open daily spin">
+          <img src="/assets/ui/daily-wheel.png" alt="" class="daily-wheel-btn__img" draggable="false" />
+        </button>
+      </div>
+    </div>
+
+    <div class="daily-wheel-overlay" id="dailyWheelOverlay" aria-hidden="true">
+      <div class="daily-wheel-overlay__backdrop"></div>
+      <button type="button" class="daily-wheel-overlay__close" id="dailyWheelClose" aria-label="Close daily spin">×</button>
+      <div class="daily-wheel-full">
+        <div class="daily-wheel-full__stage">
+          <div class="daily-wheel-full__pointer" aria-hidden="true"></div>
+          <div class="daily-wheel-full__spin" id="dailyWheelSpin">
+            <img src="/assets/ui/daily-wheel.png" class="daily-wheel-full__img" alt="" draggable="false" />
+            <div class="daily-wheel-pies" aria-hidden="true">
+              <!-- Mask = pie wedge (clip only); label is sibling so text isn’t clipped by clip-path -->
+              <div class="daily-wheel-slice" data-slice="0" style="--i: 0">
+                <div class="daily-wheel-slice__mask" aria-hidden="true"></div>
+                <div class="daily-wheel-slice__label"></div>
+              </div>
+              <div class="daily-wheel-slice" data-slice="1" style="--i: 1">
+                <div class="daily-wheel-slice__mask" aria-hidden="true"></div>
+                <div class="daily-wheel-slice__label"></div>
+              </div>
+              <div class="daily-wheel-slice" data-slice="2" style="--i: 2">
+                <div class="daily-wheel-slice__mask" aria-hidden="true"></div>
+                <div class="daily-wheel-slice__label"></div>
+              </div>
+              <div class="daily-wheel-slice" data-slice="3" style="--i: 3">
+                <div class="daily-wheel-slice__mask" aria-hidden="true"></div>
+                <div class="daily-wheel-slice__label"></div>
+              </div>
+              <div class="daily-wheel-slice" data-slice="4" style="--i: 4">
+                <div class="daily-wheel-slice__mask" aria-hidden="true"></div>
+                <div class="daily-wheel-slice__label"></div>
+              </div>
+              <div class="daily-wheel-slice" data-slice="5" style="--i: 5">
+                <div class="daily-wheel-slice__mask" aria-hidden="true"></div>
+                <div class="daily-wheel-slice__label"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <button type="button" class="daily-wheel-spin-btn" id="dailyWheelSpinBtn">SPIN</button>
+        <p class="daily-wheel-result" id="dailyWheelResult" hidden></p>
       </div>
     </div>
 
@@ -137,17 +182,21 @@
   <!-- ═══ LEADERBOARD POPUP ═══ -->
   <div class="lb-overlay" id="lbOverlay">
     <div class="lb-popup">
-      <img src="/assets/ui/leaderboard-frame.png" class="lb-popup__frame" draggable="false" alt="" />
-      <button class="lb-popup__close" id="lbClose" aria-label="Close leaderboard"></button>
-      <div class="lb-tabs">
-        <button class="lb-tab active" data-tab="weekly">Weekly</button>
-        <button class="lb-tab" data-tab="alltime">All Time</button>
+      <img src="/assets/ui/leaderboard-frame.webp" class="lb-popup__frame" draggable="false" alt="" />
+      <div class="lb-popup__inner">
+        <button type="button" class="lb-popup__close" id="lbClose" aria-label="Close leaderboard">
+          <span class="lb-popup__close-glow" aria-hidden="true"></span>
+        </button>
+        <div class="lb-tabs" role="tablist" aria-label="Leaderboard period">
+          <button type="button" class="lb-tab active" data-tab="weekly" role="tab" aria-selected="true">Weekly</button>
+          <button type="button" class="lb-tab" data-tab="alltime" role="tab" aria-selected="false">All Time</button>
+        </div>
+        <div class="lb-content">
+          <div class="lb-col lb-col--left" id="lbColLeft"></div>
+          <div class="lb-col lb-col--right" id="lbColRight"></div>
+        </div>
+        <div class="lb-loading" id="lbLoading">Loading...</div>
       </div>
-      <div class="lb-content">
-        <div class="lb-col lb-col--left" id="lbColLeft"></div>
-        <div class="lb-col lb-col--right" id="lbColRight"></div>
-      </div>
-      <div class="lb-loading" id="lbLoading">Loading...</div>
     </div>
   </div>
 
@@ -155,14 +204,19 @@
   <div class="shop-overlay" id="shopOverlay">
     <div class="shop-popup">
       <img src="/assets/ui/shop-popup.png" class="shop-popup__img" draggable="false" alt="Ice Shop" />
-      <button class="shop-popup__close" id="shopClose" aria-label="Close shop"></button>
+      <button type="button" class="shop-popup__close" id="shopClose" aria-label="Close shop">
+        <span class="shop-popup__close-glow" aria-hidden="true"></span>
+      </button>
       <!-- Shop items overlaid on image slots -->
       <div class="shop-items">
         <div class="shop-item" data-item="colorBomb">
           <canvas class="shop-item__icon" id="shopBombCanvas"></canvas>
           <div class="shop-item__name">Color Bomb</div>
           <div class="shop-item__price">$2.99</div>
-          <button class="shop-item__buy">BUY</button>
+          <button type="button" class="shop-item__buy">
+            <span class="shop-item__buy-glow" aria-hidden="true"></span>
+            <span class="shop-item__buy-label">BUY</span>
+          </button>
         </div>
       </div>
     </div>

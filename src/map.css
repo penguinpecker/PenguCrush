@@ -331,3 +331,239 @@
   font-size: 12px;
   padding: 8px 14px;
 }
+
+/* ═══════════════════════════════════════════════
+   DAILY WHEEL — mini button on map (middle-right)
+   ═══════════════════════════════════════════════ */
+.daily-wheel-btn {
+  position: absolute;
+  right: 1%;
+  top: 53%;
+  transform: translateY(-50%);
+  z-index: 20;
+  width: min(22vw, 120px);
+  height: min(22vw, 120px);
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 50%;
+  filter: drop-shadow(0 6px 16px rgba(0, 30, 60, 0.45));
+  transition: transform 0.2s ease, filter 0.2s ease;
+}
+
+.daily-wheel-btn:hover {
+  transform: translateY(-50%) scale(1.06);
+  filter: drop-shadow(0 8px 22px rgba(80, 180, 255, 0.55));
+}
+
+.daily-wheel-btn:active {
+  transform: translateY(-50%) scale(0.96);
+}
+
+.daily-wheel-btn__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+/* ═══════════════════════════════════════════════
+   DAILY WHEEL — fullscreen overlay
+   ═══════════════════════════════════════════════ */
+.daily-wheel-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+.daily-wheel-overlay.active {
+  display: flex;
+}
+
+.daily-wheel-overlay__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(4, 14, 28, 0.82);
+  backdrop-filter: blur(8px);
+}
+
+.daily-wheel-overlay__close {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  z-index: 2;
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 80, 80, 0.95);
+  color: #fff;
+  font-size: 28px;
+  line-height: 1;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 3px 0 #c03030, 0 8px 20px rgba(0, 0, 0, 0.35);
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.daily-wheel-overlay__close:hover {
+  transform: scale(1.06);
+  filter: brightness(1.08);
+}
+
+.daily-wheel-overlay__close:active {
+  transform: scale(0.95);
+}
+
+.daily-wheel-full {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(12px, 3vmin, 24px);
+  max-width: 100%;
+}
+
+.daily-wheel-full__stage {
+  position: relative;
+  width: min(88vmin, 520px);
+  aspect-ratio: 1;
+}
+
+/* Fixed pointer at top — winning segment rests here */
+.daily-wheel-full__pointer {
+  position: absolute;
+  top: 50%;
+  left: 0%;
+  transform: translateX(-20%) translateY(-50%);
+  z-index: 2;
+  width: clamp(52px, 13vmin, 80px);
+  height: clamp(36px, 9vmin, 52px);
+  background: url('/assets/ui/arrow.png') center / contain no-repeat;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.35));
+  pointer-events: none;
+}
+
+.daily-wheel-full__spin {
+  position: absolute;
+  inset: 0;
+  transform-origin: center center;
+  will-change: transform;
+}
+
+.daily-wheel-full__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+/* Six 60° pie wedges (spokes at hub); --i 0…5 = slice index, first slice centered at top with JS base rotation */
+.daily-wheel-pies {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  --wheel-r: min(30vmin, 146px);
+}
+
+.daily-wheel-slice {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Pie geometry only (empty); clip-path on parent hid all label text — keep mask separate */
+.daily-wheel-slice__mask {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  /* Spoke lines in art are at 0°, 60°, … — segment i is the pie from i×60° to (i+1)×60° clockwise from top */
+  --t0: calc(var(--i) * 60deg);
+  --t1: calc((var(--i) + 1) * 60deg);
+  clip-path: polygon(
+    50% 50%,
+    calc(50% + 50% * sin(var(--t0))) calc(50% - 50% * cos(var(--t0))),
+    calc(50% + 50% * sin(var(--t1))) calc(50% - 50% * cos(var(--t1)))
+  );
+}
+
+.daily-wheel-slice__label {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 1;
+  width: 26%;
+  max-width: 8.5em;
+  margin: 0;
+  padding: 0;
+  text-align: center;
+  font-family: 'Fredoka', sans-serif;
+  font-weight: 800;
+  font-size: clamp(9px, 2.5vmin, 15px);
+  color: #0a3a5a;
+  text-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.65),
+    0 1px 3px rgba(0, 40, 80, 0.35);
+  line-height: 1.15;
+  transform-origin: center center;
+  /* Bisector at (30 + i×60)° from top — between spokes, centered in each colored slice */
+  transform: translate(-50%, -50%) rotate(calc(-90deg + 30deg + var(--i) * 60deg)) translateY(calc(-1 * var(--wheel-r)));
+}
+
+.daily-wheel-spin-btn {
+  font-family: 'Fredoka', sans-serif;
+  font-size: clamp(18px, 4.5vmin, 28px);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  padding: 0.55em 1.8em;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  color: #fff;
+  background: linear-gradient(180deg, #5ce8f0, #28b8d8);
+  box-shadow:
+    0 4px 0 #1898b0,
+    0 10px 28px rgba(0, 60, 100, 0.45);
+  text-shadow: 0 2px 0 rgba(0, 80, 100, 0.35);
+  transition: transform 0.15s ease, filter 0.15s ease, opacity 0.2s ease;
+}
+
+.daily-wheel-spin-btn:hover:not(:disabled) {
+  transform: translateY(-2px) scale(1.02);
+  filter: brightness(1.06);
+}
+
+.daily-wheel-spin-btn:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: 0 2px 0 #1898b0, 0 6px 16px rgba(0, 60, 100, 0.35);
+}
+
+.daily-wheel-spin-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.daily-wheel-result {
+  margin: 0;
+  font-family: 'Fredoka', sans-serif;
+  font-size: clamp(14px, 3.5vmin, 20px);
+  font-weight: 700;
+  color: #e8f8ff;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  text-align: center;
+  max-width: 90vw;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .daily-wheel-btn {
+    transition: none;
+  }
+}

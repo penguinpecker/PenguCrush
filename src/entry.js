@@ -155,8 +155,12 @@ document.getElementById('lbOverlay')?.addEventListener('click', (e) => {
 // Tab switching
 document.querySelectorAll('.lb-tab').forEach(tab => {
   tab.addEventListener('click', () => {
-    document.querySelectorAll('.lb-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.lb-tab').forEach(t => {
+      t.classList.remove('active');
+      t.setAttribute('aria-selected', 'false');
+    });
     tab.classList.add('active');
+    tab.setAttribute('aria-selected', 'true');
     // Both tabs show same data for now — weekly filtering can be added later
     loadLeaderboard();
   });
@@ -177,7 +181,7 @@ async function initShopBombPreview() {
   const THREE = await import('three');
   const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
 
-  const size = canvas.clientWidth || 100;
+  const size = Math.max(1, Math.round(canvas.clientWidth || 50));
   canvas.width = size * 2;
   canvas.height = size * 2;
 
@@ -187,9 +191,9 @@ async function initShopBombPreview() {
   renderer.setClearColor(0x000000, 0);
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 100);
-  camera.position.set(0, 1.2, 3.5);
-  camera.lookAt(0, 0.3, 0);
+  const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
+  camera.position.set(0, 1.0, 3.45);
+  camera.lookAt(0, 0.02, 0);
 
   scene.add(new THREE.AmbientLight(0xffffff, 0.8));
   const dir = new THREE.DirectionalLight(0xffffff, 1.2);
@@ -207,10 +211,11 @@ async function initShopBombPreview() {
     const center = box.getCenter(new THREE.Vector3());
     const sz = box.getSize(new THREE.Vector3());
     const maxDim = Math.max(sz.x, sz.y, sz.z);
-    const scale = 1.8 / maxDim;
+    /* Larger scale + closer camera = less empty “padding” inside the canvas */
+    const scale = 2.05 / maxDim;
     model.scale.setScalar(scale);
     model.position.sub(center.multiplyScalar(scale));
-    model.position.y -= 0.1;
+    model.position.y += 0.1;
     scene.add(model);
 
     function animate() {

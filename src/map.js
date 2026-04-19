@@ -6,26 +6,26 @@ const IMG_RATIO = IMG_W / IMG_H;
 
 // Node positions on the map artwork (x/y percentages)
 const NODE_POSITIONS = [
-  { id: 1,  x: 11.8, y: 85.9 },
-  { id: 2,  x: 20.3, y: 82.9 },
-  { id: 3,  x: 28.7, y: 79.7 },
-  { id: 4,  x: 33.9, y: 71.3 },
-  { id: 5,  x: 20.8, y: 60.0 },
-  { id: 6,  x: 15.0, y: 51.1 },
-  { id: 7,  x: 20.1, y: 42.7 },
-  { id: 8,  x: 28.2, y: 39.9 },
-  { id: 9,  x: 37.4, y: 41.8 },
-  { id: 10, x: 45.0, y: 47.8 },
-  { id: 11, x: 50.8, y: 55.9 },
-  { id: 12, x: 61.5, y: 72.9 },
-  { id: 13, x: 69.0, y: 78.9 },
-  { id: 14, x: 77.6, y: 80.4 },
-  { id: 15, x: 85.5, y: 75.7 },
-  { id: 16, x: 87.8, y: 64.0 },
-  { id: 17, x: 82.4, y: 54.5 },
-  { id: 18, x: 74.5, y: 49.4 },
-  { id: 19, x: 69.3, y: 42.4 },
-  { id: 20, x: 73.2, y: 34.4 },
+  { id: 1,  x: 11.8, y: 87.9 },
+  { id: 2,  x: 21.3, y: 84.9 },
+  { id: 3,  x: 29.7, y: 81.7 },
+  { id: 4,  x: 34.9, y: 73.3 },
+  { id: 5,  x: 21.8, y: 61.0 },
+  { id: 6,  x: 16.0, y: 52.1 },
+  { id: 7,  x: 21.1, y: 42.7 },
+  { id: 8,  x: 29.2, y: 39.9 },
+  { id: 9,  x: 38.4, y: 41.8 },
+  { id: 10, x: 46.0, y: 47.8 },
+  { id: 11, x: 52.5, y: 55.9 },
+  { id: 12, x: 63.5, y: 73.9 },
+  { id: 13, x: 71.5, y: 79.9 },
+  { id: 14, x: 79.8, y: 81.0 },
+  { id: 15, x: 87.8, y: 76.7 },
+  { id: 16, x: 90.8, y: 64.0 },
+  { id: 17, x: 84.8, y: 54.5 },
+  { id: 18, x: 76.8, y: 49.4 },
+  { id: 19, x: 71.3, y: 42.4 },
+  { id: 20, x: 75.4, y: 34.4 },
 ];
 
 function loadProgress() {
@@ -219,6 +219,139 @@ export function initMap() {
     if (currentPopupLevel) window.__pengu.goToLevel(currentPopupLevel.id);
   });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closePopup(); });
+
+  // Daily wheel (map screen)
+  const dailyOverlay = document.getElementById('dailyWheelOverlay');
+  const dailyOpen = document.getElementById('dailyWheelOpen');
+  const dailyClose = document.getElementById('dailyWheelClose');
+  const dailySpinEl = document.getElementById('dailyWheelSpin');
+  const dailySpinBtn = document.getElementById('dailyWheelSpinBtn');
+  const dailyResult = document.getElementById('dailyWheelResult');
+
+  const DAILY_SEGMENTS = 6;
+  const DAILY_SEGMENT_DEG = 360 / DAILY_SEGMENTS;
+  /** Art has spokes at 12 o’clock; segment centers on bitmap are at 30° + i×60°. Base spin aligns slice 0 under pointer. */
+  const DAILY_BASE_ROTATION_DEG = -30;
+  /**
+   * Index i = slice i (same as --i / data-slice). Clockwise from top, first slice center is ~30° on bitmap →
+   * matches art order: 5 Gems, Try Again, 100 XP, 50 Coins, Ice Boost, 250 XP.
+   */
+  const DAILY_REWARDS = ['5 Gems', 'Try Again', '100 XP', '50 Coins', 'Ice Boost', '250 XP'];
+
+  function normDeg360(d) {
+    return ((d % 360) + 360) % 360;
+  }
+
+  /** Segment center k on bitmap (degrees CW from top) before wheel rotation */
+  function segmentCenterDeg(k) {
+    return 30 + k * DAILY_SEGMENT_DEG;
+  }
+
+  /** Which slice index has its center nearest the pointer (top); must match spin math */
+  function sliceIndexUnderPointer(rotationDeg) {
+    const R = normDeg360(rotationDeg);
+    let bestK = 0;
+    let bestDist = 400;
+    for (let k = 0; k < DAILY_SEGMENTS; k++) {
+      const a = normDeg360(segmentCenterDeg(k) + R);
+      const dist = Math.min(a, 360 - a);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestK = k;
+      }
+    }
+    return bestK;
+  }
+
+  document.querySelectorAll('.daily-wheel-slice[data-slice]').forEach(el => {
+    const i = Number(el.dataset.slice);
+    const label = el.querySelector('.daily-wheel-slice__label');
+    if (label && Number.isInteger(i) && DAILY_REWARDS[i]) label.textContent = DAILY_REWARDS[i];
+  });
+
+  let dailyWheelRotation = DAILY_BASE_ROTATION_DEG;
+  let dailySpinning = false;
+
+  if (dailySpinEl) {
+    dailySpinEl.style.transform = `rotate(${dailyWheelRotation}deg)`;
+  }
+
+  function openDailyWheel() {
+    dailyOverlay?.classList.add('active');
+    dailyOverlay?.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeDailyWheel() {
+    dailyOverlay?.classList.remove('active');
+    dailyOverlay?.setAttribute('aria-hidden', 'true');
+  }
+
+  function prefersReducedMotion() {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+
+  function spinDailyWheel() {
+    if (!dailySpinEl || dailySpinning) return;
+    const targetIndex = Math.floor(Math.random() * DAILY_SEGMENTS);
+    const spins = prefersReducedMotion() ? 1 : 5;
+    const current = normDeg360(dailyWheelRotation);
+    /** Final rotation (mod 360) so segment k center lines up with pointer: γ_k + R ≡ 0 ⇒ R ≡ −γ_k */
+    const desiredRest = normDeg360(-segmentCenterDeg(targetIndex));
+    let delta = spins * 360 + desiredRest - current;
+    if (delta < DAILY_SEGMENT_DEG * 2) delta += 360;
+    dailyWheelRotation += delta;
+
+    dailySpinning = true;
+    dailySpinBtn.disabled = true;
+    if (dailyResult) {
+      dailyResult.hidden = true;
+      dailyResult.textContent = '';
+    }
+
+    const duration = prefersReducedMotion() ? 0.01 : 4;
+    dailySpinEl.style.transition = `transform ${duration}s cubic-bezier(0.17, 0.67, 0.12, 0.99)`;
+    dailySpinEl.style.transform = `rotate(${dailyWheelRotation}deg)`;
+
+    const done = () => {
+      dailySpinning = false;
+      dailySpinBtn.disabled = false;
+      if (dailyResult) {
+        const won = sliceIndexUnderPointer(dailyWheelRotation);
+        dailyResult.textContent = `You won: ${DAILY_REWARDS[won]}`;
+        dailyResult.hidden = false;
+      }
+    };
+
+    if (duration < 0.1) {
+      done();
+    } else {
+      const onEnd = e => {
+        if (e.propertyName && e.propertyName !== 'transform') return;
+        clearTimeout(fallback);
+        dailySpinEl.removeEventListener('transitionend', onEnd);
+        done();
+      };
+      const fallback = setTimeout(() => {
+        dailySpinEl.removeEventListener('transitionend', onEnd);
+        done();
+      }, duration * 1000 + 400);
+      dailySpinEl.addEventListener('transitionend', onEnd);
+    }
+  }
+
+  dailyOpen?.addEventListener('click', e => {
+    e.stopPropagation();
+    openDailyWheel();
+  });
+  dailyClose?.addEventListener('click', () => closeDailyWheel());
+  dailyOverlay?.querySelector('.daily-wheel-overlay__backdrop')?.addEventListener('click', () => closeDailyWheel());
+  dailySpinBtn?.addEventListener('click', () => spinDailyWheel());
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && dailyOverlay?.classList.contains('active')) {
+      closeDailyWheel();
+    }
+  });
 
   // Load progress and render
   const nodes = loadProgress();
