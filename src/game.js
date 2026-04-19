@@ -8,7 +8,16 @@ import { logLevelOnchain } from './onchain.js';
 // ═══════════════════════════════════════════════════════════════
 //  LEVEL CONFIG — driven by ?level=N URL param
 // ═══════════════════════════════════════════════════════════════
-const levelNum = parseInt(new URLSearchParams(window.location.search).get('level')) || 1;
+// Level routing is internal (sessionStorage) so the URL bar never
+// exposes which level the player is on. Fall back to the legacy
+// ?level=N param only if sessionStorage hasn't been populated yet
+// (e.g. opening an old bookmark before entry.js's migration runs).
+const levelNum = (() => {
+  const fromSession = parseInt(sessionStorage.getItem('pengu_current_level') || '', 10);
+  if (Number.isFinite(fromSession) && fromSession >= 1) return fromSession;
+  const fromUrl = parseInt(new URLSearchParams(window.location.search).get('level') || '', 10);
+  return Number.isFinite(fromUrl) && fromUrl >= 1 ? fromUrl : 1;
+})();
 const CONFIG = getLevel(levelNum);
 
 const GRID = CONFIG.grid;

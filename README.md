@@ -65,7 +65,9 @@ Every on-chain call is fire-and-forget via `safeWrite()` in `src/onchain.js`. Fa
 
 ### Level-unlock gate
 
-`?level=N` in the URL is **not trusted**. Before loading `game.js`, the boot flow calls `isLevelUnlocked(N)` in `src/progress.js` which authorizes from trusted sources only:
+The current level is never in the URL bar — the URL only shows `/?page=play` and the actual level number lives in `sessionStorage.pengu_current_level`. Legacy `?level=N` URLs still work but are migrated to the session-based form on load.
+
+Before `game.js` loads, the boot flow calls `isLevelUnlocked(N)` in `src/progress.js`, which authorizes from trusted sources only:
 
 1. **Primary — on-chain.** `PenguCrush.getBestResult(wallet, N-1)` on Abstract. If `stars > 0` the level unlocks.
 2. **Backup — Supabase.** If the chain denies or the RPC fails, `fetchPlayerProgress(wallet)` checks `pengu_progress` for the same row. Supabase is trusted because writes go through the `pengu-save-progress` edge function, not the client.

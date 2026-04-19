@@ -4,9 +4,42 @@ import { getAGWAddress, isSignedIn, connectAGW, signInWithAGW } from './agw.js';
 import * as Inventory from './inventory.js';
 import { isLevelUnlocked } from './progress.js';
 
-function getLevel() {
-  return new URLSearchParams(window.location.search).get('level');
+// ── Current level routing (internal, not in the URL bar) ───────
+// The URL never carries ?level=N anymore — the level is stored in
+// sessionStorage and the URL only shows ?page=play. A stale ?level=N
+// (e.g. from an old bookmark or manual URL edit) gets migrated once
+// then stripped.
+const LEVEL_KEY = 'pengu_current_level';
+
+function getCurrentLevel() {
+  const s = sessionStorage.getItem(LEVEL_KEY);
+  if (s) {
+    const n = parseInt(s, 10);
+    return Number.isFinite(n) && n >= 1 ? n : null;
+  }
+  return null;
 }
+
+function setCurrentLevel(n) {
+  sessionStorage.setItem(LEVEL_KEY, String(n));
+}
+
+function clearCurrentLevel() {
+  sessionStorage.removeItem(LEVEL_KEY);
+}
+
+/** One-time migration: if the URL still carries ?level=N, stash it
+ *  into sessionStorage and rewrite the URL to ?page=play. */
+function migrateLegacyLevelParam() {
+  const url = new URLSearchParams(location.search);
+  const legacy = url.get('level');
+  if (legacy) {
+    const n = parseInt(legacy, 10);
+    if (Number.isFinite(n) && n >= 1) setCurrentLevel(n);
+    history.replaceState(null, '', '/?page=play');
+  }
+}
+migrateLegacyLevelParam();
 
 function hasSession() {
   return !!getAGWAddress() && isSignedIn();
@@ -30,10 +63,12 @@ function showHomeGateHint() {
 
 window.__pengu = {
   goToMap() {
+    clearCurrentLevel();
     window.location.href = '/?page=map';
   },
   goToLevel(lvl) {
-    window.location.href = '/?level=' + lvl;
+    setCurrentLevel(lvl);
+    window.location.href = '/?page=play';
   },
 };
 
@@ -45,24 +80,25 @@ function getPage() {
 }
 
 async function boot() {
-  const level = getLevel();
   const page = getPage();
+  const isPlay = page === 'play';
+  const level = isPlay ? getCurrentLevel() : null;
 
   // Gate non-home routes on active session (wallet + signature)
-  if ((level || page === 'map') && !hasSession()) {
+  if ((isPlay || page === 'map') && !hasSession()) {
+    clearCurrentLevel();
     showScreen('homeScreen');
     showHomeGateHint();
     history.replaceState(null, '', '/');
     return;
   }
 
-  if (level) {
-    const lvlNum = parseInt(level, 10);
-    // On-chain gate: level N>1 requires stars > 0 on level N-1 recorded
-    // on the PenguCrush contract. localStorage is not trusted.
-    const allowed = Number.isInteger(lvlNum) && lvlNum >= 1 && await isLevelUnlocked(lvlNum);
+  if (isPlay) {
+    // No level queued → send to map (no way to guess what to play)
+    const allowed = level != null && await isLevelUnlocked(level);
     if (!allowed) {
-      console.warn(`Level ${level} is locked for this wallet — redirecting to map`);
+      console.warn(`Level ${level ?? '(none)'} is locked — redirecting to map`);
+      clearCurrentLevel();
       history.replaceState(null, '', '/?page=map');
       showScreen('mapScreen');
       if (!mapInited) {
@@ -95,7 +131,8 @@ window.addEventListener('popstate', () => boot());
 // BOTTOM NAV BAR
 // ═══════════════════════════════════════════════════
 function updateNav() {
-  const page = getLevel() ? 'game' : getPage();
+  const p = getPage();
+  const page = p === 'play' ? 'game' : p;
   document.querySelectorAll('.nav-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.page === page);
   });
@@ -465,26 +502,25 @@ void (async () => {
     revealLoadingVideoLayer();
     updateLoadingUI(0.66);
 
-    const level = getLevel();
     const page = getPage();
+    const isPlay = page === 'play';
+    const level = isPlay ? getCurrentLevel() : null;
 
-    // Session gate — non-home routes require wallet + signature
     const sessionOk = hasSession();
     // Level gate — chain-verified unlock for level > 1
-    let levelAllowed = !level;
-    if (level) {
-      const lvlNum = parseInt(level, 10);
-      levelAllowed = sessionOk && Number.isInteger(lvlNum) && lvlNum >= 1 && await isLevelUnlocked(lvlNum);
+    let levelAllowed = false;
+    if (isPlay) {
+      levelAllowed = sessionOk && level != null && await isLevelUnlocked(level);
       if (!levelAllowed) {
-        console.warn(`Level ${level} is locked — redirecting`);
+        console.warn(`Level ${level ?? '(none)'} is locked — redirecting`);
+        clearCurrentLevel();
       }
     }
-    const redirectToMap = (level && !levelAllowed) || ((level || page === 'map') && !sessionOk);
 
-    if (levelAllowed && level) {
+    if (levelAllowed) {
       gameLoaded = true;
       await import('./game.js');
-    } else if ((page === 'map' || redirectToMap) && sessionOk) {
+    } else if ((page === 'map' || (isPlay && !levelAllowed)) && sessionOk) {
       mapInited = true;
       const { initMap } = await import('./map.js');
       initMap();
@@ -495,13 +531,13 @@ void (async () => {
     await holdMinLoadingVideoPlayback(loadingVideo);
     finishLoadingOutro();
 
-    if (!sessionOk && (level || page === 'map')) {
+    if (!sessionOk && (isPlay || page === 'map')) {
       history.replaceState(null, '', '/');
       showScreen('homeScreen');
       showHomeGateHint();
-    } else if (levelAllowed && level) {
+    } else if (levelAllowed) {
       showScreen('gameScreen');
-    } else if (level && !levelAllowed) {
+    } else if (isPlay && !levelAllowed) {
       history.replaceState(null, '', '/?page=map');
       showScreen('mapScreen');
     } else if (page === 'map') {
