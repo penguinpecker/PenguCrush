@@ -14,6 +14,7 @@
 
 import { getAGWAddress } from './agw.js';
 import { supabase } from './supabase.js';
+import { logBoosterUseOnchain, logBoosterPurchaseOnchain, logDailySpinOnchain } from './onchain.js';
 
 const LS_KEY = 'pengucrush_inventory_v1';
 
@@ -82,6 +83,8 @@ export function addBooster(type, qty = 1) {
   s.boosters[type] = (s.boosters[type] || 0) + qty;
   saveInventory(s);
   dispatchInventoryChange();
+  // Fire-and-forget onchain activity event
+  logBoosterPurchaseOnchain(type, qty);
   return s.boosters[type];
 }
 
@@ -92,6 +95,7 @@ export function consumeBooster(type) {
   s.boosters[type] = cur - 1;
   saveInventory(s);
   dispatchInventoryChange();
+  logBoosterUseOnchain(type);
   return s.boosters[type];
 }
 
@@ -159,6 +163,7 @@ export function applyDailyReward(rewardText) {
   if (s.dailySpinHistory.length > 60) s.dailySpinHistory = s.dailySpinHistory.slice(-60);
   saveInventory(s);
   dispatchInventoryChange();
+  logDailySpinOnchain(rewardText);
   return effect;
 }
 

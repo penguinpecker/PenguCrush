@@ -3,6 +3,7 @@ import { createGLTFLoader } from './gltf-loader.js';
 import { getLevel, hasLevel } from './levels.js';
 import { getWallet, ensureWallet, saveLevelResult } from './supabase.js';
 import * as Inventory from './inventory.js';
+import { logLevelOnchain } from './onchain.js';
 
 // ═══════════════════════════════════════════════════════════════
 //  LEVEL CONFIG — driven by ?level=N URL param
@@ -861,13 +862,14 @@ function showLevelPopup(won) {
 
   // Save to Supabase (async, non-blocking)
   const wallet = getWallet();
+  const movesUsed = CONFIG.moves - moves;
   if (wallet) {
     saveLevelResult({
       wallet,
       level: levelNum,
       score,
       stars,
-      movesUsed: CONFIG.moves - moves,
+      movesUsed,
       boostersUsed: {},
       completed: won,
       durationMs,
@@ -875,6 +877,12 @@ function showLevelPopup(won) {
       if (res?.success) console.log('🐧 Progress saved to Supabase:', res);
       else console.warn('🐧 Supabase save failed:', res);
     });
+
+    // On-chain: submitScore to PenguCrushScores on Abstract (best-effort).
+    // Only write for completed runs so failed attempts don't clutter history.
+    if (won) {
+      logLevelOnchain({ level: levelNum, score, stars, movesUsed });
+    }
   }
 
   popup.classList.add('active');
