@@ -1,23 +1,23 @@
 // ═══════════════════════════════════════════════════════════════
 //  PROGRESS GATE — is a given level actually unlocked for this player?
 //
-//  localStorage is a fast hint but cannot be trusted (a user can
-//  edit it). The blockchain is the source of truth: level N>1 is
-//  unlocked iff the connected wallet has a recorded result for
-//  level N-1 with stars > 0 on the PenguCrush contract.
+//  Authorization comes from trusted sources only:
+//    1. On-chain PenguCrush.getBestResult(wallet, N-1) — primary
+//    2. Supabase pengu_progress for that wallet — backup
 //
-//  The gate returns "locked" whenever on-chain verification is
-//  unavailable (no wallet, RPC fails) for any level > 1, so URL-
-//  tampered requests can't slip through.
+//  localStorage is never used for auth. If both trusted sources say
+//  "no" or are unavailable, the level stays locked. Editing
+//  pengucrush_progress in localStorage has zero effect on access.
 // ═══════════════════════════════════════════════════════════════
 
 import { getPublicClient, getAGWAddress } from './agw.js';
 import { PENGUCRUSH_ADDRESS } from './onchain.js';
+import { fetchPlayerProgress } from './supabase.js';
 import penguCrushAbiJson from '../contracts/PenguCrushABI.json';
 
 const abi = Array.isArray(penguCrushAbiJson) ? penguCrushAbiJson : penguCrushAbiJson.abi || [];
 
-/** Fast, untrusted hint from localStorage — useful for UI, not for authorization. */
+/** Fast, untrusted hint from localStorage — useful for UI only, never for authorization. */
 export function isLevelUnlockedLocal(levelN) {
   if (levelN <= 1) return true;
   try {
@@ -30,11 +30,11 @@ export function isLevelUnlockedLocal(levelN) {
   return false;
 }
 
-/** Authoritative on-chain gate. Returns true only if the chain confirms. */
+/** Primary check: on-chain best result for the previous level. */
 export async function isLevelUnlockedOnchain(levelN) {
   if (levelN <= 1) return true;
   const wallet = getAGWAddress();
-  if (!wallet) return false; // must be connected to prove past completions
+  if (!wallet) return false;
   try {
     const client = getPublicClient();
     const result = await client.readContract({
@@ -43,20 +43,42 @@ export async function isLevelUnlockedOnchain(levelN) {
       functionName: 'getBestResult',
       args: [wallet, levelN - 1],
     });
-    // Viem returns struct as either object or tuple depending on ABI shape
     const stars = Number(result?.stars ?? result?.[2] ?? 0);
     return stars > 0;
   } catch (err) {
     console.warn('Level-unlock chain check failed:', err?.shortMessage || err?.message || err);
+    return null; // signal "unknown" so caller can fall through to backup
+  }
+}
+
+/** Backup check: Supabase pengu_progress. Only trusted because the
+ *  edge function owns writes to this table. */
+export async function isLevelUnlockedSupabase(levelN) {
+  if (levelN <= 1) return true;
+  const wallet = getAGWAddress();
+  if (!wallet) return false;
+  try {
+    const data = await fetchPlayerProgress(wallet);
+    const rows = data?.progress || [];
+    const prev = rows.find(r => Number(r.level) === levelN - 1);
+    return Number(prev?.stars || 0) > 0;
+  } catch (err) {
+    console.warn('Level-unlock supabase check failed:', err?.message || err);
     return false;
   }
 }
 
 /**
- * Combined gate: chain is authoritative; localStorage only helps decide
- * when to *skip* the chain call for the obvious unlocked-by-default case.
+ * Combined gate: chain is primary, Supabase is a backup. A level is
+ * unlocked iff *either* trusted source confirms. If both say no, or
+ * both are unreachable, the level stays locked.
  */
 export async function isLevelUnlocked(levelN) {
   if (levelN <= 1) return true;
-  return isLevelUnlockedOnchain(levelN);
+  const chain = await isLevelUnlockedOnchain(levelN);
+  if (chain === true) return true;
+  // chain === false  → explicit deny from chain; still consult Supabase as a backup
+  // chain === null   → chain RPC failed; consult Supabase
+  const supa = await isLevelUnlockedSupabase(levelN);
+  return supa === true;
 }

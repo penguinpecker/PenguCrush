@@ -65,9 +65,12 @@ Every on-chain call is fire-and-forget via `safeWrite()` in `src/onchain.js`. Fa
 
 ### Level-unlock gate
 
-`?level=N` in the URL is **not trusted**. Before loading `game.js`, the boot flow calls `isLevelUnlocked(N)` in `src/progress.js`, which reads `getBestResult(wallet, N-1)` from the `PenguCrush` contract. A level unlocks only when the chain has recorded `stars > 0` on the previous level for the connected wallet. Level 1 is always open.
+`?level=N` in the URL is **not trusted**. Before loading `game.js`, the boot flow calls `isLevelUnlocked(N)` in `src/progress.js` which authorizes from trusted sources only:
 
-Tampering with `localStorage.pengucrush_progress` no longer bypasses the gate — the chain is the source of truth.
+1. **Primary — on-chain.** `PenguCrush.getBestResult(wallet, N-1)` on Abstract. If `stars > 0` the level unlocks.
+2. **Backup — Supabase.** If the chain denies or the RPC fails, `fetchPlayerProgress(wallet)` checks `pengu_progress` for the same row. Supabase is trusted because writes go through the `pengu-save-progress` edge function, not the client.
+
+Level 1 is always open. If both sources say no (or both are unreachable) the level stays locked. `localStorage.pengucrush_progress` is never consulted for authorization — it only colors the map UI.
 
 ### Kill switch
 
