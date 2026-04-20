@@ -119,13 +119,6 @@ function renderNodes(nodes, nodesContainer, openPopup) {
       node.appendChild(starsEl);
     }
 
-    if (lv.status === 'locked') {
-      const lock = document.createElement('span');
-      lock.className = 'lock-icon';
-      lock.textContent = '\u{1F512}';
-      node.appendChild(lock);
-    }
-
     node.addEventListener('click', () => {
       if (lv.status === 'locked') {
         node.style.animation = 'none';

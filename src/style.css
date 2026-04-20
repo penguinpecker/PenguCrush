@@ -1058,7 +1058,9 @@ body[data-screen="game"] {
 
 .shop-popup {
   position: relative;
-  width: min(750px, 92vw);
+  width: min(980px, 94vw);
+  container-type: inline-size;
+  container-name: shop-popup;
   animation: shop-pop-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
@@ -1102,94 +1104,99 @@ body[data-screen="game"] {
   transform: scale(0.94);
 }
 
-/* Shop item grid — overlaid on the image card slots */
-.shop-items {
+/* ───── Fully independent shop items ─────
+   .shop-slots and .shop-tags are transparent full-popup layers. Each child
+   (.shop-slot, .shop-tag) is absolutely positioned with its OWN top/left/
+   width/height inline — no grid binding. Tune with __pengu.shopDev(). */
+
+.shop-slots,
+.shop-tags {
   position: absolute;
-  top: 34%;
-  left: 17.7%;
-  width: 65%;
-  height: 56%;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: repeat(2, 1fr);
-  gap: 3% 10%;
+  inset: 0;
+  pointer-events: none;
 }
 
-.shop-item {
+/* Re-enable pointer events only on interactive children */
+.shop-slot,
+.shop-tag {
+  pointer-events: auto;
+}
+
+/* Booster icon slot (one tile each, placed anywhere on the art) */
+.shop-slot {
+  position: absolute;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: flex-start;
-  padding: 0;
-  gap: 2px;
+  justify-content: center;
   cursor: pointer;
-  border-radius: 10px;
   transition: transform 0.15s ease;
 }
 
-.shop-item:hover {
+.shop-slot:hover {
   transform: scale(1.04);
 }
 
-.shop-item__icon {
+.shop-slot__icon {
   display: block;
-  width: 50px;
-  height: 50px;
-  max-width: 100%;
-  margin: 0;
-  padding: 0;
-  border-radius: 8px;
-  background: transparent;
+  width: 76%;
+  height: 90%;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 6px rgba(15, 60, 95, 0.25));
+  pointer-events: none;
 }
 
-.shop-item__name {
+.shop-slot__qty {
+  position: absolute;
+  top: 6%;
+  right: 6%;
   font-family: 'Fredoka', sans-serif;
-  font-size: clamp(9px, 1.3vw, 14px);
-  font-weight: 700;
-  color: #1a5a7a;
-  text-align: center;
-  line-height: 1.1;
-}
-
-.shop-item__price {
-  font-family: 'Fredoka', sans-serif;
-  font-size: clamp(10px, 1.5vw, 16px);
+  font-size: 1.9cqw;
   font-weight: 800;
-  color: #0a6a3a;
-  text-shadow: 0 1px 0 rgba(255,255,255,0.5);
+  color: #fff;
+  background: linear-gradient(180deg, #ff9a3c 0%, #ff6a1f 100%);
+  border: 0.25cqw solid #fff;
+  border-radius: 999px;
+  padding: 0.2cqw 0.9cqw;
+  line-height: 1;
+  text-shadow: 0 1px 0 rgba(0,0,0,0.25);
+  box-shadow: 0 0.25cqw 0.5cqw rgba(0,0,0,0.25);
+  pointer-events: none;
 }
 
-.shop-item__buy {
-  position: relative;
+/* Price tag (pill-shaped box, placed anywhere on the art, fully independent) */
+.shop-tag {
+  position: absolute;
   overflow: hidden;
   isolation: isolate;
-  font-family: 'Fredoka', sans-serif;
-  font-size: clamp(8px, 1.1vw, 12px);
-  font-weight: 800;
-  padding: 3px 14px;
-  border-radius: 0;
+  padding: 0;
+  margin: 0;
   border: none;
-  box-shadow: none;
   outline: none;
-  cursor: pointer;
+  box-shadow: none;
   background: transparent;
-  color: #1a5a7a;
-  letter-spacing: 0.5px;
-  transition:
-    transform 0.15s ease,
-    color 0.3s ease;
+  cursor: pointer;
+  font-family: 'Fredoka', sans-serif;
+  font-size: 1.9cqw;
+  font-weight: 800;
+  color: #0a6a3a;
+  letter-spacing: 0.03em;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.55);
+  transition: transform 0.15s ease, color 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.shop-item__buy-label {
+.shop-tag__label {
   position: relative;
   z-index: 1;
+  line-height: 1;
 }
 
-/* Ice + frosted — shop BUY (hidden until hover) */
-.shop-item__buy-glow {
+.shop-tag__glow {
   position: absolute;
   inset: 0;
-  border-radius: inherit;
+  border-radius: 999px;
   z-index: 0;
   opacity: 0;
   transition: opacity 0.3s ease;
@@ -1200,14 +1207,14 @@ body[data-screen="game"] {
     rgba(140, 220, 255, 0.18) 40%,
     transparent 70%
   );
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   box-shadow:
     inset 0 0 18px 4px rgba(180, 240, 255, 0.35),
     0 0 24px 6px rgba(120, 210, 255, 0.28);
 }
 
-.shop-item__buy-glow::after {
+.shop-tag__glow::after {
   content: '';
   position: absolute;
   top: -20%;
@@ -1269,17 +1276,14 @@ body[data-screen="game"] {
   animation: ice-shimmer 1.8s ease-in-out infinite;
 }
 
-.shop-item__buy:hover,
-.shop-item__buy:focus-visible {
+.shop-tag:hover,
+.shop-tag:focus-visible {
   transform: translateY(-1px);
-  background: transparent;
-  border: none;
-  box-shadow: none;
   color: #fff;
 }
 
-.shop-item__buy:hover .shop-item__buy-glow,
-.shop-item__buy:focus-visible .shop-item__buy-glow {
+.shop-tag:hover .shop-tag__glow,
+.shop-tag:focus-visible .shop-tag__glow {
   opacity: 1;
 }
 
@@ -1291,13 +1295,12 @@ body[data-screen="game"] {
   opacity: 0.72;
 }
 
-.shop-item__buy:active {
+.shop-tag:active {
   transform: translateY(1px);
-  box-shadow: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .shop-item__buy-glow::after,
+  .shop-tag__glow::after,
   .shop-popup__close-glow::after,
   .lb-popup__close-glow::after {
     animation: none;

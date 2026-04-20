@@ -4,6 +4,8 @@ import { getAGWAddress, isSignedIn, connectAGW, signInWithAGW } from './agw.js';
 import * as Inventory from './inventory.js';
 import { isLevelUnlocked } from './progress.js';
 import './dev-stars.js'; // adds window.__pengu.starDev() — no UI unless enabled
+import './dev-shop.js';  // adds window.__pengu.shopDev() — align booster grid
+import './dev-booster-export.js'; // adds window.__pengu.exportBoosterPNGs()
 
 // ── Current level routing (internal, not in the URL bar) ───────
 // The URL never carries ?level=N anymore — the level is stored in
@@ -152,7 +154,6 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
     }
     if (page === 'shop') {
       document.getElementById('shopOverlay')?.classList.add('active');
-      initShopBombPreview();
       return;
     }
     if (page === 'leaderboard') {
@@ -252,81 +253,24 @@ document.querySelectorAll('.lb-tab').forEach(tab => {
 // ═══════════════════════════════════════════════════
 // SHOP POPUP
 // ═══════════════════════════════════════════════════
-let shopBombInited = false;
-
-async function initShopBombPreview() {
-  if (shopBombInited) return;
-  shopBombInited = true;
-
-  const canvas = document.getElementById('shopBombCanvas');
-  if (!canvas) return;
-
-  const THREE = await import('three');
-  const { createGLTFLoader } = await import('./gltf-loader.js');
-
-  const size = Math.max(1, Math.round(canvas.clientWidth || 50));
-  canvas.width = size * 2;
-  canvas.height = size * 2;
-
-  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
-  renderer.setSize(size, size);
-  renderer.setPixelRatio(2);
-  renderer.setClearColor(0x000000, 0);
-
-  const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
-  camera.position.set(0, 1.0, 3.45);
-  camera.lookAt(0, 0.02, 0);
-
-  scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-  const dir = new THREE.DirectionalLight(0xffffff, 1.2);
-  dir.position.set(2, 3, 2);
-  scene.add(dir);
-  const rim = new THREE.DirectionalLight(0x88ccff, 0.5);
-  rim.position.set(-2, 1, -1);
-  scene.add(rim);
-
-  const loader = createGLTFLoader();
-  loader.load('/assets/boosters/color-bomb.glb', (gltf) => {
-    const model = gltf.scene;
-    // Center and scale
-    const box = new THREE.Box3().setFromObject(model);
-    const center = box.getCenter(new THREE.Vector3());
-    const sz = box.getSize(new THREE.Vector3());
-    const maxDim = Math.max(sz.x, sz.y, sz.z);
-    /* Larger scale + closer camera = less empty “padding” inside the canvas */
-    const scale = 2.05 / maxDim;
-    model.scale.setScalar(scale);
-    model.position.sub(center.multiplyScalar(scale));
-    model.position.y += 0.1;
-    scene.add(model);
-
-    function animate() {
-      requestAnimationFrame(animate);
-      model.rotation.y += 0.012;
-      renderer.render(scene, camera);
-    }
-    animate();
-  });
-}
-
-// Shop BUY handlers — increment booster inventory, flash confirmation.
-// Real payment rails are out of scope here; the purchase is granted client-
-// side and persisted so the booster shows up in-game immediately.
-document.querySelectorAll('.shop-item').forEach(itemEl => {
-  const itemType = itemEl.dataset.item; // e.g. 'colorBomb'
-  const buyBtn = itemEl.querySelector('.shop-item__buy');
-  const labelEl = buyBtn?.querySelector('.shop-item__buy-label');
-  if (!buyBtn || !itemType) return;
-  buyBtn.addEventListener('click', () => {
-    if (buyBtn.disabled) return;
-    buyBtn.disabled = true;
+// Shop BUY handlers — increment booster inventory by data-qty, flash confirm.
+// Real payment rails are out of scope here; purchase is granted client-side
+// and persisted so boosters show up in-game immediately.
+document.querySelectorAll('.shop-tag[data-item]').forEach(tagEl => {
+  const itemType = tagEl.dataset.item;
+  const slotEl = document.querySelector(`.shop-slot[data-item="${itemType}"]`);
+  const qty = parseInt(slotEl?.dataset.qty || '1', 10);
+  const labelEl = tagEl.querySelector('.shop-tag__label');
+  if (!itemType) return;
+  tagEl.addEventListener('click', () => {
+    if (tagEl.disabled) return;
+    tagEl.disabled = true;
     const origLabel = labelEl ? labelEl.textContent : null;
-    const newCount = Inventory.addBooster(itemType, 1);
-    if (labelEl) labelEl.textContent = `+1 (${newCount})`;
+    const newCount = Inventory.addBooster(itemType, qty);
+    if (labelEl) labelEl.textContent = `+${qty} (${newCount})`;
     setTimeout(() => {
       if (labelEl && origLabel) labelEl.textContent = origLabel;
-      buyBtn.disabled = false;
+      tagEl.disabled = false;
     }, 1400);
   });
 });
