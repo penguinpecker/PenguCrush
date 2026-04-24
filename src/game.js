@@ -4,7 +4,7 @@ import { getLevel, hasLevel } from './levels.js';
 import { getWallet, ensureWallet, saveLevelResult } from './supabase.js';
 import * as Inventory from './inventory.js';
 import { logLevelOnchain } from './onchain.js';
-import { rollShardDrop, renderShardSlots, getShardDef, computeTraits } from './shards.js';
+import { rollShardsForMatch, renderShardSlots, computeTraits } from './shards.js';
 
 // ═══════════════════════════════════════════════════════════════
 //  LEVEL CONFIG — driven by ?level=N URL param
@@ -466,25 +466,41 @@ function getRandomEmptyCells(count) {
 // ═══════════════════════════════════════════════════════════════
 function findMatches() {
   const matched = new Set();
+  const runs = [];
   const canMatch = (r, c) => board[r]?.[c] && !board[r][c].isWall && !board[r][c].frozen && !board[r][c].isFaller;
-  for (let r = 0; r < GRID; r++) for (let c = 0; c < GRID - 2; c++) {
-    if (!canMatch(r, c)) continue;
-    const t = board[r][c].type;
-    if (canMatch(r, c+1) && board[r][c+1].type === t && canMatch(r, c+2) && board[r][c+2].type === t) {
-      let e = c + 2;
+  // Horizontal sweep — each contiguous same-type run of 3+ is one run
+  for (let r = 0; r < GRID; r++) {
+    let c = 0;
+    while (c < GRID) {
+      if (!canMatch(r, c)) { c++; continue; }
+      const t = board[r][c].type;
+      let e = c;
       while (e + 1 < GRID && canMatch(r, e+1) && board[r][e+1].type === t) e++;
-      for (let i = c; i <= e; i++) matched.add(`${r},${i}`);
+      const len = e - c + 1;
+      if (len >= 3) {
+        for (let i = c; i <= e; i++) matched.add(`${r},${i}`);
+        runs.push({ length: len, dir: 'h' });
+      }
+      c = e + 1;
     }
   }
-  for (let c = 0; c < GRID; c++) for (let r = 0; r < GRID - 2; r++) {
-    if (!canMatch(r, c)) continue;
-    const t = board[r][c].type;
-    if (canMatch(r+1, c) && board[r+1][c].type === t && canMatch(r+2, c) && board[r+2][c].type === t) {
-      let e = r + 2;
+  // Vertical sweep — same shape
+  for (let c = 0; c < GRID; c++) {
+    let r = 0;
+    while (r < GRID) {
+      if (!canMatch(r, c)) { r++; continue; }
+      const t = board[r][c].type;
+      let e = r;
       while (e + 1 < GRID && canMatch(e+1, c) && board[e+1][c].type === t) e++;
-      for (let i = r; i <= e; i++) matched.add(`${i},${c}`);
+      const len = e - r + 1;
+      if (len >= 3) {
+        for (let i = r; i <= e; i++) matched.add(`${i},${c}`);
+        runs.push({ length: len, dir: 'v' });
+      }
+      r = e + 1;
     }
   }
+  matched.runs = runs;
   return matched;
 }
 
@@ -651,7 +667,15 @@ async function processMatches() {
   combo = 0;
   let m = findMatches();
   while (m.size > 0) {
-    combo++; score += Math.round(m.size * 10 * combo * TRAITS.scoreMultiplier); updateHUD();
+    combo++; score += Math.round(m.size * 10 * combo * TRAITS.scoreMultiplier);
+    // Mid-level shard drops: any 4+ run rolls each shard independently
+    // (necklace 20% · crown 10% · plooshie 5%). A match can award 0..3.
+    for (const run of (m.runs || [])) {
+      if (run.length >= 4) {
+        for (const id of rollShardsForMatch()) awardShard(id);
+      }
+    }
+    updateHUD();
     await removeMatches(m);
     await delay(100);
     await dropTiles();
@@ -828,14 +852,6 @@ function showLevelPopup(won) {
   const stars = won ? getStars() : 0;
   const durationMs = Math.round(performance.now() - gameStartTime);
 
-  // Shard reward: every win rolls one shard from the rarity table.
-  // The new count is visible on the start popup and in-game HUD.
-  let awardedShard = null;
-  if (won) {
-    awardedShard = rollShardDrop();
-    Inventory.addShard(awardedShard, 1);
-  }
-
   if (won) {
     title.classList.remove('fail');
     title.innerHTML = `<span class="level-popup-title-label">LEVEL</span><span class="level-popup-title-num">${levelNum}</span>`;
@@ -857,10 +873,7 @@ function showLevelPopup(won) {
     }
 
     scoreEl.textContent = score.toLocaleString();
-    const earnedShardName = awardedShard ? getShardDef(awardedShard)?.name : null;
-    objEl.textContent = earnedShardName
-      ? `${stars} star${stars !== 1 ? 's' : ''} · +1 ${earnedShardName}`
-      : `${stars} star${stars !== 1 ? 's' : ''} earned`;
+    objEl.textContent = `${stars} star${stars !== 1 ? 's' : ''} earned`;
     nextBtn.classList.remove('hidden');
     const canNext = hasLevel(levelNum + 1);
     nextBtn.disabled = !canNext;
@@ -1483,12 +1496,31 @@ async function init() {
   console.log('🐧 PenguCrush ready!');
 }
 
+let shardPulseId = null;
+let shardPulseUntil = 0;
+let shardPulseTimer = null;
+
 function setupShardHud() {
   const el = document.getElementById('shardHud');
   if (!el) return;
-  const refresh = () => renderShardSlots(el, { counts: Inventory.getShards(), variant: 'hud' });
+  const refresh = () => {
+    const hl = performance.now() < shardPulseUntil ? shardPulseId : null;
+    renderShardSlots(el, { counts: Inventory.getShards(), variant: 'hud', highlight: hl });
+  };
   refresh();
   Inventory.onInventoryChange(refresh);
+}
+
+function awardShard(id) {
+  if (!id) return;
+  shardPulseId = id;
+  shardPulseUntil = performance.now() + 1200;
+  Inventory.addShard(id, 1); // triggers HUD refresh, which will read the pulse
+  clearTimeout(shardPulseTimer);
+  shardPulseTimer = setTimeout(() => {
+    const el = document.getElementById('shardHud');
+    if (el) renderShardSlots(el, { counts: Inventory.getShards(), variant: 'hud' });
+  }, 1250);
 }
 
 init().catch((err) => {
