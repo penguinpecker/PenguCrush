@@ -1,6 +1,7 @@
 import { getLevel, getLevelCount } from './levels.js';
 import { getWallet, fetchPlayerProgress, buildMapProgress, connectAGW, disconnectAGW, shortAddress, hasInjectedWallet, signInWithAGW, isSignedIn } from './supabase.js';
 import * as Inventory from './inventory.js';
+import { renderShardSlots, computeTraits } from './shards.js';
 
 const IMG_W = 2748, IMG_H = 1536;
 const IMG_RATIO = IMG_W / IMG_H;
@@ -314,6 +315,17 @@ export function initMap() {
     document.getElementById('popupTarget').textContent = cfg.targetScore.toLocaleString();
     document.getElementById('popupMoves').textContent = cfg.moves;
     document.getElementById('popupBest').textContent = lv.best > 0 ? lv.best.toLocaleString() : '\u2014';
+    const shardCounts = Inventory.getShards();
+    renderShardSlots(document.getElementById('popupShards'), { counts: shardCounts, variant: 'card' });
+    const traits = computeTraits(shardCounts);
+    const traitsEl = document.getElementById('popupTraits');
+    if (traitsEl) {
+      const parts = [];
+      if (traits.breakdown.necklace) parts.push(`+${traits.breakdown.necklace}% score`);
+      if (traits.breakdown.crown)    parts.push(`+${traits.breakdown.crown} move${traits.breakdown.crown === 1 ? '' : 's'}`);
+      if (traits.breakdown.plooshie) parts.push(`+${traits.breakdown.plooshie}% score`);
+      traitsEl.textContent = parts.length ? `Shard traits: ${parts.join(' · ')}` : '';
+    }
     overlay.classList.add('active');
   }
 

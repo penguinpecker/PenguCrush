@@ -20,11 +20,13 @@ const LS_KEY = 'pengucrush_inventory_v1';
 
 const DEFAULT_BOOSTERS = { row: 1, col: 1, colorBomb: 1, hammer: 1, shuffle: 1 };
 const DEFAULT_CURRENCIES = { coins: 0, gems: 0, xp: 0 };
+const DEFAULT_SHARDS = { necklace: 0, crown: 0, plooshie: 0 };
 
 function emptyState() {
   return {
     boosters: { ...DEFAULT_BOOSTERS },
     currencies: { ...DEFAULT_CURRENCIES },
+    shards: { ...DEFAULT_SHARDS },
     lastDailySpin: null,  // ISO date string 'YYYY-MM-DD' (UTC)
     dailySpinHistory: [], // [{ date, reward, at }]
   };
@@ -56,6 +58,7 @@ export function getInventory() {
   const s = all[key];
   s.boosters = { ...DEFAULT_BOOSTERS, ...(s.boosters || {}) };
   s.currencies = { ...DEFAULT_CURRENCIES, ...(s.currencies || {}) };
+  s.shards = { ...DEFAULT_SHARDS, ...(s.shards || {}) };
   if (!Array.isArray(s.dailySpinHistory)) s.dailySpinHistory = [];
   return s;
 }
@@ -97,6 +100,25 @@ export function consumeBooster(type) {
   dispatchInventoryChange();
   logBoosterUseOnchain(type);
   return s.boosters[type];
+}
+
+// ── Shards ───────────────────────────────────────────────────
+
+export function getShards() {
+  return { ...getInventory().shards };
+}
+
+export function getShardCount(id) {
+  return getInventory().shards[id] || 0;
+}
+
+export function addShard(id, qty = 1) {
+  const s = getInventory();
+  if (!s.shards[id] && s.shards[id] !== 0) s.shards[id] = 0;
+  s.shards[id] = (s.shards[id] || 0) + qty;
+  saveInventory(s);
+  dispatchInventoryChange();
+  return s.shards[id];
 }
 
 // ── Currencies ────────────────────────────────────────────────

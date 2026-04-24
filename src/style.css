@@ -1059,6 +1059,7 @@ body[data-screen="game"] {
 .shop-popup {
   position: relative;
   width: min(980px, 94vw);
+  aspect-ratio: 2754 / 1536;
   container-type: inline-size;
   container-name: shop-popup;
   animation: shop-pop-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -1070,9 +1071,12 @@ body[data-screen="game"] {
 }
 
 .shop-popup__img {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
-  height: auto;
+  height: 100%;
+  object-fit: fill;
   pointer-events: none;
 }
 
@@ -1176,10 +1180,11 @@ body[data-screen="game"] {
   background: transparent;
   cursor: pointer;
   font-family: 'Fredoka', sans-serif;
-  font-size: 1.9cqw;
+  font-size: 1.6cqw;
   font-weight: 800;
   color: #0a6a3a;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.01em;
+  line-height: 1;
   text-shadow: 0 1px 0 rgba(255,255,255,0.55);
   transition: transform 0.15s ease, color 0.3s ease;
   display: flex;
@@ -1450,3 +1455,168 @@ body:has(.loading-screen:not(.loading-screen--exit)) .nav-bar {
 body[data-screen="game"] .nav-bar {
   display: none;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   SHARDS — 3 rarity collectibles (necklace/crown/plooshie)
+   rendered in: start popup, end popup, in-game bottom HUD
+   ═══════════════════════════════════════════════════════════════ */
+.shard-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.shard-slot {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  border-radius: 14px;
+  padding: 6px 8px 4px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.06) 100%);
+  border: 1.5px solid rgba(255,255,255,0.5);
+  box-shadow:
+    0 4px 12px rgba(10, 40, 80, 0.25),
+    inset 0 1px 0 rgba(255,255,255,0.55);
+  transition: transform 140ms ease;
+}
+
+.shard-slot__icon {
+  width: 100%;
+  height: auto;
+  max-width: 56px;
+  aspect-ratio: 1;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 4px rgba(0, 30, 60, 0.35));
+}
+
+.shard-slot__qty {
+  margin-top: 3px;
+  font-family: 'Fredoka', sans-serif;
+  font-weight: 800;
+  font-size: 13px;
+  color: #ffffff;
+  -webkit-text-stroke: 1px #0a3a5a;
+  paint-order: stroke fill;
+  text-shadow: 0 1px 2px rgba(0, 30, 60, 0.4);
+}
+
+/* Rarity tints on the slot frame */
+.shard-slot--common    { border-color: #c9d7e5; background: linear-gradient(180deg, #e8f1f9 0%, #c2d5e8 100%); }
+.shard-slot--rare      { border-color: #8dd1ff; background: linear-gradient(180deg, #d5ecff 0%, #7fc0ff 100%); box-shadow: 0 4px 14px rgba(30, 120, 220, 0.35), inset 0 1px 0 rgba(255,255,255,0.6); }
+.shard-slot--legendary { border-color: #ffd76a; background: linear-gradient(180deg, #fff4c0 0%, #ffb64a 100%); box-shadow: 0 4px 18px rgba(255, 170, 30, 0.5), inset 0 1px 0 rgba(255,255,255,0.7); }
+
+/* "Awarded" pulse + +1 badge, used on end-of-level popup */
+.shard-slot--awarded {
+  animation: shard-pop 0.65s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+@keyframes shard-pop {
+  0%   { transform: scale(0.6); filter: brightness(1.6); }
+  50%  { transform: scale(1.18); }
+  100% { transform: scale(1); }
+}
+
+.shard-slot__badge {
+  position: absolute;
+  top: -10px;
+  right: -8px;
+  font-family: 'Fredoka', sans-serif;
+  font-weight: 800;
+  font-size: 12px;
+  color: #fff;
+  background: linear-gradient(180deg, #ffd54a 0%, #ff9f2a 100%);
+  border: 1.5px solid #ffffff;
+  padding: 2px 7px;
+  border-radius: 999px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  animation: badge-bounce 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) 0.1s both;
+}
+@keyframes badge-bounce {
+  0%   { transform: scale(0) translateY(-6px); opacity: 0; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+/* ── Variant: start popup (map) ─────────────────────────── */
+.pop-shards {
+  position: absolute;
+  bottom: 25%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  align-items: center;
+  pointer-events: none;
+}
+.pop-shards .shard-slot {
+  flex: 0 0 auto;
+  width: 58px;
+  aspect-ratio: 1;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  box-sizing: border-box;
+}
+.pop-shards .shard-slot__icon {
+  width: 68%;
+  height: 68%;
+  max-width: none;
+  object-fit: contain;
+}
+.pop-shards .shard-slot__qty {
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.pop-traits {
+  position: absolute;
+  bottom: 19%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 82%;
+  text-align: center;
+  font-family: 'Fredoka', sans-serif;
+  font-weight: 700;
+  font-size: 11px;
+  color: #ffb74d;
+  text-shadow: 0 1px 2px rgba(0, 30, 60, 0.5);
+  pointer-events: none;
+  min-height: 14px;
+}
+.pop-traits:empty { display: none; }
+
+/* ── Variant: in-game bottom HUD ───────────────────────── */
+.shard-hud {
+  position: fixed;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 12px;
+  padding: 8px 16px;
+  border-radius: 22px;
+  background: linear-gradient(180deg, rgba(30, 80, 140, 0.78) 0%, rgba(10, 40, 80, 0.88) 100%);
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  box-shadow:
+    0 8px 24px rgba(0, 20, 50, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 30;
+  pointer-events: none;
+}
+.shard-hud .shard-slot {
+  padding: 4px 6px 2px;
+  border-radius: 12px;
+  min-width: 46px;
+}
+.shard-hud .shard-slot__icon { max-width: 36px; }
+.shard-hud .shard-slot__qty  { font-size: 12px; margin-top: 2px; }
+/* Keep HUD out of the way on the home/map/loading screens */
+body:not([data-screen="game"]) .shard-hud { display: none; }

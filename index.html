@@ -147,6 +147,8 @@
             <span class="pop-obj-moves"><strong id="popupMoves">30</strong> Moves</span>
           </div>
           <div class="pop-best">Best Score: <span id="popupBest">—</span> 🏆</div>
+          <div class="pop-shards" id="popupShards" aria-label="Shards collected"></div>
+          <div class="pop-traits" id="popupTraits" aria-label="Active shard traits"></div>
           <button class="pop-play" id="popupPlay">PLAY</button>
           <button class="pop-back" id="popupBack">◀ Back to Map</button>
           <button class="pop-close" id="popupClose">✕</button>
@@ -177,6 +179,7 @@
         <canvas id="gameCanvas"></canvas>
       </div>
       <div class="booster-bar" id="boosterBar"></div>
+      <div class="shard-hud" id="shardHud" aria-label="Shard collection"></div>
     </div>
     <div class="msg" id="msg"></div>
 
@@ -246,46 +249,46 @@
            fully independent — move/resize each one separately via
            __pengu.shopDev().  Default coords approximate a 3x2 layout. -->
       <div class="shop-slots">
-        <div class="shop-slot" data-item="row" data-qty="4" style="top:31%;left:11.5%;width:24.5%;height:20.75%">
+        <div class="shop-slot" data-item="row" data-qty="4" style="top:34%;left:18%;width:17%;height:18%">
           <img class="shop-slot__icon" src="/assets/boosters-2d/row-clear.png" draggable="false" alt="Row Clear" />
           <span class="shop-slot__qty">x4</span>
         </div>
-        <div class="shop-slot" data-item="col" data-qty="4" style="top:31%;left:37.8%;width:24.5%;height:20.75%">
+        <div class="shop-slot" data-item="col" data-qty="4" style="top:34%;left:41.5%;width:17%;height:18%">
           <img class="shop-slot__icon" src="/assets/boosters-2d/col-clear.png" draggable="false" alt="Column Clear" />
           <span class="shop-slot__qty">x4</span>
         </div>
-        <div class="shop-slot" data-item="colorBomb" data-qty="4" style="top:31%;left:64.1%;width:24.5%;height:20.75%">
+        <div class="shop-slot" data-item="colorBomb" data-qty="4" style="top:34%;left:65%;width:17%;height:18%">
           <img class="shop-slot__icon" src="/assets/boosters-2d/color-bomb.png" draggable="false" alt="Color Bomb" />
           <span class="shop-slot__qty">x4</span>
         </div>
-        <div class="shop-slot" data-item="hammer" data-qty="4" style="top:54%;left:11.5%;width:24.5%;height:20.75%">
+        <div class="shop-slot" data-item="hammer" data-qty="4" style="top:66%;left:18%;width:17%;height:18%">
           <img class="shop-slot__icon" src="/assets/boosters-2d/hammer.png" draggable="false" alt="Hammer" />
           <span class="shop-slot__qty">x4</span>
         </div>
-        <div class="shop-slot" data-item="shuffle" data-qty="4" style="top:54%;left:37.8%;width:24.5%;height:20.75%">
+        <div class="shop-slot" data-item="shuffle" data-qty="4" style="top:66%;left:41.5%;width:17%;height:18%">
           <img class="shop-slot__icon" src="/assets/boosters-2d/shuffle.png" draggable="false" alt="Shuffle" />
           <span class="shop-slot__qty">x4</span>
         </div>
       </div>
 
       <div class="shop-tags">
-        <button type="button" class="shop-tag" data-item="row" style="top:56%;left:18.5%;width:16.2%;height:17%">
+        <button type="button" class="shop-tag" data-item="row" style="top:54%;left:18%;width:12%;height:8%">
           <span class="shop-tag__glow" aria-hidden="true"></span>
           <span class="shop-tag__label">$2.98</span>
         </button>
-        <button type="button" class="shop-tag" data-item="col" style="top:56%;left:41.9%;width:16.2%;height:17%">
+        <button type="button" class="shop-tag" data-item="col" style="top:54%;left:41.5%;width:12%;height:8%">
           <span class="shop-tag__glow" aria-hidden="true"></span>
           <span class="shop-tag__label">$2.98</span>
         </button>
-        <button type="button" class="shop-tag" data-item="colorBomb" style="top:56%;left:65.3%;width:16.2%;height:17%">
+        <button type="button" class="shop-tag" data-item="colorBomb" style="top:54%;left:65%;width:12%;height:8%">
           <span class="shop-tag__glow" aria-hidden="true"></span>
           <span class="shop-tag__label">$2.98</span>
         </button>
-        <button type="button" class="shop-tag" data-item="hammer" style="top:75%;left:18.5%;width:16.2%;height:17%">
+        <button type="button" class="shop-tag" data-item="hammer" style="top:84%;left:18%;width:12%;height:8%">
           <span class="shop-tag__glow" aria-hidden="true"></span>
           <span class="shop-tag__label">$2.98</span>
         </button>
-        <button type="button" class="shop-tag" data-item="shuffle" style="top:75%;left:41.9%;width:16.2%;height:17%">
+        <button type="button" class="shop-tag" data-item="shuffle" style="top:84%;left:41.5%;width:12%;height:8%">
           <span class="shop-tag__glow" aria-hidden="true"></span>
           <span class="shop-tag__label">$2.98</span>
         </button>

@@ -4,6 +4,7 @@ import { getLevel, hasLevel } from './levels.js';
 import { getWallet, ensureWallet, saveLevelResult } from './supabase.js';
 import * as Inventory from './inventory.js';
 import { logLevelOnchain } from './onchain.js';
+import { rollShardDrop, renderShardSlots, getShardDef, computeTraits } from './shards.js';
 
 // ═══════════════════════════════════════════════════════════════
 //  LEVEL CONFIG — driven by ?level=N URL param
@@ -82,7 +83,11 @@ const TYPE_FIX = {
   crab:      { rx: 0, ry: 0, rz: 0, scale: 0.60 },
 };
 
-let board = [], selected = null, animating = false, score = 0, moves = CONFIG.moves, combo = 0;
+// Shard-driven passive traits (read once at load; shards earned mid-run
+// don't change the current level's buff — they kick in next level).
+const TRAITS = computeTraits(Inventory.getShards());
+
+let board = [], selected = null, animating = false, score = 0, moves = CONFIG.moves + TRAITS.bonusMoves, combo = 0;
 let gameOver = false;
 
 // Objective tracking
@@ -104,7 +109,7 @@ if (CONFIG.bg) {
   document.body.style.background = `url('${CONFIG.bg}') center/cover no-repeat fixed`;
 }
 
-console.log(`🐧 Level ${levelNum} | Era ${CONFIG.era} | ${GRID}x${GRID} | ${CONFIG.moves} moves | Tiles: ${TILE_TYPES.join(', ')}`);
+console.log(`🐧 Level ${levelNum} | Era ${CONFIG.era} | ${GRID}x${GRID} | ${CONFIG.moves}${TRAITS.bonusMoves ? `(+${TRAITS.bonusMoves})` : ''} moves | x${TRAITS.scoreMultiplier.toFixed(3)} score | Tiles: ${TILE_TYPES.join(', ')}`);
 
 // ═══════════════════════════════════════════════════════════════
 //  THREE.JS SETUP — transparent canvas so BG shows through
@@ -646,7 +651,7 @@ async function processMatches() {
   combo = 0;
   let m = findMatches();
   while (m.size > 0) {
-    combo++; score += m.size * 10 * combo; updateHUD();
+    combo++; score += Math.round(m.size * 10 * combo * TRAITS.scoreMultiplier); updateHUD();
     await removeMatches(m);
     await delay(100);
     await dropTiles();
@@ -823,6 +828,14 @@ function showLevelPopup(won) {
   const stars = won ? getStars() : 0;
   const durationMs = Math.round(performance.now() - gameStartTime);
 
+  // Shard reward: every win rolls one shard from the rarity table.
+  // The new count is visible on the start popup and in-game HUD.
+  let awardedShard = null;
+  if (won) {
+    awardedShard = rollShardDrop();
+    Inventory.addShard(awardedShard, 1);
+  }
+
   if (won) {
     title.classList.remove('fail');
     title.innerHTML = `<span class="level-popup-title-label">LEVEL</span><span class="level-popup-title-num">${levelNum}</span>`;
@@ -844,7 +857,10 @@ function showLevelPopup(won) {
     }
 
     scoreEl.textContent = score.toLocaleString();
-    objEl.textContent = `${stars} star${stars !== 1 ? 's' : ''} earned`;
+    const earnedShardName = awardedShard ? getShardDef(awardedShard)?.name : null;
+    objEl.textContent = earnedShardName
+      ? `${stars} star${stars !== 1 ? 's' : ''} · +1 ${earnedShardName}`
+      : `${stars} star${stars !== 1 ? 's' : ''} earned`;
     nextBtn.classList.remove('hidden');
     const canNext = hasLevel(levelNum + 1);
     nextBtn.disabled = !canNext;
@@ -1461,9 +1477,18 @@ async function init() {
   updateHUD();
   setupBoosterUI();
   setupLevelPopupButtons();
+  setupShardHud();
   initBoard();
   animate();
   console.log('🐧 PenguCrush ready!');
+}
+
+function setupShardHud() {
+  const el = document.getElementById('shardHud');
+  if (!el) return;
+  const refresh = () => renderShardSlots(el, { counts: Inventory.getShards(), variant: 'hud' });
+  refresh();
+  Inventory.onInventoryChange(refresh);
 }
 
 init().catch((err) => {
