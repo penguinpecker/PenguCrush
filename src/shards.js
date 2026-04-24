@@ -1,19 +1,20 @@
 // ═══════════════════════════════════════════════════════════════
-//  SHARDS — rarity-tiered collectibles awarded on level completion
+//  SHARDS — rarity-tiered collectibles earned in-play
 //
-//  Drop table (rolled once per completed level):
-//    Necklace  — common     65%
-//    Crown     — rare       28%
-//    Plooshie  — legendary   7%
+//  Drop trigger: a match of 4+ tiles. Each shard is rolled
+//  INDEPENDENTLY so a single match can yield 0..3 shards:
+//    Necklace  — common     20% per 4+ match
+//    Crown     — rare       10% per 4+ match
+//    Plooshie  — legendary   5% per 4+ match
 //
 //  All counts live on the wallet-scoped Inventory record (shards.{id}).
 //  This module only owns the catalogue + drop roll + render helpers.
 // ═══════════════════════════════════════════════════════════════
 
 export const SHARDS = [
-  { id: 'necklace', name: 'Necklace', rarity: 'common',    weight: 65, img: '/assets/shards/necklace.webp' },
-  { id: 'crown',    name: 'Crown',    rarity: 'rare',      weight: 28, img: '/assets/shards/crown.webp'    },
-  { id: 'plooshie', name: 'Plooshie', rarity: 'legendary', weight:  7, img: '/assets/shards/plooshie.webp' },
+  { id: 'necklace', name: 'Necklace', rarity: 'common',    dropChance: 0.20, img: '/assets/shards/necklace.webp' },
+  { id: 'crown',    name: 'Crown',    rarity: 'rare',      dropChance: 0.10, img: '/assets/shards/crown.webp'    },
+  { id: 'plooshie', name: 'Plooshie', rarity: 'legendary', dropChance: 0.05, img: '/assets/shards/plooshie.webp' },
 ];
 
 const SHARD_BY_ID = Object.fromEntries(SHARDS.map(s => [s.id, s]));
@@ -46,14 +47,17 @@ export function computeTraits(counts = {}) {
   };
 }
 
-export function rollShardDrop() {
-  const total = SHARDS.reduce((n, s) => n + s.weight, 0);
-  let r = Math.random() * total;
+/**
+ * Roll shard drops for a single 4+ match. Each shard is rolled
+ * independently, so a match can award 0, 1, 2, or all 3 shards.
+ * Returns an array of earned shard ids (in catalogue order).
+ */
+export function rollShardsForMatch() {
+  const earned = [];
   for (const s of SHARDS) {
-    r -= s.weight;
-    if (r < 0) return s.id;
+    if (Math.random() < s.dropChance) earned.push(s.id);
   }
-  return SHARDS[0].id;
+  return earned;
 }
 
 /**
