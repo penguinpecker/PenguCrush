@@ -115,7 +115,19 @@ console.log(`🐧 Level ${levelNum} | Era ${CONFIG.era} | ${GRID}x${GRID} | ${CO
 //  THREE.JS SETUP — transparent canvas so BG shows through
 // ═══════════════════════════════════════════════════════════════
 const canvas = document.getElementById('gameCanvas');
-const W = Math.min(window.innerWidth - 60, window.innerHeight - 320, 580);
+
+function computeCanvasSize() {
+  const vw = window.innerWidth || 360;
+  const vh = window.innerHeight || 640;
+  const compact = vw <= 700 || vh <= 720;
+  const landscapePhone = compact && vw > vh && vh <= 500;
+  const reserved = landscapePhone ? 155 : compact ? 250 : 320;
+  const edgePadding = landscapePhone ? 280 : compact ? 24 : 60;
+  const available = Math.min(vw - edgePadding, vh - reserved, 580);
+  return Math.max(220, Math.floor(available));
+}
+
+let W = computeCanvasSize();
 canvas.width = W; canvas.height = W;
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
@@ -132,6 +144,17 @@ const frustum = GRID * CELL + 4.0;
 const camera = new THREE.OrthographicCamera(-frustum/2, frustum/2, frustum/2, -frustum/2, 0.1, 100);
 camera.position.set(0, 0, 20);
 camera.lookAt(0, 0, 0);
+
+function resizeGameCanvas() {
+  const next = computeCanvasSize();
+  if (next === W) return;
+  W = next;
+  canvas.width = W;
+  canvas.height = W;
+  renderer.setSize(W, W);
+}
+
+window.addEventListener('resize', resizeGameCanvas);
 
 // Lighting
 scene.add(new THREE.AmbientLight(0xd0ecff, 1.2));

@@ -121,6 +121,14 @@ body {
 
 body[data-screen="game"] {
   background: url('/assets/board/bg-arctic.png') center/cover no-repeat fixed;
+  align-items: stretch;
+  justify-content: center;
+}
+
+#gameScreen {
+  width: 100vw;
+  min-height: 100dvh;
+  overflow: hidden;
 }
 
 /* ═══ HOME SCREEN ═══ */
@@ -252,6 +260,8 @@ body[data-screen="game"] {
   justify-content: center;
   z-index: 10;
   margin-top: 0;
+  width: 100%;
+  min-height: 100dvh;
 }
 
 /* ═══ Back-to-map button on the game screen ═══ */
@@ -325,6 +335,8 @@ body[data-screen="game"] {
 #gameCanvas {
   display: block;
   cursor: pointer;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 220px);
 }
 
 .msg {
@@ -1620,3 +1632,336 @@ body[data-screen="game"] .nav-bar {
 .shard-hud .shard-slot__qty  { font-size: 12px; margin-top: 2px; }
 /* Keep HUD out of the way on the home/map/loading screens */
 body:not([data-screen="game"]) .shard-hud { display: none; }
+
+@media (max-width: 700px), (max-height: 720px) {
+  .level-popup-overlay,
+  .lb-overlay,
+  .shop-overlay {
+    padding:
+      max(10px, env(safe-area-inset-top))
+      max(10px, env(safe-area-inset-right))
+      max(10px, env(safe-area-inset-bottom))
+      max(10px, env(safe-area-inset-left));
+  }
+
+  body[data-screen="game"] {
+    overflow: hidden;
+  }
+
+  body[data-screen="game"] #app {
+    justify-content: flex-start;
+    padding:
+      max(8px, env(safe-area-inset-top))
+      12px
+      calc(136px + env(safe-area-inset-bottom));
+  }
+
+  .game-back-btn {
+    top: max(8px, env(safe-area-inset-top));
+    left: max(8px, env(safe-area-inset-left));
+    padding: 8px 12px 8px 10px;
+    font-size: 13px;
+    z-index: 80;
+  }
+
+  .logo {
+    width: clamp(160px, 48vw, 250px);
+    max-height: 12dvh;
+    object-fit: contain;
+    margin: 0 0 2px;
+  }
+
+  .hud {
+    width: min(100%, 330px);
+    justify-content: center;
+    gap: clamp(8px, 3vw, 14px);
+    margin-bottom: 6px;
+  }
+
+  .hud-panel {
+    width: clamp(112px, 34vw, 150px);
+    height: auto;
+    aspect-ratio: 11 / 6;
+  }
+
+  .game-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+  }
+
+  #gameCanvas {
+    width: min(calc(100vw - 24px), calc(100dvh - 250px), 580px) !important;
+    height: min(calc(100vw - 24px), calc(100dvh - 250px), 580px) !important;
+    max-width: calc(100vw - 24px);
+    max-height: calc(100dvh - 250px);
+  }
+
+  .booster-bar {
+    top: auto;
+    left: 50%;
+    bottom: calc(8px + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    z-index: 70;
+    max-width: calc(100vw - 16px);
+    padding: 5px 8px;
+    border-radius: 20px;
+    background: linear-gradient(180deg, rgba(30, 80, 140, 0.72), rgba(8, 34, 72, 0.86));
+    border: 1.5px solid rgba(255, 255, 255, 0.28);
+    box-shadow: 0 6px 18px rgba(0, 20, 50, 0.35);
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+  }
+
+  .booster-slots {
+    flex-direction: row;
+    gap: clamp(4px, 1.7vw, 9px);
+  }
+
+  .booster-slot {
+    width: clamp(42px, 12.5vw, 52px);
+    height: clamp(42px, 12.5vw, 52px);
+  }
+
+  .booster-slot-icon {
+    width: 90%;
+    height: 90%;
+  }
+
+  .booster-slot-count {
+    top: -1px;
+    right: -1px;
+    min-width: 16px;
+    text-align: center;
+    font-size: 9px;
+  }
+
+  .shard-hud {
+    left: 50%;
+    right: auto;
+    bottom: calc(72px + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: 16px;
+    z-index: 65;
+  }
+
+  .shard-hud .shard-slot {
+    min-width: 34px;
+    padding: 3px 4px 2px;
+    border-radius: 10px;
+  }
+
+  .shard-hud .shard-slot__icon {
+    max-width: 24px;
+  }
+
+  .shard-hud .shard-slot__qty {
+    font-size: 9px;
+    margin-top: 1px;
+  }
+
+  .msg {
+    width: min(88vw, 340px);
+    padding: 14px 18px;
+    font-size: 18px;
+  }
+
+  .level-popup {
+    width: min(94vw, calc(88dvh * 91 / 45));
+  }
+
+  .level-popup-buttons {
+    bottom: 22%;
+    gap: clamp(2px, 1.2cqw, 7px);
+    padding: 0 15%;
+  }
+
+  .level-popup-btn {
+    font-size: clamp(9px, 2.35cqw, 12px);
+    padding: clamp(2px, 0.75cqw, 5px) clamp(4px, 3.4cqw, 18px);
+    letter-spacing: 0.2px;
+  }
+
+  .lb-popup {
+    width: min(96vw, calc(90dvh * 1600 / 894));
+  }
+
+  .lb-popup__inner {
+    padding: 15% 9.5% 5% 10%;
+  }
+
+  .lb-tabs {
+    width: min(94%, 360px);
+    margin-bottom: 1.5%;
+  }
+
+  .lb-tab {
+    min-height: 26px;
+    font-size: clamp(10px, 2.9vw, 13px);
+    padding: 0.15em 0.35em;
+  }
+
+  .lb-content {
+    gap: 6px;
+    padding: 0 4px;
+  }
+
+  .lb-row {
+    gap: 4px;
+    padding: 3px 5px;
+  }
+
+  .lb-rank {
+    width: clamp(18px, 5.2vw, 24px);
+    height: clamp(18px, 5.2vw, 24px);
+  }
+
+  .lb-penguin {
+    width: clamp(16px, 4.6vw, 22px);
+    height: clamp(16px, 4.6vw, 22px);
+  }
+
+  .lb-addr,
+  .lb-xp {
+    font-size: clamp(8px, 2.45vw, 11px);
+  }
+
+  .shop-popup {
+    width: min(96vw, calc(90dvh * 2754 / 1536));
+  }
+
+  .shop-tag {
+    font-size: clamp(8px, 1.8cqw, 13px);
+  }
+
+  .shop-slot__qty {
+    font-size: clamp(8px, 2.1cqw, 15px);
+  }
+
+  .nav-bar {
+    padding: 0 4px max(4px, env(safe-area-inset-bottom));
+  }
+
+  .nav-bar__inner {
+    width: min(620px, 100vw);
+  }
+}
+
+@media (max-width: 380px) {
+  .game-back-btn {
+    width: 38px;
+    height: 38px;
+    justify-content: center;
+    padding: 0;
+    border-radius: 50%;
+  }
+
+  .game-back-btn__label {
+    display: none;
+  }
+
+  .hud {
+    width: min(100%, 292px);
+  }
+
+  .hud-panel {
+    width: clamp(104px, 33vw, 132px);
+  }
+
+  .booster-slot {
+    width: clamp(38px, 12vw, 46px);
+    height: clamp(38px, 12vw, 46px);
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) and (max-width: 900px) {
+  body[data-screen="game"] #app {
+    justify-content: center;
+    padding:
+      calc(118px + env(safe-area-inset-top))
+      calc(92px + env(safe-area-inset-right))
+      max(8px, env(safe-area-inset-bottom))
+      calc(92px + env(safe-area-inset-left));
+  }
+
+  .game-back-btn {
+    top: max(8px, env(safe-area-inset-top));
+    left: max(8px, env(safe-area-inset-left));
+    width: auto;
+    height: auto;
+    padding: 7px 12px 7px 10px;
+    border-radius: 22px;
+  }
+
+  .game-back-btn__label {
+    display: inline;
+  }
+
+  .logo {
+    position: fixed;
+    top: max(4px, env(safe-area-inset-top));
+    left: 50%;
+    transform: translateX(-50%);
+    width: clamp(150px, 26vw, 220px);
+    max-height: 48px;
+    z-index: 25;
+  }
+
+  .hud {
+    position: fixed;
+    top: calc(max(4px, env(safe-area-inset-top)) + 46px);
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(340px, 52vw);
+    gap: 10px;
+    z-index: 25;
+  }
+
+  .hud-panel {
+    width: clamp(116px, 20vw, 150px);
+  }
+
+  #gameCanvas {
+    width: min(calc(100dvh - 155px), calc(100vw - 280px), 580px) !important;
+    height: min(calc(100dvh - 155px), calc(100vw - 280px), 580px) !important;
+    max-width: calc(100vw - 280px);
+    max-height: calc(100dvh - 155px);
+  }
+
+  .booster-bar {
+    top: 50%;
+    right: max(8px, env(safe-area-inset-right));
+    bottom: auto;
+    left: auto;
+    transform: translateY(-50%);
+    padding: 6px;
+    max-height: calc(100dvh - 18px);
+  }
+
+  .booster-slots {
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .booster-slot {
+    width: clamp(38px, 11dvh, 48px);
+    height: clamp(38px, 11dvh, 48px);
+  }
+
+  .shard-hud {
+    top: 50%;
+    left: max(8px, env(safe-area-inset-left));
+    bottom: auto;
+    transform: translateY(-50%);
+    flex-direction: column;
+    gap: 5px;
+    padding: 6px;
+  }
+
+  .shard-hud .shard-slot {
+    min-width: 34px;
+  }
+}

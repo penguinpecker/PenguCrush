@@ -23,6 +23,7 @@ let _signerAddress = null;  // underlying EOA address
 
 const SIGNIN_KEY = 'pengu_siwe';
 const SIGNIN_TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7 days
+const CROSS_APP_STORAGE_KEY = `privy-caw:${AGW_APP_ID}:connection:smart-wallet`;
 
 // ── helpers ────────────────────────────────────────────────────
 function persist(addr) {
@@ -31,6 +32,60 @@ function persist(addr) {
 }
 
 function clearSignIn() { localStorage.removeItem(SIGNIN_KEY); }
+
+function getPopupFeatures(width = 440, height = 680) {
+  const leftEdge = window.screenLeft ?? window.screenX ?? 0;
+  const topEdge = window.screenTop ?? window.screenY ?? 0;
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || screen.width;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || screen.height;
+  const left = (viewportWidth - width) / 2 / (viewportWidth / window.screen.availWidth) + leftEdge;
+  const top = (viewportHeight - height) / 2 / (viewportHeight / window.screen.availHeight) + topEdge;
+  return `toolbar=0,location=0,menubar=0,height=${height},width=${width},popup=1,left=${left},top=${top}`;
+}
+
+function hasStoredCrossAppConnection() {
+  try {
+    const raw = localStorage.getItem(CROSS_APP_STORAGE_KEY);
+    if (!raw) return false;
+    const connection = JSON.parse(raw);
+    return !!connection?.address && Number(connection.exp || 0) > Date.now();
+  } catch (_) {
+    return false;
+  }
+}
+
+async function requestAccountsWithUserPopup(privy) {
+  if (hasStoredCrossAppConnection()) {
+    await privy.request({ method: 'eth_requestAccounts' });
+    return;
+  }
+
+  // The cross-app connector does async setup before calling window.open().
+  // Pre-open the popup from the real click, then let Privy navigate it.
+  const originalOpen = window.open.bind(window);
+  const popup = originalOpen('', undefined, getPopupFeatures());
+  if (!popup) {
+    await privy.request({ method: 'eth_requestAccounts' });
+    return;
+  }
+
+  let consumed = false;
+  window.open = (url, target, features) => {
+    if (!consumed && !popup.closed) {
+      consumed = true;
+      if (url) popup.location.href = String(url);
+      return popup;
+    }
+    return originalOpen(url, target, features);
+  };
+
+  try {
+    await privy.request({ method: 'eth_requestAccounts' });
+  } finally {
+    window.open = originalOpen;
+    if (!consumed && !popup.closed) popup.close();
+  }
+}
 
 function buildSignInMessage(addr) {
   const nonce = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
@@ -92,7 +147,7 @@ export async function connectAGW() {
   const privy = ensurePrivyProvider();
 
   // 2. Request accounts — this opens the AGW login popup (must be synchronous from user gesture)
-  await privy.request({ method: 'eth_requestAccounts' });
+  await requestAccountsWithUserPopup(privy);
   const accounts = await privy.request({ method: 'eth_accounts' });
   if (!accounts?.length) throw new Error('No accounts returned from AGW');
 

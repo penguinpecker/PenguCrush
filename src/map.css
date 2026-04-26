@@ -650,3 +650,89 @@
     transition: none;
   }
 }
+
+@media (max-width: 700px), (max-height: 720px) {
+  .popup-overlay,
+  .confirm-overlay,
+  .daily-wheel-overlay {
+    padding:
+      max(10px, env(safe-area-inset-top))
+      max(10px, env(safe-area-inset-right))
+      max(10px, env(safe-area-inset-bottom))
+      max(10px, env(safe-area-inset-left));
+  }
+
+  .popup-frame {
+    width: min(92vw, calc(90dvh * 837 / 737));
+  }
+
+  .pop-objectives {
+    gap: 3.2cqw;
+  }
+
+  .pop-shards .shard-slot {
+    width: clamp(34px, 8.5cqw, 46px);
+  }
+
+  .crush-pass {
+    top: max(8px, env(safe-area-inset-top));
+    left: max(8px, env(safe-area-inset-left));
+    transform: none;
+    width: clamp(52px, 15vw, 70px);
+  }
+
+  .crush-pass:hover,
+  .crush-pass:active {
+    transform: none;
+  }
+
+  .agw-btn {
+    top: max(8px, env(safe-area-inset-top));
+    right: max(8px, env(safe-area-inset-right));
+    max-width: 48vw;
+    padding: 7px 11px;
+    font-size: 11px;
+    line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .agw-btn.connected {
+    max-width: 42vw;
+    padding: 7px 10px;
+    font-size: 11px;
+  }
+
+  .daily-wheel-btn {
+    width: clamp(64px, 20vw, 92px);
+    height: clamp(64px, 20vw, 92px);
+    right: 2%;
+  }
+
+  .daily-wheel-full__stage {
+    width: min(86vmin, 440px);
+  }
+
+  .daily-wheel-overlay__close {
+    width: 40px;
+    height: 40px;
+    font-size: 24px;
+  }
+
+  .confirm-card {
+    width: min(340px, 92vw);
+    padding: 22px 18px 18px;
+  }
+
+  .confirm-actions {
+    gap: 8px;
+  }
+
+  .confirm-btn {
+    min-width: 0;
+    flex: 1;
+    padding: 9px 12px;
+    font-size: 13px;
+  }
+}
