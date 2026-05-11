@@ -1362,7 +1362,7 @@ body[data-screen="game"] {
   align-items: center;
   justify-content: center;
   /* Horizontal space between pills — % of this container’s width */
-  column-gap: 1.5%;
+  column-gap: 0.5%;
   box-sizing: border-box;
 }
 
@@ -1381,27 +1381,28 @@ body[data-screen="game"] {
 }
 
 .nav-btn[data-page="home"] {
-  width: 22%;
-  height: 40%;
+  width: 25%;
+  height: 90%;
 }
 
 .nav-btn[data-page="map"] {
-  width: 22%;
-  height: 40%;
+  width: 25%;
+  height: 90%;
 }
 
 .nav-btn[data-page="shop"] {
-  width: 22%;
-  height: 40%;
+  width: 25%;
+  height: 90%;
 }
 
 .nav-btn[data-page="leaderboard"] {
-  width: 22%;
-  height: 40%;
+  width: 25%;
+  height: 90%;
 }
 
 .nav-btn:active {
   transform: scale(0.93);
+  cursor: pointer;
 }
 
 /* ── Ice glow shine on hover ── */
@@ -1452,12 +1453,46 @@ body[data-screen="game"] {
   opacity: 1;
 }
 
-/* Active page */
+/* Active page — barely-there glass; mostly a soft rim */
+.nav-btn.active {
+  background: rgba(200, 245, 255, 0.55);
+  box-shadow:
+    inset 0 0 0 1px rgba(180, 230, 255, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+/* Very faint top line (optional read on dark slots) */
+.nav-btn.active::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 18%;
+  width: 64%;
+  height: 1px;
+  border-radius: 0 0 2px 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(200, 235, 255, 0.22) 40%,
+    rgba(235, 250, 255, 0.35) 50%,
+    rgba(200, 235, 255, 0.22) 60%,
+    transparent
+  );
+  opacity: 0.65;
+  pointer-events: none;
+}
+
 .nav-btn.active .nav-btn__glow {
-  opacity: 0.4;
+  opacity: 0.42;
 }
 .nav-btn.active .nav-btn__glow::after {
   display: none;
+}
+
+/* Restore full glow when hovering the active button */
+.nav-btn.active:hover .nav-btn__glow,
+.nav-btn.active:focus-visible .nav-btn__glow {
+  opacity: 1;
 }
 
 /* Hide during loading & game */
@@ -1555,15 +1590,16 @@ body[data-screen="game"] .nav-bar {
 /* ── Variant: start popup (map) ─────────────────────────── */
 .pop-shards {
   position: absolute;
-  bottom: 25%;
+  bottom: 26%;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
-  gap: 10px;
+  gap: 29px;
   justify-content: center;
   align-items: center;
   pointer-events: none;
 }
+
 .pop-shards .shard-slot {
   flex: 0 0 auto;
   width: 58px;
@@ -1574,7 +1610,18 @@ body[data-screen="game"] .nav-bar {
   justify-content: center;
   align-items: center;
   box-sizing: border-box;
+  pointer-events: auto;
+  cursor: default;
 }
+
+/* Nudge 2nd / 3rd slots to match background art (avoid transform: conflicts with shard-pop) */
+.pop-shards .shard-slot:nth-child(2) {
+  left: -4px;
+}
+.pop-shards .shard-slot:nth-child(3) {
+  left: -7px;
+}
+
 .pop-shards .shard-slot__icon {
   width: 68%;
   height: 68%;
