@@ -165,6 +165,58 @@ scene.add(new THREE.DirectionalLight(0x80d0ff, 0.5).translateX(-4));
 scene.add(new THREE.DirectionalLight(0xa0e0ff, 0.3).translateY(-6));
 
 // ═══════════════════════════════════════════════════════════════
+//  BOOSTER CURSOR & ROW/COL HOVER HIGHLIGHT
+// ═══════════════════════════════════════════════════════════════
+const rowHighlightMat = new THREE.MeshBasicMaterial({ color: 0x00dfff, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide });
+const rowHighlightMesh = new THREE.Mesh(new THREE.PlaneGeometry(GRID * CELL, CELL * 0.94), rowHighlightMat);
+rowHighlightMesh.position.z = 0.55;
+scene.add(rowHighlightMesh);
+
+const colHighlightMat = new THREE.MeshBasicMaterial({ color: 0x00dfff, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide });
+const colHighlightMesh = new THREE.Mesh(new THREE.PlaneGeometry(CELL * 0.94, GRID * CELL), colHighlightMat);
+colHighlightMesh.position.z = 0.55;
+scene.add(colHighlightMesh);
+
+let _highlightRowActive = false, _highlightColActive = false;
+
+// Pre-cached cursor data-URL strings, populated by preCacheBoosterCursors().
+// Browsers require cursor images to be ≤128×128; we normalise to 48×48.
+const _boosterCursorUrls = {};
+
+async function _buildCursorDataUrl(src, size = 48) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = size; c.height = size;
+      c.getContext('2d').drawImage(img, 0, 0, size, size);
+      resolve(c.toDataURL());
+    };
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+
+async function preCacheBoosterCursors() {
+  const specs = {
+    row:       { src: '/assets/boosters-2d/row-clear.png',  hot: '24 24', size: 48 },
+    col:       { src: '/assets/boosters-2d/col-clear.png',  hot: '24 24', size: 48 },
+    hammer:    { src: '/assets/boosters-2d/hammer.png',     hot: '14 14', size: 28 },
+    colorBomb: { src: '/assets/boosters-2d/color-bomb.png', hot: '24 24', size: 48 },
+  };
+  await Promise.all(Object.entries(specs).map(async ([type, { src, hot, size }]) => {
+    const dataUrl = await _buildCursorDataUrl(src, size ?? 48);
+    _boosterCursorUrls[type] = dataUrl
+      ? `url(${dataUrl}) ${hot}, crosshair`
+      : 'crosshair';
+  }));
+}
+
+function applyBoosterCursor(type) {
+  canvas.style.cursor = type ? (_boosterCursorUrls[type] || 'crosshair') : '';
+}
+
+// ═══════════════════════════════════════════════════════════════
 //  GRID
 // ═══════════════════════════════════════════════════════════════
 function gridToWorld(row, col) {
@@ -608,6 +660,652 @@ function particles(pos, color = 0x4fc3f7) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+//  BOOSTER ANIMATIONS — each booster has its own visual style
+// ═══════════════════════════════════════════════════════════════
+
+// ─── Row Booster: splitting-arrow sweep ───────────────────────
+
+/** Builds a right- or left-pointing arrow Shape for Three.js ShapeGeometry. */
+function buildArrowShape(direction) {
+  const shape = new THREE.Shape();
+  const w = CELL * 0.44, h = CELL * 0.28, tip = CELL * 0.34;
+  if (direction > 0) {         // right arrow
+    shape.moveTo(-w,  h * 0.55); shape.lineTo(0,   h * 0.55);
+    shape.lineTo(0,   h);        shape.lineTo(tip,  0);
+    shape.lineTo(0,  -h);        shape.lineTo(0,   -h * 0.55);
+    shape.lineTo(-w, -h * 0.55); shape.closePath();
+  } else {                      // left arrow
+    shape.moveTo(w,  h * 0.55);  shape.lineTo(0,   h * 0.55);
+    shape.lineTo(0,  h);          shape.lineTo(-tip, 0);
+    shape.lineTo(0, -h);          shape.lineTo(0,   -h * 0.55);
+    shape.lineTo(w, -h * 0.55);   shape.closePath();
+  }
+  return shape;
+}
+
+/** Creates a glowing arrow group (fill + soft glow halo). */
+function createSplitArrow(direction) {
+  const fillGeo = new THREE.ShapeGeometry(buildArrowShape(direction));
+  const glowGeo = new THREE.ShapeGeometry(buildArrowShape(direction));
+  const matFill = new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthWrite: false });
+  const matGlow = new THREE.MeshBasicMaterial({ color: 0x80ffff, transparent: true, opacity: 0.30, side: THREE.DoubleSide, depthWrite: false });
+  const fill = new THREE.Mesh(fillGeo, matFill);
+  const glow = new THREE.Mesh(glowGeo, matGlow);
+  glow.scale.setScalar(1.38);
+  glow.position.z = -0.05;
+  const group = new THREE.Group();
+  group.add(glow);
+  group.add(fill);
+  group._matFill = matFill;
+  group._matGlow = matGlow;
+  return group;
+}
+
+function _disposeArrow(arrow) {
+  arrow.children.forEach(ch => { if (ch.geometry) ch.geometry.dispose(); if (ch.material) ch.material.dispose(); });
+}
+
+/** Slides a tile mesh off-screen in dirX direction (+1 right, -1 left), then removes it. */
+function animSweepOut(mesh, dirX, dur = 270) {
+  return new Promise(res => {
+    const t0 = performance.now();
+    const startX = mesh.position.x;
+    const travel = dirX * CELL * (GRID + 2);
+    (function tick() {
+      const p = Math.min((performance.now() - t0) / dur, 1);
+      mesh.position.x = startX + travel * ease(p);
+      const fade = 1 - Math.pow(p, 0.7);
+      mesh.traverse(ch => { if (ch.isMesh && ch.material) { ch.material.transparent = true; ch.material.opacity = Math.max(0, fade); }});
+      p < 1 ? requestAnimationFrame(tick) : (scene.remove(mesh), res());
+    })();
+  });
+}
+
+/**
+ * Row booster visual: two arrow halves appear at row centre, split apart and
+ * glide to opposite edges, fading as they exit. Tiles are swept outward in a
+ * staggered wave that follows each arrow half.
+ */
+async function animRowBoosterFx(row) {
+  const rowY       = gridToWorld(row, 0).y;
+  const boardHalfW = ((GRID - 1) / 2) * CELL;
+  const edgeX      = boardHalfW + CELL * 1.8;
+  const sweepDur   = 420;
+  const centerCol  = (GRID - 1) / 2;
+
+  const leftArrow  = createSplitArrow(-1);
+  const rightArrow = createSplitArrow(1);
+  leftArrow.position.set(-CELL * 0.25,  rowY, 1.2);
+  rightArrow.position.set(CELL * 0.25,  rowY, 1.2);
+  scene.add(leftArrow);
+  scene.add(rightArrow);
+
+  const ps = [];
+
+  // Arrow flight + edge fade-out
+  ps.push(new Promise(res => {
+    const t0 = performance.now();
+    (function tick() {
+      const p = Math.min((performance.now() - t0) / sweepDur, 1);
+      leftArrow.position.x  = -CELL * 0.25 - p * edgeX;
+      rightArrow.position.x =  CELL * 0.25 + p * edgeX;
+      const fade = p > 0.62 ? 1 - (p - 0.62) / 0.38 : 1;
+      leftArrow._matFill.opacity  = 0.95 * fade;
+      leftArrow._matGlow.opacity  = 0.30 * fade;
+      rightArrow._matFill.opacity = 0.95 * fade;
+      rightArrow._matGlow.opacity = 0.30 * fade;
+      if (p < 1) {
+        requestAnimationFrame(tick);
+      } else {
+        scene.remove(leftArrow);  _disposeArrow(leftArrow);
+        scene.remove(rightArrow); _disposeArrow(rightArrow);
+        res();
+      }
+    })();
+  }));
+
+  // Staggered tile sweep — tiles closest to centre go first
+  for (let c = 0; c < GRID; c++) {
+    const tile = board[row][c];
+    if (!tile || tile.isWall) continue;
+    if (tile.frozen) { removeFrozenOverlay(tile); tile.iceLayer = 0; continue; }
+
+    const dir = c <= centerCol ? -1 : 1;
+    const distFromCenter = Math.abs(c - centerCol);
+    const startDelay = (distFromCenter / Math.max(centerCol, 1)) * sweepDur * 0.48;
+
+    board[row][c] = null;
+    tilesCleared[tile.type] = (tilesCleared[tile.type] || 0) + 1;
+    totalTilesCleared++;
+    particles(tile.mesh.position.clone(), 0x00bfff);
+
+    const captured = tile;
+    ps.push(new Promise(res => {
+      setTimeout(() => animSweepOut(captured.mesh, dir, 270).then(res), startDelay);
+    }));
+  }
+
+  await Promise.all(ps);
+}
+
+// ─── Col Booster: vertical splitting-arrow sweep ─────────────
+
+/** Builds an up- or down-pointing arrow Shape. */
+function buildVerticalArrowShape(direction) {
+  const shape = new THREE.Shape();
+  const h = CELL * 0.44, w = CELL * 0.28, tip = CELL * 0.34;
+  if (direction > 0) {         // up arrow
+    shape.moveTo(-w * 0.55, -h); shape.lineTo(-w * 0.55, 0);
+    shape.lineTo(-w,  0);        shape.lineTo(0,  tip);
+    shape.lineTo( w,  0);        shape.lineTo( w * 0.55, 0);
+    shape.lineTo( w * 0.55, -h); shape.closePath();
+  } else {                      // down arrow
+    shape.moveTo(-w * 0.55,  h); shape.lineTo(-w * 0.55, 0);
+    shape.lineTo(-w,  0);        shape.lineTo(0, -tip);
+    shape.lineTo( w,  0);        shape.lineTo( w * 0.55, 0);
+    shape.lineTo( w * 0.55,  h); shape.closePath();
+  }
+  return shape;
+}
+
+/** Creates a glowing vertical arrow group (fill + soft glow halo). */
+function createVerticalSplitArrow(direction) {
+  const fillGeo = new THREE.ShapeGeometry(buildVerticalArrowShape(direction));
+  const glowGeo = new THREE.ShapeGeometry(buildVerticalArrowShape(direction));
+  const matFill = new THREE.MeshBasicMaterial({ color: 0x00ced1, transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthWrite: false });
+  const matGlow = new THREE.MeshBasicMaterial({ color: 0x80ffee, transparent: true, opacity: 0.30, side: THREE.DoubleSide, depthWrite: false });
+  const fill = new THREE.Mesh(fillGeo, matFill);
+  const glow = new THREE.Mesh(glowGeo, matGlow);
+  glow.scale.setScalar(1.38);
+  glow.position.z = -0.05;
+  const group = new THREE.Group();
+  group.add(glow);
+  group.add(fill);
+  group._matFill = matFill;
+  group._matGlow = matGlow;
+  return group;
+}
+
+/** Slides a tile mesh off-screen along the Y axis (dirY: +1 up, -1 down), then removes it. */
+function animSweepOutY(mesh, dirY, dur = 270) {
+  return new Promise(res => {
+    const t0 = performance.now();
+    const startY = mesh.position.y;
+    const travel = dirY * CELL * (GRID + 2);
+    (function tick() {
+      const p = Math.min((performance.now() - t0) / dur, 1);
+      mesh.position.y = startY + travel * ease(p);
+      const fade = 1 - Math.pow(p, 0.7);
+      mesh.traverse(ch => { if (ch.isMesh && ch.material) { ch.material.transparent = true; ch.material.opacity = Math.max(0, fade); }});
+      p < 1 ? requestAnimationFrame(tick) : (scene.remove(mesh), res());
+    })();
+  });
+}
+
+/**
+ * Col booster visual: two arrow halves appear at column centre, split apart
+ * vertically and glide to opposite edges, fading as they exit. Tiles are
+ * swept outward in a staggered wave that follows each arrow half.
+ */
+async function animColBoosterFx(col) {
+  const colX       = gridToWorld(0, col).x;
+  const boardHalfH = ((GRID - 1) / 2) * CELL;
+  const edgeY      = boardHalfH + CELL * 1.8;
+  const sweepDur   = 420;
+  const centerRow  = (GRID - 1) / 2;
+
+  const downArrow = createVerticalSplitArrow(-1);
+  const upArrow   = createVerticalSplitArrow(1);
+  downArrow.position.set(colX, -CELL * 0.25, 1.2);
+  upArrow.position.set(  colX,  CELL * 0.25, 1.2);
+  scene.add(downArrow);
+  scene.add(upArrow);
+
+  const ps = [];
+
+  // Arrow flight + edge fade-out
+  ps.push(new Promise(res => {
+    const t0 = performance.now();
+    (function tick() {
+      const p = Math.min((performance.now() - t0) / sweepDur, 1);
+      downArrow.position.y = -CELL * 0.25 - p * edgeY;
+      upArrow.position.y   =  CELL * 0.25 + p * edgeY;
+      const fade = p > 0.62 ? 1 - (p - 0.62) / 0.38 : 1;
+      downArrow._matFill.opacity = 0.95 * fade;
+      downArrow._matGlow.opacity = 0.30 * fade;
+      upArrow._matFill.opacity   = 0.95 * fade;
+      upArrow._matGlow.opacity   = 0.30 * fade;
+      if (p < 1) {
+        requestAnimationFrame(tick);
+      } else {
+        scene.remove(downArrow); _disposeArrow(downArrow);
+        scene.remove(upArrow);   _disposeArrow(upArrow);
+        res();
+      }
+    })();
+  }));
+
+  // Staggered tile sweep — tiles nearest centre row launch first
+  // In Three.js: row 0 = top (+Y), row GRID-1 = bottom (-Y)
+  for (let r = 0; r < GRID; r++) {
+    const tile = board[r][col];
+    if (!tile || tile.isWall) continue;
+    if (tile.frozen) { removeFrozenOverlay(tile); tile.iceLayer = 0; continue; }
+
+    const dir = r <= centerRow ? 1 : -1; // upper half → up (+Y), lower half → down (-Y)
+    const distFromCenter = Math.abs(r - centerRow);
+    const startDelay = (distFromCenter / Math.max(centerRow, 1)) * sweepDur * 0.48;
+
+    board[r][col] = null;
+    tilesCleared[tile.type] = (tilesCleared[tile.type] || 0) + 1;
+    totalTilesCleared++;
+    particles(tile.mesh.position.clone(), 0x00ced1);
+
+    const captured = tile;
+    ps.push(new Promise(res => {
+      setTimeout(() => animSweepOutY(captured.mesh, dir, 270).then(res), startDelay);
+    }));
+  }
+
+  await Promise.all(ps);
+}
+
+// ─── Color Bomb: pre-shake candies → chained mini-explosions ───
+
+/** Wobble X/Y + rotation (does not touch Z so the idle float in `animate` still works). */
+function animShakeColorBombTile(mesh, dur = 400) {
+  return new Promise(res => {
+    const t0 = performance.now();
+    const ox = mesh.position.x, oy = mesh.position.y;
+    const orx = mesh.rotation.x, ory = mesh.rotation.y, orz = mesh.rotation.z;
+    (function tick() {
+      const p = Math.min((performance.now() - t0) / dur, 1);
+      const damp = 1 - p;
+      mesh.position.x = ox + Math.sin(p * Math.PI * 11) * 0.13 * damp;
+      mesh.position.y = oy + Math.cos(p * Math.PI * 9) * 0.11 * damp;
+      mesh.rotation.x = orx + Math.sin(p * Math.PI * 6) * 0.14 * damp;
+      mesh.rotation.y = ory + Math.cos(p * Math.PI * 5) * 0.11 * damp;
+      mesh.rotation.z = orz + Math.sin(p * Math.PI * 8) * 0.12 * damp;
+      p < 1 ? requestAnimationFrame(tick) : (mesh.position.x = ox, mesh.position.y = oy, mesh.rotation.set(orx, ory, orz), res());
+    })();
+  });
+}
+
+/** Single puff: sphere flies outward, scales up, fades. */
+function _spawnOneExplosionPuff(pos, colors, baseSpeed, duration) {
+  const geo = new THREE.SphereGeometry(0.03 + Math.random() * 0.055, 5, 5);
+  const col = colors[Math.floor(Math.random() * colors.length)];
+  const mat = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 1, depthWrite: false });
+  const m = new THREE.Mesh(geo, mat);
+  m.position.copy(pos);
+  m.position.z += 0.28 + Math.random() * 0.35;
+  scene.add(m);
+  const ang = Math.random() * Math.PI * 2;
+  const speed = baseSpeed * (0.65 + Math.random() * 0.9);
+  let vx = Math.cos(ang) * speed * 0.0175;
+  let vy = Math.sin(ang) * speed * 0.0175;
+  let vz = (Math.random() - 0.35) * speed * 0.010;
+  const t0 = performance.now();
+  const life = duration + Math.random() * 70;
+  (function tick() {
+    const pr = Math.min((performance.now() - t0) / life, 1);
+    m.position.x += vx * (1 - pr * 0.55);
+    m.position.y += vy * (1 - pr * 0.55);
+    m.position.z += vz;
+    vz *= 0.94;
+    m.scale.setScalar(0.45 + ease(pr) * 2.4);
+    mat.opacity = Math.max(0, 1 - Math.pow(pr, 0.62));
+    pr < 1 ? requestAnimationFrame(tick) : (scene.remove(m), geo.dispose(), mat.dispose());
+  })();
+}
+
+/**
+ * A cluster of small “sub-explosions”: radial puffs + expanding ring,
+ * with 2–3 timed micro-bursts for a candy-bomb feel.
+ */
+function spawnMiniExplosionCluster(pos, options = {}) {
+  const count = options.count ?? 10;
+  const colors = options.colors ?? [0xff66aa, 0xff4488, 0xffaa66, 0xffccff, 0xffffff];
+  const baseSpeed = options.baseSpeed ?? CELL * 0.45;
+  const duration = options.duration ?? 280;
+
+  const burst = (n, speedMul, tOffset) => {
+    for (let i = 0; i < n; i++) {
+      setTimeout(() => {
+        _spawnOneExplosionPuff(pos, colors, baseSpeed * speedMul, duration);
+      }, tOffset + i * 6);
+    }
+  };
+
+  burst(Math.max(4, Math.floor(count * 0.55)), 1.0, 0);
+  burst(Math.max(3, Math.floor(count * 0.35)), 0.75, 32);
+  burst(Math.max(2, Math.floor(count * 0.25)), 0.55, 68);
+
+  const ringGeo = new THREE.RingGeometry(0.06, 0.14, 20);
+  const ringColor = options.ringColor ?? 0xff99cc;
+  const ringMat = new THREE.MeshBasicMaterial({ color: ringColor, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false });
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.position.copy(pos);
+  ring.position.z = 0.85;
+  scene.add(ring);
+  const t0 = performance.now();
+  (function tickRing() {
+    const pr = Math.min((performance.now() - t0) / 220, 1);
+    ring.scale.setScalar(1 + pr * 5.5);
+    ringMat.opacity = 0.9 * (1 - pr);
+    pr < 1 ? requestAnimationFrame(tickRing) : (scene.remove(ring), ringGeo.dispose(), ringMat.dispose());
+  })();
+}
+
+/** Final shatter: quick pop + spin + fade, then remove mesh. */
+function animColorBombShatter(mesh, dur = 270) {
+  return new Promise(res => {
+    const t0 = performance.now(), os = mesh.scale.clone();
+    (function tick() {
+      const p = Math.min((performance.now() - t0) / dur, 1);
+      const pulse = p < 0.22 ? 1 + Math.sin((p / 0.22) * Math.PI) * 0.42 : 1;
+      const shrink = p < 0.22 ? pulse : pulse * (1 - (p - 0.22) / 0.78);
+      mesh.scale.set(os.x * shrink, os.y * shrink, os.z * shrink);
+      mesh.rotation.z += 0.16;
+      mesh.rotation.x += 0.05;
+      const fade = 1 - Math.pow(p, 0.48);
+      mesh.traverse(ch => { if (ch.isMesh && ch.material) { ch.material.transparent = true; ch.material.opacity = Math.max(0, fade); }});
+      p < 1 ? requestAnimationFrame(tick) : (scene.remove(mesh), res());
+    })();
+  });
+}
+
+// ─── Hammer: swing → impact → same mini-explosion + shatter ───
+
+const HAMMER_EXPLOSION_COLORS = [0xffb800, 0xff8800, 0xffdd44, 0xffffff, 0xffaa66];
+const HAMMER_ICE_EXPLOSION_COLORS = [0x88ccff, 0xaaeeff, 0xffffff, 0x66b8ff];
+
+const HAMMER_SWING_GLB = '/assets/boosters/hammer.glb';
+/**
+ * Lay the hammer in the board plane (horizontal strike): pitch about X, not yaw about Y.
+ * Model is usually upright in GLB; ±π/2 drops it flat on XY. Flip sign if head points wrong.
+ */
+const HAMMER_SWING_PITCH_X = Math.PI / 2;
+/** In-plane heading (right→left) — added to swing Z; keeps arc in horizontal plane. */
+const HAMMER_SWING_Z_BASE = Math.PI / 2;
+/** Show hammer in GLB default orientation first (no pitch / horizontal offset). */
+const HAMMER_SWING_INITIAL_FRAC = 0.11;
+/** Smoothly rotate into horizontal strike pose (pitch + in-plane base) before the swing arc. */
+const HAMMER_SWING_HORIZONTAL_BLEND_FRAC = 0.08;
+/**
+ * Pivot-local positions (strike is origin). Small |x|, large +y = above candy, slam is mostly −y (overhead).
+ */
+const HAMMER_SWING_POS_PRE = { x: 0.06, y: 0.92, z: 0.18 };
+const HAMMER_SWING_POS_WIND = { x: 0.04, y: 1.05, z: 0.18 };
+const HAMMER_SWING_POS_IMPACT = { x: 0, y: -0.06, z: 0.14 };
+
+/** Single reused mesh for every hammer swing (no new geometry per hit). */
+let _hammerSwingModel = null;
+let _hammerSwingFadeMats = [];
+let _hammerSwingLoadPromise = null;
+
+/** World point on the top-front of the cell — hammer head targets this (not cell centre). */
+function hammerStrikePoint(cellCenterWorld) {
+  return new THREE.Vector3(
+    cellCenterWorld.x,
+    cellCenterWorld.y + CELL * 0.46,
+    Math.max(cellCenterWorld.z, 0) + 0.88
+  );
+}
+
+/**
+ * Load & normalize the shop / booster-tray hammer GLB once; clone materials so fade-out is safe.
+ */
+async function ensureHammerSwingModel() {
+  if (_hammerSwingModel) return;
+  if (!_hammerSwingLoadPromise) {
+    _hammerSwingLoadPromise = (async () => {
+      try {
+        const loaded = await loadGLB(HAMMER_SWING_GLB);
+        const root = loaded.clone(true);
+        root.traverse(ch => {
+          if (ch.isMesh && ch.material) {
+            if (Array.isArray(ch.material)) {
+              ch.material = ch.material.map(m => {
+                const c = m.clone();
+                c.transparent = true;
+                c.depthWrite = false;
+                return c;
+              });
+            } else {
+              const c = ch.material.clone();
+              c.transparent = true;
+              c.depthWrite = false;
+              ch.material = c;
+            }
+          }
+        });
+        const box = new THREE.Box3().setFromObject(root);
+        const sz = new THREE.Vector3();
+        box.getSize(sz);
+        const maxD = Math.max(sz.x, sz.y, sz.z, 1e-6);
+        root.scale.multiplyScalar((CELL * 0.52) / maxD);
+        const nb = new THREE.Box3().setFromObject(root);
+        const c = new THREE.Vector3();
+        nb.getCenter(c);
+        root.position.sub(c);
+        _hammerSwingFadeMats = [];
+        root.traverse(ch => {
+          if (ch.isMesh && ch.material) {
+            const mats = Array.isArray(ch.material) ? ch.material : [ch.material];
+            for (const m of mats) _hammerSwingFadeMats.push(m);
+          }
+        });
+        _hammerSwingModel = root;
+        _hammerSwingModel.visible = false;
+      } catch (e) {
+        console.warn('hammer.glb swing reuse failed, procedural fallback:', e);
+        _hammerSwingModel = createHammerProceduralFallback();
+        _hammerSwingFadeMats = [];
+        _hammerSwingModel.traverse(ch => {
+          if (ch.isMesh && ch.material) _hammerSwingFadeMats.push(ch.material);
+        });
+        _hammerSwingModel.visible = false;
+      }
+    })();
+  }
+  await _hammerSwingLoadPromise;
+}
+
+function _resetHammerSwingOpacity() {
+  for (const m of _hammerSwingFadeMats) {
+    if (m) m.opacity = 1;
+  }
+}
+
+/** Detach reusable hammer from pivot; dispose only the empty pivot. */
+function _finishHammerSwing(pivot) {
+  const h = _hammerSwingModel;
+  if (h && h.parent === pivot) pivot.remove(h);
+  scene.remove(pivot);
+  if (h) h.visible = false;
+  _resetHammerSwingOpacity();
+}
+
+/**
+ * Fallback ~½-tile primitive hammer if GLB fails (matches swing rig orientation).
+ */
+function createHammerProceduralFallback() {
+  const g = new THREE.Group();
+  const handleMat = new THREE.MeshBasicMaterial({
+    color: 0x5a3928, transparent: true, opacity: 1, depthTest: true, depthWrite: false,
+  });
+  const headMat = new THREE.MeshBasicMaterial({
+    color: 0xd8e0ea, transparent: true, opacity: 1, depthTest: true, depthWrite: false,
+  });
+  const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.042, 0.62, 8), handleMat);
+  handle.position.y = -0.31;
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.085, 0.09), headMat);
+  head.position.set(0.04, 0.065, 0);
+  g.add(handle);
+  g.add(head);
+  g.scale.setScalar(0.98);
+  return g;
+}
+
+/**
+ * Pivot sits on strike point (top of candy). Hammer swings down from above so the head
+ * meets the tile top, not the cell below (centre Y would read as a “lower” hit in screen space).
+ */
+async function animHammerSwing(strikePoint, onImpact) {
+  await ensureHammerSwingModel();
+  const hammer = _hammerSwingModel;
+  const fadeMats = _hammerSwingFadeMats;
+
+  return new Promise(res => {
+    const pivot = new THREE.Group();
+    pivot.position.copy(strikePoint);
+    scene.add(pivot);
+
+    hammer.visible = true;
+    _resetHammerSwingOpacity();
+    hammer.rotation.order = 'YXZ';
+    pivot.add(hammer);
+
+    const totalMs = 520;
+    const t0 = performance.now();
+    let impacted = false;
+
+    const T_INIT = HAMMER_SWING_INITIAL_FRAC;
+    const T_BLEND_END = T_INIT + HAMMER_SWING_HORIZONTAL_BLEND_FRAC;
+
+    (function tick() {
+      const p = Math.min((performance.now() - t0) / totalMs, 1);
+
+      if (p < T_INIT) {
+        hammer.position.set(HAMMER_SWING_POS_PRE.x, HAMMER_SWING_POS_PRE.y, HAMMER_SWING_POS_PRE.z);
+        hammer.rotation.set(0, 0, -1.78);
+      } else if (p < T_BLEND_END) {
+        const b = ease((p - T_INIT) / (T_BLEND_END - T_INIT));
+        hammer.position.set(HAMMER_SWING_POS_PRE.x, HAMMER_SWING_POS_PRE.y, HAMMER_SWING_POS_PRE.z);
+        hammer.rotation.set(
+          b * HAMMER_SWING_PITCH_X,
+          0,
+          -1.78 + b * HAMMER_SWING_Z_BASE
+        );
+      } else {
+        const pRem = (p - T_BLEND_END) / (1 - T_BLEND_END);
+
+        if (pRem < 0.32) {
+          const q = pRem / 0.32;
+          const e = ease(q);
+          hammer.position.set(
+            HAMMER_SWING_POS_PRE.x + e * (HAMMER_SWING_POS_WIND.x - HAMMER_SWING_POS_PRE.x),
+            HAMMER_SWING_POS_PRE.y + e * (HAMMER_SWING_POS_WIND.y - HAMMER_SWING_POS_PRE.y),
+            HAMMER_SWING_POS_PRE.z + e * (HAMMER_SWING_POS_WIND.z - HAMMER_SWING_POS_PRE.z)
+          );
+          hammer.rotation.set(HAMMER_SWING_PITCH_X, 0, HAMMER_SWING_Z_BASE + (-1.78 - e * 0.16));
+        } else if (pRem < 0.50) {
+          const q = (pRem - 0.32) / 0.18;
+          const slam = q * q * q;
+          hammer.position.set(
+            HAMMER_SWING_POS_WIND.x + (HAMMER_SWING_POS_IMPACT.x - HAMMER_SWING_POS_WIND.x) * slam,
+            HAMMER_SWING_POS_WIND.y + (HAMMER_SWING_POS_IMPACT.y - HAMMER_SWING_POS_WIND.y) * slam,
+            HAMMER_SWING_POS_WIND.z + (HAMMER_SWING_POS_IMPACT.z - HAMMER_SWING_POS_WIND.z) * slam
+          );
+          hammer.rotation.set(HAMMER_SWING_PITCH_X, 0, HAMMER_SWING_Z_BASE + (-1.94 + slam * 0.95));
+          if (!impacted && q >= 0.75) {
+            impacted = true;
+            onImpact?.();
+          }
+        } else {
+          if (!impacted) {
+            impacted = true;
+            onImpact?.();
+          }
+          const q = (pRem - 0.50) / 0.50;
+          hammer.position.set(
+            HAMMER_SWING_POS_IMPACT.x,
+            HAMMER_SWING_POS_IMPACT.y + 0.02 * q,
+            HAMMER_SWING_POS_IMPACT.z
+          );
+          for (const m of fadeMats) m.opacity = Math.max(0, 1 - q * 1.18);
+        }
+      }
+
+      p < 1 ? requestAnimationFrame(tick) : (_finishHammerSwing(pivot), res());
+    })();
+  });
+}
+
+async function animHammerHitCandy(candyMesh, cellCenterWorld) {
+  const strike = hammerStrikePoint(cellCenterWorld);
+  let shatterP = null;
+  await animHammerSwing(strike, () => {
+    const os = candyMesh.scale.clone();
+    candyMesh.scale.set(os.x * 1.08, os.y * 0.32, os.z * 1.06);
+    const burstPos = cellCenterWorld.clone();
+    burstPos.z += 0.35;
+    spawnMiniExplosionCluster(burstPos, {
+      count: 15,
+      baseSpeed: CELL * 0.52,
+      colors: HAMMER_EXPLOSION_COLORS,
+      ringColor: 0xffaa55,
+    });
+    spawnMiniExplosionCluster(burstPos, {
+      count: 8,
+      baseSpeed: CELL * 0.34,
+      duration: 230,
+      colors: [0xffee88, 0xff6600, 0xffffff],
+      ringColor: 0xffcc77,
+    });
+    particles(burstPos.clone(), 0xffb800);
+    shatterP = animColorBombShatter(candyMesh, 275);
+  });
+  if (shatterP) await shatterP;
+}
+
+async function animHammerBreakIce(tile, cellCenterWorld) {
+  await animHammerSwing(hammerStrikePoint(cellCenterWorld), () => {
+    const burstPos = cellCenterWorld.clone();
+    burstPos.z += 0.35;
+    spawnMiniExplosionCluster(burstPos, {
+      count: 12,
+      baseSpeed: CELL * 0.4,
+      colors: HAMMER_ICE_EXPLOSION_COLORS,
+      ringColor: 0x99ddff,
+    });
+    particles(burstPos.clone(), 0xaaeeff);
+    removeFrozenOverlay(tile);
+    tile.iceLayer = 0;
+  });
+  await animShake(tile.mesh, 220);
+}
+
+async function animColorBombBoosterFx(originRow, originCol, targets) {
+  await Promise.all(targets.map(({ mesh }) => animShakeColorBombTile(mesh, 400)));
+  await delay(90);
+
+  const originWp = gridToWorld(originRow, originCol);
+  spawnMiniExplosionCluster(originWp, { count: 18, baseSpeed: CELL * 0.55, colors: [0xff66ee, 0xff8844, 0xffccff, 0xffffff] });
+  await delay(50);
+
+  const sorted = [...targets].sort((a, b) =>
+    (Math.abs(a.r - originRow) + Math.abs(a.c - originCol)) -
+    (Math.abs(b.r - originRow) + Math.abs(b.c - originCol))
+  );
+  const maxMan = Math.max(...sorted.map(t => Math.abs(t.r - originRow) + Math.abs(t.c - originCol)), 1);
+
+  const ps = sorted.map((t, idx) => {
+    const man = Math.abs(t.r - originRow) + Math.abs(t.c - originCol);
+    const wave = (man / maxMan) * 160 + idx * 14;
+    const wp = gridToWorld(t.r, t.c);
+    return delay(wave).then(() => {
+      spawnMiniExplosionCluster(wp, { count: 11, baseSpeed: CELL * 0.42 });
+      spawnMiniExplosionCluster(wp, { count: 7, baseSpeed: CELL * 0.3, duration: 220, colors: [0xffaa88, 0xff4488, 0xffffee] });
+      particles(wp.clone(), 0xff66aa);
+      return animColorBombShatter(t.mesh, 265);
+    });
+  });
+  await Promise.all(ps);
+}
+
+// ═══════════════════════════════════════════════════════════════
 //  GAME FLOW
 // ═══════════════════════════════════════════════════════════════
 async function swapTiles(r1, c1, r2, c2) {
@@ -992,18 +1690,7 @@ const delay = ms => new Promise(r => setTimeout(r, ms));
 async function useBoosterRow(row) {
   if (animating) return;
   animating = true;
-  const ps = [];
-  for (let c = 0; c < GRID; c++) {
-    const tile = board[row][c];
-    if (!tile || tile.isWall) continue;
-    if (tile.frozen) { removeFrozenOverlay(tile); tile.iceLayer = 0; continue; }
-    particles(tile.mesh.position.clone(), 0x00bfff);
-    ps.push(animDestroy(tile.mesh));
-    tilesCleared[tile.type] = (tilesCleared[tile.type] || 0) + 1;
-    totalTilesCleared++;
-    board[row][c] = null;
-  }
-  await Promise.all(ps);
+  await animRowBoosterFx(row);
   await delay(100);
   await dropTiles();
   await processMatches();
@@ -1014,18 +1701,7 @@ async function useBoosterRow(row) {
 async function useBoosterCol(col) {
   if (animating) return;
   animating = true;
-  const ps = [];
-  for (let r = 0; r < GRID; r++) {
-    const tile = board[r][col];
-    if (!tile || tile.isWall) continue;
-    if (tile.frozen) { removeFrozenOverlay(tile); tile.iceLayer = 0; continue; }
-    particles(tile.mesh.position.clone(), 0x00ced1);
-    ps.push(animDestroy(tile.mesh));
-    tilesCleared[tile.type] = (tilesCleared[tile.type] || 0) + 1;
-    totalTilesCleared++;
-    board[r][col] = null;
-  }
-  await Promise.all(ps);
+  await animColBoosterFx(col);
   await delay(100);
   await dropTiles();
   await processMatches();
@@ -1038,16 +1714,17 @@ async function useBoosterHammer(row, col) {
   const tile = board[row][col];
   if (!tile || tile.isWall) return;
   animating = true;
+  const wp = gridToWorld(row, col);
+
   if (tile.frozen) {
-    removeFrozenOverlay(tile);
-    tile.iceLayer = 0;
-    particles(tile.mesh.position.clone(), 0xaaeeff);
+    await animHammerBreakIce(tile, wp);
   } else {
-    particles(tile.mesh.position.clone(), 0xffb800);
-    await animDestroy(tile.mesh);
-    tilesCleared[tile.type] = (tilesCleared[tile.type] || 0) + 1;
+    const mesh = tile.mesh;
+    const ttype = tile.type;
+    tilesCleared[ttype] = (tilesCleared[ttype] || 0) + 1;
     totalTilesCleared++;
     board[row][col] = null;
+    await animHammerHitCandy(mesh, wp);
     await delay(100);
     await dropTiles();
     await processMatches();
@@ -1062,17 +1739,18 @@ async function useBoosterColorBomb(row, col) {
   if (!tile || tile.isWall || tile.frozen) return;
   animating = true;
   const targetType = tile.type;
-  const ps = [];
+
+  const targets = [];
   for (let r = 0; r < GRID; r++) for (let c = 0; c < GRID; c++) {
     const t = board[r][c];
     if (!t || t.isWall || t.frozen || t.type !== targetType) continue;
-    particles(t.mesh.position.clone(), 0xff66aa);
-    ps.push(animDestroy(t.mesh));
+    targets.push({ r, c, mesh: t.mesh });
     tilesCleared[t.type] = (tilesCleared[t.type] || 0) + 1;
     totalTilesCleared++;
     board[r][c] = null;
   }
-  await Promise.all(ps);
+
+  await animColorBombBoosterFx(row, col, targets);
   await delay(100);
   await dropTiles();
   await processMatches();
@@ -1080,30 +1758,123 @@ async function useBoosterColorBomb(row, col) {
   animating = false;
 }
 
+function animShuffleTileVanish(mesh, dur = 260) {
+  return new Promise(res => {
+    const t0 = performance.now();
+    const os = mesh.scale.clone();
+    const oz = mesh.position.z;
+    (function tick() {
+      const p = Math.min((performance.now() - t0) / dur, 1);
+      const e = ease(p);
+      const s = 1 - e;
+      mesh.scale.set(os.x * Math.max(0.02, s), os.y * Math.max(0.02, s), os.z * Math.max(0.02, s));
+      mesh.rotation.z += 0.1;
+      mesh.position.z = oz + e * 0.4;
+      mesh.traverse(ch => {
+        if (ch.isMesh && ch.material) {
+          ch.material.transparent = true;
+          ch.material.opacity = Math.max(0, s);
+        }
+      });
+      p < 1 ? requestAnimationFrame(tick) : (scene.remove(mesh), res());
+    })();
+  });
+}
+
+/**
+ * Shuffle icon flies from the booster slot to center, scales to ~30% of the viewport, spins, then `close` spins it out and fades.
+ */
+async function playShuffleBoosterOverlay() {
+  const btn = document.querySelector('.booster-slot[data-booster="shuffle"]:not(.booster-slot--locked)');
+  const img = btn?.querySelector('.booster-slot-icon img');
+
+  if (!btn || !img?.src) {
+    await delay(400);
+    return { close: async () => {} };
+  }
+
+  const br = btn.getBoundingClientRect();
+  const dx = br.left + br.width / 2 - window.innerWidth / 2;
+  const dy = br.top + br.height / 2 - window.innerHeight / 2;
+  const w0 = Math.max(br.width, 56);
+  const h0 = Math.max(br.height, 56);
+  const vpMin = Math.min(window.innerWidth, window.innerHeight);
+  const targetPx = vpMin * 0.3;
+  const endScale = Math.max(0.35, targetPx / Math.max(w0, h0));
+
+  const wrap = document.createElement('div');
+  wrap.setAttribute('aria-hidden', 'true');
+  wrap.style.cssText = 'position:fixed;inset:0;z-index:1600;display:flex;align-items:center;justify-content:center;pointer-events:none;';
+
+  const backdrop = document.createElement('div');
+  backdrop.style.cssText = 'position:absolute;inset:0;background:radial-gradient(ellipse at center,rgba(20,60,90,.45) 0%,rgba(6,16,24,.78) 100%);opacity:0;transition:opacity .3s ease';
+  wrap.appendChild(backdrop);
+
+  const ghost = document.createElement('img');
+  ghost.src = img.src;
+  ghost.alt = '';
+  ghost.draggable = false;
+  ghost.style.cssText = `width:${w0}px;height:${h0}px;object-fit:contain;filter:drop-shadow(0 14px 36px rgba(0,0,0,.55));transition:transform .58s cubic-bezier(.34,1.1,.42,1);will-change:transform;transform-origin:center center;`;
+  ghost.style.transform = `translate(${dx}px,${dy}px) scale(1) rotate(0deg)`;
+  wrap.appendChild(ghost);
+  document.body.appendChild(wrap);
+
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => {
+    backdrop.style.opacity = '1';
+    ghost.style.transform = `translate(0,0) scale(${endScale}) rotate(360deg)`;
+    r();
+  })));
+
+  await delay(320);
+
+  const close = async () => {
+    ghost.style.transition = 'transform .52s cubic-bezier(.45,0,.55,1), opacity .42s ease';
+    backdrop.style.transition = 'opacity .4s ease';
+    ghost.style.transform = `translate(0,0) scale(0) rotate(720deg)`;
+    ghost.style.opacity = '0';
+    backdrop.style.opacity = '0';
+    await delay(480);
+    wrap.remove();
+  };
+
+  return { close };
+}
+
 async function useBoosterShuffle() {
   if (animating) return;
   animating = true;
-  // Collect non-wall, non-frozen tile types
+
   const positions = [];
   for (let r = 0; r < GRID; r++) for (let c = 0; c < GRID; c++) {
     const t = board[r][c];
-    if (t && !t.isWall && !t.frozen) positions.push([r, c]);
+    if (t && !t.isWall && !t.frozen && !t.isFaller) positions.push([r, c]);
   }
-  // Remove all
-  for (const [r, c] of positions) {
-    scene.remove(board[r][c].mesh);
-    board[r][c] = null;
+  if (positions.length === 0) {
+    animating = false;
+    return;
   }
-  // Refill avoiding matches
+
+  const { close } = await playShuffleBoosterOverlay();
+
+  const vanishPs = positions.map(([r, c]) => animShuffleTileVanish(board[r][c].mesh));
+  await Promise.all(vanishPs);
+  for (const [r, c] of positions) board[r][c] = null;
+
+  const spawnPs = [];
   for (const [r, c] of positions) {
     let type;
     do { type = randomType(); } while (
       (c >= 2 && board[r][c-1]?.type === type && board[r][c-2]?.type === type) ||
       (r >= 2 && board[r-1]?.[c]?.type === type && board[r-2]?.[c]?.type === type)
     );
-    board[r][c] = createTile(type, r, c);
+    const tile = createTile(type, r, c);
+    board[r][c] = tile;
+    spawnPs.push(animSpawn(tile.mesh, gridToWorld(r, c), 450));
   }
-  await delay(300);
+  await Promise.all(spawnPs);
+
+  await close();
+  await delay(80);
   await resolveLevelStateAfterBoardSettled();
   animating = false;
 }
@@ -1126,6 +1897,12 @@ function updateBoosterUI() {
     const badge = btn.querySelector('.booster-slot-count');
     if (badge) badge.textContent = charges;
   });
+  applyBoosterCursor(activeBooster);
+  // Clear highlights when no directional booster is active
+  if (!activeBooster || (activeBooster !== 'row' && activeBooster !== 'col')) {
+    _highlightRowActive = false; _highlightColActive = false;
+    rowHighlightMat.opacity = 0;  colHighlightMat.opacity = 0;
+  }
 }
 
 async function renderGLBIcon(glbPath, size = 128) {
@@ -1329,6 +2106,46 @@ canvas.addEventListener('click', async e => {
   }
 });
 
+// Booster row/col hover highlight tracking
+canvas.addEventListener('mousemove', e => {
+  if (!activeBooster || (activeBooster !== 'row' && activeBooster !== 'col')) {
+    _highlightRowActive = false; _highlightColActive = false;
+    rowHighlightMat.opacity = 0;  colHighlightMat.opacity = 0;
+    return;
+  }
+  const rect = canvas.getBoundingClientRect();
+  const mx = ((e.clientX - rect.left) / rect.width)  * 2 - 1;
+  const my = -((e.clientY - rect.top)  / rect.height) * 2 + 1;
+  const worldX =  mx * (frustum / 2);
+  const worldY =  my * (frustum / 2);
+  const hovRow = Math.round((GRID - 1) / 2 - worldY / CELL);
+  const hovCol = Math.round(worldX / CELL + (GRID - 1) / 2);
+
+  if (activeBooster === 'row') {
+    _highlightColActive = false; colHighlightMat.opacity = 0;
+    if (hovRow >= 0 && hovRow < GRID) {
+      _highlightRowActive = true;
+      rowHighlightMesh.position.y = gridToWorld(hovRow, 0).y;
+    } else { _highlightRowActive = false; rowHighlightMat.opacity = 0; }
+  } else {
+    _highlightRowActive = false; rowHighlightMat.opacity = 0;
+    if (hovCol >= 0 && hovCol < GRID) {
+      _highlightColActive = true;
+      colHighlightMesh.position.x = gridToWorld(0, hovCol).x;
+    } else { _highlightColActive = false; colHighlightMat.opacity = 0; }
+  }
+});
+
+canvas.addEventListener('mouseleave', () => {
+  _highlightRowActive = false; _highlightColActive = false;
+  rowHighlightMat.opacity = 0;  colHighlightMat.opacity = 0;
+});
+
+// Right-click cancels active booster
+canvas.addEventListener('contextmenu', e => {
+  if (activeBooster) { e.preventDefault(); activeBooster = null; updateBoosterUI(); }
+});
+
 // ═══════════════════════════════════════════════════════════════
 //  HUD
 // ═══════════════════════════════════════════════════════════════
@@ -1364,6 +2181,8 @@ function animate() {
     selRing.scale.setScalar(1 + Math.sin(clk * 4) * 0.05);
     selRing.rotation.z = clk * 0.5;
   }
+  if (_highlightRowActive) rowHighlightMat.opacity = 0.16 + Math.sin(clk * 5) * 0.09;
+  if (_highlightColActive) colHighlightMat.opacity = 0.16 + Math.sin(clk * 5) * 0.09;
   renderer.render(scene, camera);
 }
 
@@ -1371,6 +2190,13 @@ function animate() {
 //  DEBUG — Popsicle: 2=X 3=Y 4=Z | Fish: 7=X 8=Y 9=Z
 // ═══════════════════════════════════════════════════════════════
 window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && activeBooster) {
+    activeBooster = null;
+    updateBoosterUI();
+    return;
+  }
+  // Shift+B → refill all boosters to 10 (dev/test shortcut)
+  if (e.key === 'B' && e.shiftKey) { fillBoosters(10); return; }
   const keyMap = {
     '2': { type: 'popsicle', axis: 'rx' },
     '3': { type: 'popsicle', axis: 'ry' },
@@ -1502,13 +2328,26 @@ function drawHUDPanel(cvs) {
   ctx.shadowBlur = 0;
 }
 
+// ─── Dev helper — fill booster charges ───────────────────────
+// Call window.__pengu.fillBoosters() from the browser console, or press
+// Shift+B in-game, to top up every booster to `qty` charges.
+function fillBoosters(qty = 10) {
+  const ALL = ['row', 'col', 'colorBomb', 'hammer', 'shuffle'];
+  for (const b of ALL) Inventory.addBooster(b, Math.max(0, qty - (boosterCharges[b] || 0)));
+  rehydrateBoosterCharges();
+  updateBoosterUI();
+  showMsg(`🧪 Boosters ×${qty}`, 900);
+}
+
 async function init() {
   console.log('🐧 PenguCrush loading...');
 
   await preloadAssets(() => {});
+  await ensureHammerSwingModel();
   await loadGridFrame();
   await loadHUDPanel('scoreCanvas', '/assets/hud/score-panel.glb');
   await loadHUDPanel('movesCanvas', '/assets/hud/moves-panel.glb');
+  await preCacheBoosterCursors();
 
   updateHUD();
   setupBoosterUI();
@@ -1516,7 +2355,11 @@ async function init() {
   setupShardHud();
   initBoard();
   animate();
-  console.log('🐧 PenguCrush ready!');
+
+  // Give a healthy test supply on first load
+  fillBoosters(10);
+
+  console.log('🐧 PenguCrush ready!  Tip: Shift+B in-game or window.__pengu.fillBoosters() to refill.');
 }
 
 let shardPulseId = null;
@@ -1549,3 +2392,7 @@ function awardShard(id) {
 init().catch((err) => {
   console.error(err);
 });
+
+// Expose dev helpers on the global pengu namespace (set up by entry.js)
+window.__pengu = window.__pengu || {};
+window.__pengu.fillBoosters = fillBoosters;
