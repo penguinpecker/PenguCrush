@@ -1602,7 +1602,7 @@ body[data-screen="game"] .nav-bar {
 
 .pop-shards .shard-slot {
   flex: 0 0 auto;
-  width: 58px;
+  width: 59px;
   aspect-ratio: 1;
   padding: 4px;
   display: flex;

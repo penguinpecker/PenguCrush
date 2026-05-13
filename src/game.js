@@ -1781,27 +1781,19 @@ function animShuffleTileVanish(mesh, dur = 260) {
   });
 }
 
-/**
- * Shuffle icon flies from the booster slot to center, scales to ~30% of the viewport, spins, then `close` spins it out and fades.
- */
-async function playShuffleBoosterOverlay() {
-  const btn = document.querySelector('.booster-slot[data-booster="shuffle"]:not(.booster-slot--locked)');
-  const img = btn?.querySelector('.booster-slot-icon img');
+let _shuffleBoosterGltfRoot = null;
 
-  if (!btn || !img?.src) {
-    await delay(400);
-    return { close: async () => {} };
+/** Cached root cloned per overlay so the shuffle animation uses vectors, not the raster HUD icon. */
+async function cloneShuffleBoosterForOverlay() {
+  if (!_shuffleBoosterGltfRoot) {
+    _shuffleBoosterGltfRoot = await loadGLB('/assets/boosters/shuffle.glb');
   }
+  return _shuffleBoosterGltfRoot.clone(true);
+}
 
-  const br = btn.getBoundingClientRect();
-  const dx = br.left + br.width / 2 - window.innerWidth / 2;
-  const dy = br.top + br.height / 2 - window.innerHeight / 2;
-  const w0 = Math.max(br.width, 56);
-  const h0 = Math.max(br.height, 56);
-  const vpMin = Math.min(window.innerWidth, window.innerHeight);
-  const targetPx = vpMin * 0.3;
-  const endScale = Math.max(0.35, targetPx / Math.max(w0, h0));
-
+/** PNG fallback if GLB fails (same motion as pre-3D overlay). */
+async function playShuffleBoosterOverlayWithPng(btn, dx, dy, w0, h0, endScale) {
+  const imgEl = btn.querySelector('.booster-slot-icon img');
   const wrap = document.createElement('div');
   wrap.setAttribute('aria-hidden', 'true');
   wrap.style.cssText = 'position:fixed;inset:0;z-index:1600;display:flex;align-items:center;justify-content:center;pointer-events:none;';
@@ -1811,7 +1803,7 @@ async function playShuffleBoosterOverlay() {
   wrap.appendChild(backdrop);
 
   const ghost = document.createElement('img');
-  ghost.src = img.src;
+  ghost.src = imgEl?.src || '/assets/boosters-2d/shuffle.png';
   ghost.alt = '';
   ghost.draggable = false;
   ghost.style.cssText = `width:${w0}px;height:${h0}px;object-fit:contain;filter:drop-shadow(0 14px 36px rgba(0,0,0,.55));transition:transform .58s cubic-bezier(.34,1.1,.42,1);will-change:transform;transform-origin:center center;`;
@@ -1838,6 +1830,132 @@ async function playShuffleBoosterOverlay() {
   };
 
   return { close };
+}
+
+/**
+ * Shuffle booster flies from the slot to center, scales up, spins. Uses live GLB render (sharp at any scale); PNG if load fails.
+ */
+async function playShuffleBoosterOverlay() {
+  const btn = document.querySelector('.booster-slot[data-booster="shuffle"]:not(.booster-slot--locked)');
+  if (!btn) {
+    await delay(400);
+    return { close: async () => {} };
+  }
+
+  const br = btn.getBoundingClientRect();
+  const dx = br.left + br.width / 2 - window.innerWidth / 2;
+  const dy = br.top + br.height / 2 - window.innerHeight / 2;
+  const w0 = Math.max(br.width, 56);
+  const h0 = Math.max(br.height, 56);
+  const side = Math.max(w0, h0);
+  const vpMin = Math.min(window.innerWidth, window.innerHeight);
+  const targetPx = vpMin * 0.3;
+  const endScale = Math.max(0.35, targetPx / side);
+
+  try {
+    const model = await cloneShuffleBoosterForOverlay();
+    const pr = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    pr.setClearColor(0x000000, 0);
+    pr.toneMapping = THREE.ACESFilmicToneMapping;
+    pr.toneMappingExposure = 1.6;
+
+    const pixelRatio = Math.min(2.5, window.devicePixelRatio || 1);
+    const bufSize = Math.max(320, Math.ceil(side * endScale * pixelRatio * 1.35));
+    const canvasEl = pr.domElement;
+    canvasEl.width = bufSize;
+    canvasEl.height = bufSize;
+    pr.setSize(bufSize, bufSize, false);
+
+    const scene = new THREE.Scene();
+    scene.add(new THREE.AmbientLight(0xffffff, 1.8));
+    const dl = new THREE.DirectionalLight(0xffffff, 1.4);
+    dl.position.set(2, 3, 8);
+    scene.add(dl);
+
+    const rots = [[0, 0, 0], [-Math.PI / 2, 0, 0], [0, -Math.PI / 2, 0]];
+    let best = rots[0], bestArea = 0;
+    for (const r of rots) {
+      model.rotation.set(r[0], r[1], r[2]);
+      const b = new THREE.Box3().setFromObject(model);
+      const s = new THREE.Vector3(); b.getSize(s);
+      if (s.x * s.y > bestArea) { bestArea = s.x * s.y; best = r; }
+    }
+    model.rotation.set(best[0], best[1], best[2]);
+
+    const box = new THREE.Box3().setFromObject(model);
+    const sz = new THREE.Vector3(); box.getSize(sz);
+    model.scale.multiplyScalar(3.5 / Math.max(sz.x, sz.y, sz.z));
+    const nb = new THREE.Box3().setFromObject(model);
+    const ct = new THREE.Vector3(); nb.getCenter(ct);
+    model.position.sub(ct);
+    scene.add(model);
+
+    const finalBox = new THREE.Box3().setFromObject(model);
+    const finalSz = new THREE.Vector3(); finalBox.getSize(finalSz);
+    const pad = 1.15;
+    const halfW = finalSz.x * pad / 2;
+    const halfH = finalSz.y * pad / 2;
+    const camH = Math.max(halfH, halfW);
+    const cam = new THREE.OrthographicCamera(-camH, camH, camH, -camH, 0.1, 100);
+    cam.position.set(0, 0, 15);
+    cam.lookAt(0, 0, 0);
+
+    const wrap = document.createElement('div');
+    wrap.setAttribute('aria-hidden', 'true');
+    wrap.style.cssText = 'position:fixed;inset:0;z-index:1600;display:flex;align-items:center;justify-content:center;pointer-events:none;';
+
+    const backdrop = document.createElement('div');
+    backdrop.style.cssText = 'position:absolute;inset:0;background:radial-gradient(ellipse at center,rgba(20,60,90,.45) 0%,rgba(6,16,24,.78) 100%);opacity:0;transition:opacity .3s ease';
+    wrap.appendChild(backdrop);
+
+    const host = document.createElement('div');
+    host.style.cssText = `width:${side}px;height:${side}px;flex-shrink:0;filter:drop-shadow(0 14px 36px rgba(0,0,0,.55));transition:transform .58s cubic-bezier(.34,1.1,.42,1);will-change:transform;transform-origin:center center;`;
+    host.style.transform = `translate(${dx}px,${dy}px) scale(1) rotate(0deg)`;
+    canvasEl.style.cssText = 'width:100%;height:100%;display:block';
+    host.appendChild(canvasEl);
+    wrap.appendChild(host);
+    document.body.appendChild(wrap);
+
+    let disposed = false;
+    let rafId = 0;
+    let prevT = performance.now();
+    function tick(now) {
+      if (disposed) return;
+      const dt = (now - prevT) / 1000;
+      prevT = now;
+      /* Screen-plane roll (not yaw): camera looks down −Z, so Z is the view axis. */
+      model.rotateZ(-dt * 3.8);
+      pr.render(scene, cam);
+      rafId = requestAnimationFrame(tick);
+    }
+    rafId = requestAnimationFrame(tick);
+
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => {
+      backdrop.style.opacity = '1';
+      host.style.transform = `translate(0,0) scale(${endScale}) rotate(360deg)`;
+      r();
+    })));
+
+    await delay(320);
+
+    const close = async () => {
+      disposed = true;
+      cancelAnimationFrame(rafId);
+      host.style.transition = 'transform .52s cubic-bezier(.45,0,.55,1), opacity .42s ease';
+      backdrop.style.transition = 'opacity .4s ease';
+      host.style.transform = `translate(0,0) scale(0) rotate(720deg)`;
+      host.style.opacity = '0';
+      backdrop.style.opacity = '0';
+      await delay(480);
+      pr.dispose();
+      wrap.remove();
+    };
+
+    return { close };
+  } catch (e) {
+    console.warn('Shuffle 3D overlay failed, using PNG:', e);
+    return playShuffleBoosterOverlayWithPng(btn, dx, dy, w0, h0, endScale);
+  }
 }
 
 async function useBoosterShuffle() {
