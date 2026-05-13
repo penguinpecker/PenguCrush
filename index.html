@@ -81,9 +81,26 @@
       <div class="map-scene">
         <img src="/assets/map/map-bg.png" class="map-img" draggable="false" />
         <div class="map-nodes" id="mapNodes"></div>
-        <button type="button" class="daily-wheel-btn" id="dailyWheelOpen" aria-label="Open daily spin">
-          <img src="/assets/ui/daily-wheel.png" alt="" class="daily-wheel-btn__img" draggable="false" />
-        </button>
+        <div class="map-wheel-cluster">
+          <button type="button" class="inventory-map-btn" id="inventoryMapOpen" aria-label="Open inventory">
+            <img src="/assets/ui/Inventory-icon.png" alt="" class="inventory-map-btn__img" draggable="false" />
+          </button>
+          <button type="button" class="daily-wheel-btn" id="dailyWheelOpen" aria-label="Open daily spin">
+            <img src="/assets/ui/daily-wheel.png" alt="" class="daily-wheel-btn__img" draggable="false" />
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="inventory-overlay" id="inventoryOverlay" aria-hidden="true">
+      <div class="inventory-overlay__backdrop"></div>
+      <div class="inventory-popup" role="dialog" aria-modal="true" aria-labelledby="inventoryDialogTitle">
+        <h2 class="visually-hidden" id="inventoryDialogTitle">Inventory</h2>
+        <img src="/assets/ui/inventory-frame.png" class="inventory-popup__frame" draggable="false" alt="" />
+        <button type="button" class="inventory-popup__close" id="inventoryClose" aria-label="Close inventory"></button>
+        <div class="inventory-popup__inner">
+          <div class="inventory-popup__grid" id="inventoryGrid"></div>
+        </div>
       </div>
     </div>
 

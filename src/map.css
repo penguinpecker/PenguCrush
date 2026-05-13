@@ -15,7 +15,7 @@
 }
 .map-stage.panning { cursor: grabbing; }
 .map-stage.panning .level-node,
-.map-stage.panning .daily-wheel-btn { pointer-events: none; }
+.map-stage.panning .map-wheel-cluster { pointer-events: none; }
 
 .map-scene {
   position: absolute;
@@ -416,14 +416,199 @@
 .confirm-btn:active { transform: translateY(1px); filter: brightness(0.96); }
 
 /* ═══════════════════════════════════════════════
-   DAILY WHEEL — mini button on map (middle-right)
+   MAP — daily wheel + inventory (stacked, middle-right)
    ═══════════════════════════════════════════════ */
-.daily-wheel-btn {
+.map-wheel-cluster {
   position: absolute;
   right: 1%;
   top: 53%;
   transform: translateY(-50%);
   z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(6px, 3.4vw, 30px);
+  pointer-events: auto;
+}
+
+.inventory-map-btn {
+  width: min(19vw, 102px);
+  height: min(19vw, 102px);
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 50%;
+  filter: drop-shadow(0 5px 14px rgba(0, 30, 60, 0.42));
+  transition: transform 0.2s ease, filter 0.2s ease;
+}
+
+.inventory-map-btn:hover {
+  transform: scale(1.07);
+  filter: drop-shadow(0 7px 20px rgba(80, 180, 255, 0.5));
+}
+
+.inventory-map-btn:active {
+  transform: scale(0.94);
+}
+
+.inventory-map-btn__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+/* ═══════════════════════════════════════════════
+   INVENTORY POPUP (map)
+   ═══════════════════════════════════════════════ */
+.inventory-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 410;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+.inventory-overlay.active {
+  display: flex;
+}
+
+.inventory-overlay__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(4, 14, 28, 0.82);
+  backdrop-filter: blur(8px);
+}
+
+.inventory-popup {
+  position: relative;
+  z-index: 1;
+  /* Same footprint as .shop-popup (inventory-frame.png is also 2754×1536) */
+  width: min(980px, 94vw);
+  aspect-ratio: 2754 / 1536;
+  container-type: inline-size;
+  container-name: inventory-popup;
+  animation: inventory-pop-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes inventory-pop-in {
+  0% { transform: scale(0.6); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.inventory-popup__frame {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+  user-select: none;
+}
+
+.inventory-popup__close {
+  position: absolute;
+  top: 10%;
+  right: 4%;
+  z-index: 3;
+  width: 8%;
+  height: 14%;
+  min-width: 44px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  background: transparent;
+  transition: transform 0.15s ease;
+}
+
+.inventory-popup__close:hover,
+.inventory-popup__close:focus-visible {
+  transform: scale(1.08);
+}
+
+.inventory-popup__close:active {
+  transform: scale(0.94);
+}
+
+.inventory-popup__inner {
+  position: absolute;
+  left: 14%;
+  right: 14%;
+  top: 32%;
+  bottom: 12%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.inventory-popup__grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: clamp(6px, 3.2cqw, 20px);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.inventory-slot {
+  position: relative;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 25% 6% 18%;
+  background: url('/assets/ui/inventory-box.png') center / 100% 100% no-repeat;
+  filter: drop-shadow(0 2px 6px rgba(0, 40, 80, 0.2));
+}
+
+.inventory-slot__icon {
+  width: 70%;
+  max-width: min(120px, 18cqw);
+  height: auto;
+  max-height: 70%;
+  object-fit: contain;
+  pointer-events: none;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.25));
+}
+
+.inventory-slot__qty {
+  margin-top: 10%;
+  font-family: 'Fredoka', sans-serif;
+  font-weight: 800;
+  font-size: clamp(11px, 7cqw, 22px);
+  color: #0a3a5a;
+  text-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.7),
+    0 1px 4px rgba(0, 60, 100, 0.25);
+  line-height: 1;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ═══════════════════════════════════════════════
+   DAILY WHEEL — mini button on map (middle-right)
+   ═══════════════════════════════════════════════ */
+.daily-wheel-btn {
+  position: relative;
   width: min(22vw, 120px);
   height: min(22vw, 120px);
   padding: 0;
@@ -436,12 +621,12 @@
 }
 
 .daily-wheel-btn:hover {
-  transform: translateY(-50%) scale(1.06);
+  transform: scale(1.06);
   filter: drop-shadow(0 8px 22px rgba(80, 180, 255, 0.55));
 }
 
 .daily-wheel-btn:active {
-  transform: translateY(-50%) scale(0.96);
+  transform: scale(0.96);
 }
 
 .daily-wheel-btn__img {
@@ -649,12 +834,21 @@
   .daily-wheel-btn {
     transition: none;
   }
+
+  .inventory-map-btn {
+    transition: none;
+  }
+
+  .inventory-popup {
+    animation: none;
+  }
 }
 
 @media (max-width: 700px), (max-height: 720px) {
   .popup-overlay,
   .confirm-overlay,
-  .daily-wheel-overlay {
+  .daily-wheel-overlay,
+  .inventory-overlay {
     padding:
       max(10px, env(safe-area-inset-top))
       max(10px, env(safe-area-inset-right))
@@ -704,10 +898,18 @@
     font-size: 11px;
   }
 
+  .map-wheel-cluster {
+    right: 2%;
+  }
+
+  .inventory-map-btn {
+    width: clamp(52px, 16vw, 88px);
+    height: clamp(52px, 16vw, 88px);
+  }
+
   .daily-wheel-btn {
     width: clamp(64px, 20vw, 92px);
     height: clamp(64px, 20vw, 92px);
-    right: 2%;
   }
 
   .daily-wheel-full__stage {

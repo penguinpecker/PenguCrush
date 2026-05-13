@@ -1,7 +1,17 @@
 import { getLevel, getLevelCount } from './levels.js';
 import { getWallet, fetchPlayerProgress, buildMapProgress, connectAGW, disconnectAGW, shortAddress, hasInjectedWallet, signInWithAGW, isSignedIn } from './supabase.js';
 import * as Inventory from './inventory.js';
-import { renderShardSlots } from './shards.js';
+import { renderShardSlots, SHARDS } from './shards.js';
+
+/** Map inventory grid: 5 boosters + 3 shards = 4×2 */
+const INVENTORY_MAP_SLOTS = [
+  { kind: 'booster', id: 'row',       label: 'Row clear',    icon: '/assets/boosters-2d/row-clear.png' },
+  { kind: 'booster', id: 'col',       label: 'Column clear', icon: '/assets/boosters-2d/col-clear.png' },
+  { kind: 'booster', id: 'colorBomb', label: 'Color bomb',   icon: '/assets/boosters-2d/color-bomb.png' },
+  { kind: 'booster', id: 'hammer',    label: 'Hammer',       icon: '/assets/boosters-2d/hammer.png' },
+  { kind: 'booster', id: 'shuffle',   label: 'Shuffle',      icon: '/assets/boosters-2d/shuffle.png' },
+  ...SHARDS.map(s => ({ kind: 'shard', id: s.id, label: s.name, icon: s.img })),
+];
 
 const IMG_W = 2748, IMG_H = 1536;
 const IMG_RATIO = IMG_W / IMG_H;
@@ -327,7 +337,6 @@ export function initMap() {
   document.getElementById('popupPlay').addEventListener('click', () => {
     if (currentPopupLevel) window.__pengu.goToLevel(currentPopupLevel.id);
   });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') closePopup(); });
 
   // Daily wheel (map screen)
   const dailyOverlay = document.getElementById('dailyWheelOverlay');
@@ -486,10 +495,68 @@ export function initMap() {
   dailyOverlay?.querySelector('.daily-wheel-overlay__backdrop')?.addEventListener('click', () => closeDailyWheel());
   dailySpinBtn?.addEventListener('click', () => spinDailyWheel());
 
-  document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && dailyOverlay?.classList.contains('active')) {
-      closeDailyWheel();
+  // Inventory popup (map screen)
+  const inventoryOverlay = document.getElementById('inventoryOverlay');
+  const inventoryOpen = document.getElementById('inventoryMapOpen');
+  const inventoryClose = document.getElementById('inventoryClose');
+  const inventoryGrid = document.getElementById('inventoryGrid');
+
+  function renderInventoryGrid() {
+    if (!inventoryGrid) return;
+    const boosters = Inventory.getAllBoosters();
+    const shards = Inventory.getShards();
+    inventoryGrid.innerHTML = '';
+    for (const def of INVENTORY_MAP_SLOTS) {
+      const cell = document.createElement('div');
+      cell.className = 'inventory-slot';
+      cell.title = def.label;
+      const icon = document.createElement('img');
+      icon.className = 'inventory-slot__icon';
+      icon.src = def.icon;
+      icon.alt = def.label;
+      icon.draggable = false;
+      const qty = document.createElement('span');
+      qty.className = 'inventory-slot__qty';
+      const n = def.kind === 'booster' ? (boosters[def.id] ?? 0) : (shards[def.id] ?? 0);
+      qty.textContent = `×${n}`;
+      cell.appendChild(icon);
+      cell.appendChild(qty);
+      inventoryGrid.appendChild(cell);
     }
+  }
+
+  function openInventory() {
+    renderInventoryGrid();
+    inventoryOverlay?.classList.add('active');
+    inventoryOverlay?.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeInventory() {
+    inventoryOverlay?.classList.remove('active');
+    inventoryOverlay?.setAttribute('aria-hidden', 'true');
+  }
+
+  inventoryOpen?.addEventListener('click', e => {
+    e.stopPropagation();
+    openInventory();
+  });
+  inventoryClose?.addEventListener('click', () => closeInventory());
+  inventoryOverlay?.querySelector('.inventory-overlay__backdrop')?.addEventListener('click', () => closeInventory());
+  Inventory.onInventoryChange(() => {
+    if (inventoryOverlay?.classList.contains('active')) renderInventoryGrid();
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (inventoryOverlay?.classList.contains('active')) {
+      closeInventory();
+      return;
+    }
+    if (dailyOverlay?.classList.contains('active')) {
+      closeDailyWheel();
+      return;
+    }
+    if (overlay.classList.contains('active')) closePopup();
   });
 
   // Load progress and render
