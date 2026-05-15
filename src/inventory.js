@@ -29,8 +29,8 @@ function emptyState() {
     shards: { ...DEFAULT_SHARDS },
     lastDailySpin: null,  // ISO date string 'YYYY-MM-DD' (UTC)
     dailySpinHistory: [], // [{ date, reward, at }]
-    lastCrushPass: null,  // ISO week key, e.g. "2026-W20" (UTC-based ISO week)
-    crushPassHistory: [], // [{ week, kind, id, at }]
+    lastCrushPass: null, // ISO week key, e.g. "2026-W20" (UTC-based ISO week)
+    crushPassHistory: [], // [{ week, at, boostersEach, shardBonus? }]
   };
 }
 
@@ -199,7 +199,7 @@ export function applyDailyReward(rewardText) {
  * Dev: set `true` to ignore the weekly cooldown (claim as many times as you like).
  * Or at runtime: `__pengu.setCrushPassRewardDebug(true)` — see entry.js.
  */
-export const DEBUG_CRUSH_PASS_REWARD = true;
+export const DEBUG_CRUSH_PASS_REWARD = false; // true;
 
 function crushPassRewardDebugEnabled() {
   if (DEBUG_CRUSH_PASS_REWARD) return true;
@@ -270,26 +270,29 @@ const CRUSH_PASS_SHARD_LABELS = {
   plooshie: 'Plooshie shard',
 };
 
-/** Weighted table: row 20%, col 20%, colorBomb 15%, hammer 15%, shuffle 10%, necklace 12%, crown 6%, plooshie 2%. */
-const CRUSH_PASS_TABLE = [
-  { kind: 'booster', id: 'row', w: 20 },
-  { kind: 'booster', id: 'col', w: 20 },
-  { kind: 'booster', id: 'colorBomb', w: 15 },
-  { kind: 'booster', id: 'hammer', w: 15 },
-  { kind: 'booster', id: 'shuffle', w: 10 },
-  { kind: 'shard', id: 'necklace', w: 12 },
-  { kind: 'shard', id: 'crown', w: 6 },
-  { kind: 'shard', id: 'plooshie', w: 2 },
+/** Guaranteed boosters per type each week. */
+const CRUSH_PASS_BOOSTERS_EACH = 3;
+
+const CRUSH_PASS_BOOSTER_IDS = ['row', 'col', 'colorBomb', 'hammer', 'shuffle'];
+
+/** ~15% chance to also win one random shard (lucky bonus). */
+const CRUSH_PASS_SHARD_BONUS_CHANCE = 0.15;
+
+/** If the shard bonus hits, which shard (necklace most common, plooshie rarest). */
+const CRUSH_PASS_SHARD_BONUS_WEIGHTS = [
+  { id: 'necklace', w: 55 },
+  { id: 'crown', w: 30 },
+  { id: 'plooshie', w: 15 },
 ];
 
-function rollCrushPassReward() {
-  const total = CRUSH_PASS_TABLE.reduce((a, e) => a + e.w, 0);
+function rollCrushPassShardBonusId() {
+  const total = CRUSH_PASS_SHARD_BONUS_WEIGHTS.reduce((a, e) => a + e.w, 0);
   let r = Math.random() * total;
-  for (const e of CRUSH_PASS_TABLE) {
+  for (const e of CRUSH_PASS_SHARD_BONUS_WEIGHTS) {
     r -= e.w;
-    if (r <= 0) return e;
+    if (r <= 0) return e.id;
   }
-  return CRUSH_PASS_TABLE[0];
+  return CRUSH_PASS_SHARD_BONUS_WEIGHTS[0].id;
 }
 
 export function canClaimCrushPass() {
@@ -305,38 +308,65 @@ export function nextCrushPassAvailableIn() {
 }
 
 /**
- * Claim this week's Crush Pass reward. Returns { kind, id, icon, label } or null if already claimed.
+ * Claim this week's Crush Pass: 3 of each booster, plus a random shard ~15% of the time.
+ * Returns { kind, id, label, boosters, shardBonus? } for the celebration UI.
  */
 export function claimCrushPass() {
   if (!canClaimCrushPass()) return null;
   const week = crushPassWeekKeyUTC();
-  const pick = rollCrushPassReward();
-  const kind = pick.kind;
-  const id = pick.id;
+  const s = getInventory();
 
-  if (kind === 'booster') {
-    addBooster(id, 1);
-  } else {
-    addShard(id, 1);
+  for (const id of CRUSH_PASS_BOOSTER_IDS) {
+    s.boosters[id] = (s.boosters[id] || 0) + CRUSH_PASS_BOOSTERS_EACH;
+    logBoosterPurchaseOnchain(id, CRUSH_PASS_BOOSTERS_EACH);
   }
 
-  const s = getInventory();
+  let shardBonus = null;
+  if (Math.random() < CRUSH_PASS_SHARD_BONUS_CHANCE) {
+    const sid = rollCrushPassShardBonusId();
+    s.shards[sid] = (s.shards[sid] || 0) + 1;
+    shardBonus = {
+      kind: 'shard',
+      id: sid,
+      icon: CRUSH_PASS_SHARD_ICONS[sid],
+      label: CRUSH_PASS_SHARD_LABELS[sid] || sid,
+    };
+  }
+
   s.lastCrushPass = week;
-  s.crushPassHistory.push({ week, kind, id, at: new Date().toISOString() });
+  s.crushPassHistory.push({
+    week,
+    at: new Date().toISOString(),
+    boostersEach: CRUSH_PASS_BOOSTERS_EACH,
+    shardBonus: shardBonus ? { kind: 'shard', id: shardBonus.id } : null,
+  });
   if (s.crushPassHistory.length > 52) s.crushPassHistory = s.crushPassHistory.slice(-52);
   saveInventory(s);
   dispatchInventoryChange();
 
-  const icon =
-    kind === 'booster'
-      ? CRUSH_PASS_BOOSTER_ICONS[id]
-      : CRUSH_PASS_SHARD_ICONS[id];
-  const label =
-    kind === 'booster'
-      ? CRUSH_PASS_BOOSTER_LABELS[id] || id
-      : CRUSH_PASS_SHARD_LABELS[id] || id;
+  const boosters = CRUSH_PASS_BOOSTER_IDS.map(id => ({
+    id,
+    count: CRUSH_PASS_BOOSTERS_EACH,
+    icon: CRUSH_PASS_BOOSTER_ICONS[id],
+    label: CRUSH_PASS_BOOSTER_LABELS[id] || id,
+  }));
 
-  return { kind, id, icon, label };
+  const bundleLabel = `${CRUSH_PASS_BOOSTERS_EACH} of each booster`;
+  if (shardBonus) {
+    return {
+      kind: 'weekly_pass',
+      id: 'bundle_plus_shard',
+      label: `Lucky! ${shardBonus.label} — ${bundleLabel}`,
+      boosters,
+      shardBonus,
+    };
+  }
+  return {
+    kind: 'weekly_pass',
+    id: 'bundle',
+    label: bundleLabel,
+    boosters,
+  };
 }
 
 // ── Cloud sync (best-effort) ──────────────────────────────────

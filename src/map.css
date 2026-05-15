@@ -365,6 +365,7 @@
 .crush-pass-hint {
   display: none;
   justify-content: center;
+  align-items: center;
   width: 100%;
   margin: 0;
   padding: 0 0 2px;
@@ -376,20 +377,37 @@
   display: flex;
 }
 
+.crush-pass-hint__cluster {
+  display: flex;
+  align-items: center;
+  gap: clamp(8px, 2vmin, 16px);
+  animation: crush-pass-arrow-bob 0.9s ease-in-out infinite;
+}
+
+.crush-pass-hint__price {
+  font-family: 'Fredoka', sans-serif;
+  font-size: clamp(17px, 4.2vmin, 24px);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #fffbe8;
+  text-shadow:
+    0 0 12px rgba(255, 220, 120, 0.55),
+    0 2px 8px rgba(0, 30, 70, 0.65);
+  white-space: nowrap;
+}
+
 .crush-pass-hint__arrow {
   width: clamp(40px, 11vmin, 72px);
   height: auto;
   object-fit: contain;
   filter: drop-shadow(0 4px 12px rgba(0, 40, 80, 0.45));
   transform-origin: center center;
-  /* translateY before rotate → bob moves on screen vertically (not along the arrow’s local axis) */
-  transform: translateY(0) rotate(90deg);
-  animation: crush-pass-arrow-bob 0.9s ease-in-out infinite;
+  transform: rotate(90deg);
 }
 
 @keyframes crush-pass-arrow-bob {
-  0%, 100% { transform: translateY(0) rotate(90deg); }
-  50% { transform: translateY(-12px) rotate(90deg); }
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
 }
 
 .crush-pass-ticket {
@@ -551,21 +569,60 @@
   to { transform: rotate(-360deg) translateZ(0); }
 }
 
-.crush-pass-burst__icon {
+.crush-pass-burst__pile {
   position: absolute;
   left: 50%;
   top: 50%;
   z-index: 2;
-  width: min(36vmin, 160px);
-  height: min(36vmin, 160px);
   margin: 0;
-  object-fit: contain;
-  filter: drop-shadow(0 0 18px rgba(255, 230, 140, 0.45)) drop-shadow(0 0 10px rgba(100, 200, 255, 0.38));
+  padding: 0;
   transform: translate3d(-50%, -50%, 0) scale(0);
   backface-visibility: hidden;
+  filter: drop-shadow(0 0 18px rgba(255, 230, 140, 0.45)) drop-shadow(0 0 10px rgba(100, 200, 255, 0.38));
 }
 
-.crush-pass-burst--active .crush-pass-burst__icon:not(.crush-pass-burst__icon--fly) {
+.crush-pass-burst__boosters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: center;
+  gap: clamp(6px, 2vmin, 14px);
+  max-width: min(92vw, 440px);
+  margin: 0;
+  padding: 0;
+}
+
+.crush-pass-booster-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+}
+
+.crush-pass-booster-pill__icon {
+  display: block;
+  width: clamp(40px, 11vmin, 64px);
+  height: clamp(40px, 11vmin, 64px);
+  object-fit: contain;
+  filter: drop-shadow(0 2px 8px rgba(0, 40, 80, 0.4));
+}
+
+.crush-pass-booster-pill__qty {
+  font-family: 'Fredoka', sans-serif;
+  font-size: clamp(13px, 3.2vmin, 17px);
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 2px 6px rgba(0, 20, 50, 0.85);
+  line-height: 1;
+}
+
+.crush-pass-booster-pill--shard .crush-pass-booster-pill__icon {
+  filter: drop-shadow(0 0 12px rgba(255, 220, 120, 0.55)) drop-shadow(0 2px 8px rgba(0, 40, 80, 0.4));
+}
+
+.crush-pass-burst--active .crush-pass-burst__pile:not(.crush-pass-burst__pile--fly) {
   animation: crush-pass-icon-pop 0.55s cubic-bezier(0.34, 1.45, 0.64, 1) forwards;
 }
 
@@ -578,7 +635,7 @@
 .crush-pass-burst__label {
   position: absolute;
   left: 50%;
-  bottom: 8%;
+  bottom: 5%;
   transform: translateX(-50%);
   z-index: 2;
   margin: 0;
@@ -589,14 +646,15 @@
   color: #fff;
   text-align: center;
   text-shadow: 0 2px 6px rgba(0, 20, 50, 0.75);
+  max-width: min(94vw, 520px);
 }
 
-.crush-pass-burst__icon--fly {
+.crush-pass-burst__pile--fly {
   animation: none !important;
   transition:
     transform 0.55s cubic-bezier(0.42, 0, 0.25, 1),
     opacity 0.5s ease;
-  transform: translate3d(calc(-50% + var(--crush-fly-x, 0px)), calc(-50% + var(--crush-fly-y, 0px)), 0) scale(0.2) !important;
+  transform: translate3d(calc(-50% + var(--crush-fly-x, 0px)), calc(-50% + var(--crush-fly-y, 0px)), 0) scale(0.32) !important;
   opacity: 0;
   filter: drop-shadow(0 0 8px rgba(255, 230, 140, 0.4));
 }
@@ -623,14 +681,14 @@
     animation: none;
   }
 
-  .crush-pass-burst--active .crush-pass-burst__icon {
+  .crush-pass-burst--active .crush-pass-burst__pile {
     animation: none;
     transform: translate3d(-50%, -50%, 0) scale(1);
   }
 
-  .crush-pass-hint__arrow {
+  .crush-pass-hint__cluster {
     animation: none;
-    transform: translateY(0) rotate(90deg);
+    transform: none;
   }
 }
 

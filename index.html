@@ -70,7 +70,10 @@
       <div class="crush-pass-popup" id="crushPassPopup" role="dialog" aria-modal="true" aria-labelledby="crushPassTitle">
         <h2 class="visually-hidden" id="crushPassTitle">Weekly Crush Pass</h2>
         <div class="crush-pass-hint" id="crushPassHint" aria-hidden="true">
-          <img src="/assets/ui/arrow.png" class="crush-pass-hint__arrow" alt="" draggable="false" />
+          <div class="crush-pass-hint__cluster">
+            <span class="crush-pass-hint__price">$4.99</span>
+            <img src="/assets/ui/arrow.png" class="crush-pass-hint__arrow" alt="" draggable="false" />
+          </div>
         </div>
         <div class="crush-pass-ticket" id="crushPassTicket" role="button" tabindex="0" aria-label="Open Weekly Crush Pass reward">
           <img class="crush-pass-ticket__left" src="/assets/ui/crush-pass-left.png" alt="" draggable="false" />
@@ -79,7 +82,9 @@
         <p class="crush-pass-popup__timer" id="crushPassTimer" aria-live="polite"></p>
         <div class="crush-pass-burst" id="crushPassBurst" aria-hidden="true">
           <div class="crush-pass-burst__rays" aria-hidden="true"></div>
-          <img class="crush-pass-burst__icon" id="crushPassRewardIcon" src="" alt="" draggable="false" />
+          <div class="crush-pass-burst__pile" id="crushPassFlyTarget">
+            <div class="crush-pass-burst__boosters" id="crushPassBoostersRow"></div>
+          </div>
           <span class="crush-pass-burst__label" id="crushPassRewardLabel"></span>
         </div>
       </div>
