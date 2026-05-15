@@ -73,6 +73,9 @@ Object.assign(window.__pengu ||= {}, {
     setCurrentLevel(lvl);
     window.location.href = '/?page=play';
   },
+  /** Crush Pass: bypass weekly cooldown for testing (`true` / `false`). */
+  setCrushPassRewardDebug: Inventory.setCrushPassRewardDebug,
+  getCrushPassRewardDebug: Inventory.getCrushPassRewardDebug,
 });
 
 let mapInited = false;
@@ -356,31 +359,12 @@ homePlayBtn?.addEventListener('click', async () => {
 // ═══════════════════════════════════════════════════
 // LOADING SCREEN (runs once on first visit)
 // ═══════════════════════════════════════════════════
-let loadingVideoSeekRaf = null;
-
-function syncLoadingVideoToProgress(p) {
-  const video = document.getElementById('loadingVideo');
-  if (!video || !video.duration || !Number.isFinite(video.duration)) return;
-  const t = Math.min(1, Math.max(0, p)) * video.duration;
-  const targetTime = Math.min(t, Math.max(0, video.duration - 0.04));
-  if (loadingVideoSeekRaf != null) cancelAnimationFrame(loadingVideoSeekRaf);
-  loadingVideoSeekRaf = requestAnimationFrame(() => {
-    loadingVideoSeekRaf = null;
-    try {
-      video.pause();
-      if (Math.abs(video.currentTime - targetTime) < 0.02) return;
-      video.currentTime = targetTime;
-    } catch (_) {}
-  });
-}
-
 function updateLoadingUI(p) {
   const pct = Math.round(p * 100);
   const bar = document.getElementById('loadingBarFill');
   const host = document.getElementById('loadingProgress');
   if (bar) bar.style.transform = 'scaleX(' + p + ')';
   if (host) host.setAttribute('aria-valuenow', String(pct));
-  syncLoadingVideoToProgress(p);
 }
 
 function waitForLoadingPoster() {
@@ -414,6 +398,9 @@ function revealLoadingVideoLayer() {
   const video = document.getElementById('loadingVideo');
   const content = document.getElementById('loadingScreenContent');
   if (!video || video.error || video.readyState < 2) return;
+  try {
+    video.currentTime = 0;
+  } catch (_) {}
   video.classList.add('loading-screen__video--ready');
   content?.classList.add('loading-screen__content--video-ready');
 }
@@ -427,17 +414,17 @@ async function holdMinLoadingVideoPlayback(video) {
   }
   const deadline = performance.now() + MIN_LOADING_PLAY_MS;
   try {
+    video.loop = true;
     if (video.currentTime >= video.duration - 0.12) video.currentTime = 0;
     await video.play();
   } catch (_) {}
   while (performance.now() < deadline) {
-    await new Promise((r) => setTimeout(r, 50));
-    if (video.ended) {
-      video.currentTime = 0;
-      try { await video.play(); } catch (_) {}
-    }
+    await new Promise((r) => setTimeout(r, 100));
   }
-  try { video.pause(); } catch (_) {}
+  try {
+    video.pause();
+    video.loop = false;
+  } catch (_) {}
 }
 
 function finishLoadingOutro() {

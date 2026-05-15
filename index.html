@@ -60,7 +60,30 @@
   <!-- ═══ MAP SCREEN ═══ -->
   <div id="mapScreen" class="screen screen--hidden">
     <!-- Crush Pass banner -->
-    <img src="/assets/ui/crush-pass.png" class="crush-pass" draggable="false" alt="Crush Pass Weekly" />
+    <button type="button" class="crush-pass" id="crushPassBtn" aria-label="Weekly Crush Pass">
+      <img src="/assets/ui/crush-pass.png" class="crush-pass__img" draggable="false" alt="" />
+    </button>
+
+    <!-- Crush Pass full overlay (split ticket + reward) -->
+    <div class="crush-pass-overlay" id="crushPassOverlay" aria-hidden="true">
+      <div class="crush-pass-overlay__backdrop"></div>
+      <div class="crush-pass-popup" id="crushPassPopup" role="dialog" aria-modal="true" aria-labelledby="crushPassTitle">
+        <h2 class="visually-hidden" id="crushPassTitle">Weekly Crush Pass</h2>
+        <div class="crush-pass-hint" id="crushPassHint" aria-hidden="true">
+          <img src="/assets/ui/arrow.png" class="crush-pass-hint__arrow" alt="" draggable="false" />
+        </div>
+        <div class="crush-pass-ticket" id="crushPassTicket" role="button" tabindex="0" aria-label="Open Weekly Crush Pass reward">
+          <img class="crush-pass-ticket__left" src="/assets/ui/crush-pass-left.png" alt="" draggable="false" />
+          <img class="crush-pass-ticket__right" src="/assets/ui/crush-pass-right.png" alt="" draggable="false" />
+        </div>
+        <p class="crush-pass-popup__timer" id="crushPassTimer" aria-live="polite"></p>
+        <div class="crush-pass-burst" id="crushPassBurst" aria-hidden="true">
+          <div class="crush-pass-burst__rays" aria-hidden="true"></div>
+          <img class="crush-pass-burst__icon" id="crushPassRewardIcon" src="" alt="" draggable="false" />
+          <span class="crush-pass-burst__label" id="crushPassRewardLabel"></span>
+        </div>
+      </div>
+    </div>
 
     <!-- AGW wallet button -->
     <button class="agw-btn" id="agwBtn">Connect Wallet</button>

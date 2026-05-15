@@ -74,7 +74,8 @@
   transform-origin: left center;
   transform: scaleX(0);
   background: linear-gradient(90deg, #4fc3f7, #b3e5fc);
-  transition: transform 0.2s ease-out;
+  transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
   box-shadow: 0 0 12px rgba(79, 195, 247, 0.6);
 }
 

@@ -495,6 +495,215 @@ export function initMap() {
   dailyOverlay?.querySelector('.daily-wheel-overlay__backdrop')?.addEventListener('click', () => closeDailyWheel());
   dailySpinBtn?.addEventListener('click', () => spinDailyWheel());
 
+  // Weekly Crush Pass (map screen)
+  const crushPassBtn = document.getElementById('crushPassBtn');
+  const crushPassOverlay = document.getElementById('crushPassOverlay');
+  const crushPassTicket = document.getElementById('crushPassTicket');
+  const crushPassTimer = document.getElementById('crushPassTimer');
+  const crushPassBurst = document.getElementById('crushPassBurst');
+  const crushPassRewardIcon = document.getElementById('crushPassRewardIcon');
+  const crushPassRewardLabel = document.getElementById('crushPassRewardLabel');
+
+  let crushPassAnimating = false;
+  /** @type {ReturnType<typeof setInterval> | null} */
+  let crushPassTimerInterval = null;
+  /** @type {ReturnType<typeof setTimeout> | null} */
+  let crushPassSplitT = null;
+  /** @type {ReturnType<typeof setTimeout> | null} */
+  let crushPassBurstT = null;
+  /** @type {ReturnType<typeof setTimeout> | null} */
+  let crushPassFlyT = null;
+  /** @type {((e: TransitionEvent) => void) | null} */
+  let crushPassFlyTransitionEnd = null;
+
+  function clearCrushPassTimeouts() {
+    if (crushPassSplitT) clearTimeout(crushPassSplitT);
+    if (crushPassBurstT) clearTimeout(crushPassBurstT);
+    if (crushPassFlyT) clearTimeout(crushPassFlyT);
+    crushPassSplitT = crushPassBurstT = crushPassFlyT = null;
+    if (crushPassFlyTransitionEnd && crushPassRewardIcon) {
+      crushPassRewardIcon.removeEventListener('transitionend', crushPassFlyTransitionEnd);
+      crushPassFlyTransitionEnd = null;
+    }
+  }
+
+  function formatCrushPassCountdown(ms) {
+    const d = Math.floor(ms / 86400000);
+    const h = Math.floor((ms % 86400000) / 3600000);
+    const m = Math.floor((ms % 3600000) / 60000);
+    if (d > 0) return `${d}d ${h}h until next claim`;
+    if (h > 0) return `${h}h ${m}m until next claim`;
+    return `${Math.max(1, m)}m until next claim`;
+  }
+
+  function renderCrushPassTimer() {
+    if (!crushPassTimer) return;
+    if (Inventory.canClaimCrushPass()) {
+      crushPassTimer.textContent = 'Tap the pass to claim your weekly reward!';
+    } else {
+      const ms = Inventory.nextCrushPassAvailableIn();
+      crushPassTimer.textContent =
+        ms > 0
+          ? `Already claimed this week — ${formatCrushPassCountdown(ms)}`
+          : 'Already claimed this week.';
+    }
+    updateCrushPassHint();
+  }
+
+  function updateCrushPassHint() {
+    const hint = document.getElementById('crushPassHint');
+    if (!hint) return;
+    const split = crushPassTicket?.classList.contains('crush-pass-ticket--split');
+    const show =
+      !!crushPassOverlay?.classList.contains('active') &&
+      Inventory.canClaimCrushPass() &&
+      !crushPassAnimating &&
+      !split;
+    hint.classList.toggle('crush-pass-hint--active', show);
+    hint.setAttribute('aria-hidden', show ? 'false' : 'true');
+  }
+
+  function resetCrushPassUI() {
+    crushPassAnimating = false;
+    crushPassOverlay?.classList.remove('crush-pass-overlay--burst');
+    crushPassTicket?.classList.remove('crush-pass-ticket--shake', 'crush-pass-ticket--split');
+    crushPassBurst?.classList.remove('crush-pass-burst--active');
+    crushPassBurst?.setAttribute('aria-hidden', 'true');
+    crushPassRewardIcon?.classList.remove('crush-pass-burst__icon--fly');
+    crushPassRewardIcon?.style.removeProperty('--crush-fly-x');
+    crushPassRewardIcon?.style.removeProperty('--crush-fly-y');
+    crushPassRewardIcon?.style.removeProperty('opacity');
+    if (crushPassRewardIcon) {
+      crushPassRewardIcon.src = '';
+      crushPassRewardIcon.alt = '';
+    }
+    if (crushPassRewardLabel) crushPassRewardLabel.textContent = '';
+    updateCrushPassHint();
+  }
+
+  function openCrushPassOverlay() {
+    if (!crushPassOverlay) return;
+    clearCrushPassTimeouts();
+    resetCrushPassUI();
+    crushPassOverlay.classList.add('active');
+    crushPassOverlay.setAttribute('aria-hidden', 'false');
+    renderCrushPassTimer();
+    if (crushPassTimerInterval) clearInterval(crushPassTimerInterval);
+    crushPassTimerInterval = setInterval(() => {
+      if (crushPassOverlay?.classList.contains('active')) renderCrushPassTimer();
+    }, 60000);
+  }
+
+  function closeCrushPassOverlay() {
+    clearCrushPassTimeouts();
+    if (crushPassTimerInterval) {
+      clearInterval(crushPassTimerInterval);
+      crushPassTimerInterval = null;
+    }
+    crushPassOverlay?.classList.remove('active');
+    crushPassOverlay?.setAttribute('aria-hidden', 'true');
+    resetCrushPassUI();
+  }
+
+  function handleCrushPassTicketActivate() {
+    if (!crushPassTicket || crushPassAnimating) return;
+
+    if (!Inventory.canClaimCrushPass()) {
+      crushPassTicket.classList.remove('crush-pass-ticket--shake');
+      crushPassTicket.offsetHeight;
+      crushPassTicket.classList.add('crush-pass-ticket--shake');
+      setTimeout(() => crushPassTicket?.classList.remove('crush-pass-ticket--shake'), 620);
+      renderCrushPassTimer();
+      return;
+    }
+
+    crushPassAnimating = true;
+    crushPassTicket.classList.add('crush-pass-ticket--split');
+    updateCrushPassHint();
+
+    crushPassSplitT = setTimeout(() => {
+      crushPassSplitT = null;
+      const reward = Inventory.claimCrushPass();
+      if (!reward) {
+        resetCrushPassUI();
+        renderCrushPassTimer();
+        return;
+      }
+      if (crushPassRewardIcon) {
+        crushPassRewardIcon.src = reward.icon;
+        crushPassRewardIcon.alt = reward.label;
+      }
+      if (crushPassRewardLabel) crushPassRewardLabel.textContent = reward.label;
+      crushPassBurst?.classList.add('crush-pass-burst--active');
+      crushPassBurst?.setAttribute('aria-hidden', 'false');
+      crushPassOverlay?.classList.add('crush-pass-overlay--burst');
+      renderCrushPassTimer();
+
+      /** Time to read reward + sun before flying toward inventory */
+      const CRUSH_PASS_HOLD_BEFORE_FLY_MS = 2200;
+
+      crushPassBurstT = setTimeout(() => {
+        crushPassBurstT = null;
+        const invBtn = document.getElementById('inventoryMapOpen');
+        const iconEl = crushPassRewardIcon;
+        if (!iconEl || !invBtn) {
+          closeCrushPassOverlay();
+          return;
+        }
+        const runFly = () => {
+          const ir = iconEl.getBoundingClientRect();
+          const tr = invBtn.getBoundingClientRect();
+          const dx = tr.left + tr.width / 2 - (ir.left + ir.width / 2);
+          const dy = tr.top + tr.height / 2 - (ir.top + ir.height / 2);
+          iconEl.style.setProperty('--crush-fly-x', `${dx}px`);
+          iconEl.style.setProperty('--crush-fly-y', `${dy}px`);
+          void iconEl.offsetWidth;
+          let flyFinished = false;
+          const finishFly = () => {
+            if (flyFinished) return;
+            flyFinished = true;
+            if (crushPassFlyT) {
+              clearTimeout(crushPassFlyT);
+              crushPassFlyT = null;
+            }
+            if (crushPassFlyTransitionEnd) {
+              iconEl.removeEventListener('transitionend', crushPassFlyTransitionEnd);
+              crushPassFlyTransitionEnd = null;
+            }
+            closeCrushPassOverlay();
+          };
+          crushPassFlyTransitionEnd = e => {
+            if (e.target !== iconEl || e.propertyName !== 'transform') return;
+            finishFly();
+          };
+          iconEl.addEventListener('transitionend', crushPassFlyTransitionEnd);
+          /** Fallback if transitionend does not fire (tab hidden, reduced motion quirks). */
+          crushPassFlyT = setTimeout(finishFly, 900);
+          iconEl.classList.add('crush-pass-burst__icon--fly');
+        };
+        requestAnimationFrame(() => requestAnimationFrame(runFly));
+      }, CRUSH_PASS_HOLD_BEFORE_FLY_MS);
+    }, 550);
+  }
+
+  crushPassBtn?.addEventListener('click', e => {
+    e.stopPropagation();
+    openCrushPassOverlay();
+  });
+  crushPassOverlay?.querySelector('.crush-pass-overlay__backdrop')?.addEventListener('click', () => {
+    closeCrushPassOverlay();
+  });
+  crushPassTicket?.addEventListener('click', e => {
+    e.stopPropagation();
+    handleCrushPassTicketActivate();
+  });
+  crushPassTicket?.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handleCrushPassTicketActivate();
+    }
+  });
+
   // Inventory popup (map screen)
   const inventoryOverlay = document.getElementById('inventoryOverlay');
   const inventoryOpen = document.getElementById('inventoryMapOpen');
@@ -544,12 +753,17 @@ export function initMap() {
   inventoryOverlay?.querySelector('.inventory-overlay__backdrop')?.addEventListener('click', () => closeInventory());
   Inventory.onInventoryChange(() => {
     if (inventoryOverlay?.classList.contains('active')) renderInventoryGrid();
+    if (crushPassOverlay?.classList.contains('active')) renderCrushPassTimer();
   });
 
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
     if (inventoryOverlay?.classList.contains('active')) {
       closeInventory();
+      return;
+    }
+    if (crushPassOverlay?.classList.contains('active')) {
+      closeCrushPassOverlay();
       return;
     }
     if (dailyOverlay?.classList.contains('active')) {
