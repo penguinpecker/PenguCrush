@@ -322,6 +322,7 @@ export function initMap() {
   function renderLivesHud() {
     const { lives, frozenLives, total } = Inventory.getLives();
     const livesMax = Inventory.getMaxLives();
+    const hudSlots = Inventory.getLivesHudSlotCount();
 
     const countEl = document.getElementById('livesCount');
     const rowEl = document.getElementById('livesHearts');
@@ -331,25 +332,39 @@ export function initMap() {
 
     if (rowEl) {
       rowEl.innerHTML = '';
-      for (let slot = 1; slot <= livesMax; slot++) {
-        const img = document.createElement('img');
-        img.className = 'lives-hud__heart';
-        img.draggable = false;
-        img.alt = '';
+      const hasPass = Inventory.hasCrushPass();
+      for (let slot = 1; slot <= hudSlots; slot++) {
         const filled = slot <= lives + frozenLives;
-        if (!filled) {
-          img.src = LIFE_HEART_EMPTY;
+        const isIceSlot = slot > livesMax; // slots 4 & 5 are the frozen-heart zone
+        const isLocked = !filled && isIceSlot && !hasPass;
+
+        if (isLocked) {
+          // Show a greyed-out heart with a lock badge; tooltip on hover
+          const wrap = document.createElement('div');
+          wrap.className = 'lives-hud__heart lives-hud__heart--locked';
+          wrap.title = 'Unlock with Weekly Pass';
+          wrap.setAttribute('data-tooltip', 'Unlock with Weekly Pass');
+          const heartImg = document.createElement('img');
+          heartImg.className = 'lives-hud__heart--locked-img';
+          heartImg.src = LIFE_HEART_EMPTY;
+          heartImg.draggable = false;
+          heartImg.alt = '';
+          wrap.appendChild(heartImg);
+          rowEl.appendChild(wrap);
         } else {
-          const isLastTwoSlots = slot >= livesMax - 1;
-          if (isLastTwoSlots) {
+          const img = document.createElement('img');
+          img.className = 'lives-hud__heart';
+          img.draggable = false;
+          img.alt = '';
+          if (!filled) {
+            img.src = LIFE_HEART_EMPTY;
+          } else if (isIceSlot || slot > lives) {
             img.src = LIFE_HEART_ICE;
-          } else if (slot <= lives) {
-            img.src = LIFE_HEART_FULL;
           } else {
-            img.src = LIFE_HEART_ICE;
+            img.src = LIFE_HEART_FULL;
           }
+          rowEl.appendChild(img);
         }
-        rowEl.appendChild(img);
       }
     }
 
@@ -369,6 +384,14 @@ export function initMap() {
       popupPlayBtn.disabled = inactive;
       popupPlayBtn.classList.toggle('pop-play--disabled', inactive);
     }
+
+    refreshCrushPassChrome();
+  }
+
+  function refreshCrushPassChrome() {
+    const on = Inventory.hasCrushPass();
+    document.getElementById('crushPassBtn')?.classList.toggle('crush-pass--active', on);
+    document.getElementById('livesHud')?.classList.toggle('lives-hud--pass', on);
   }
 
   window.addEventListener('pengu:inventory', renderLivesHud);
@@ -442,6 +465,21 @@ export function initMap() {
    * matches art order: 5 Gems, Try Again, 100 XP, 50 Coins, Ice Boost, 250 XP.
    */
   const DAILY_REWARDS = ['5 Gems', 'Try Again', '100 XP', '50 Coins', 'Ice Boost', '250 XP'];
+
+  function formatDailyWheelResult(rewardText, effect) {
+    const mult = effect.wheelMultiplier || 1;
+    const passTag = mult > 1 ? ' (2× Crush Pass)' : '';
+    if (effect.type === 'gems') return `You won: ${effect.amount} Gems${passTag}`;
+    if (effect.type === 'coins') return `You won: ${effect.amount} Coins${passTag}`;
+    if (effect.type === 'xp') return `You won: ${effect.amount} XP${passTag}`;
+    if (effect.type === 'booster' && effect.boosterGrants?.length) {
+      const tally = {};
+      for (const id of effect.boosterGrants) tally[id] = (tally[id] || 0) + 1;
+      const parts = Object.entries(tally).map(([id, n]) => `${n}× ${id}`);
+      return `You won: Ice Boost → ${parts.join(', ')}${passTag}`;
+    }
+    return `You won: ${rewardText}${passTag}`;
+  }
 
   function normDeg360(d) {
     return ((d % 360) + 360) % 360;
@@ -548,9 +586,7 @@ export function initMap() {
       const rewardText = DAILY_REWARDS[won];
       const effect = Inventory.applyDailyReward(rewardText);
       if (dailyResult) {
-        let suffix = '';
-        if (effect.type === 'booster') suffix = ` (+1 ${effect.booster})`;
-        dailyResult.textContent = `You won: ${rewardText}${suffix}`;
+        dailyResult.textContent = formatDailyWheelResult(rewardText, effect);
         dailyResult.hidden = false;
       }
       refreshSpinButtonState();
@@ -591,8 +627,18 @@ export function initMap() {
   const crushPassFlyTarget = document.getElementById('crushPassFlyTarget');
   const crushPassBoostersRow = document.getElementById('crushPassBoostersRow');
   const crushPassRewardLabel = document.getElementById('crushPassRewardLabel');
+  const crushPassHint = document.getElementById('crushPassHint');
+  const crushPassManageRow = document.getElementById('crushPassManageRow');
+  const crushPassRenewBtn = document.getElementById('crushPassRenewBtn');
+  const crushPassCancelSubscriptionBtn = document.getElementById('crushPassCancelSubscriptionBtn');
+  const crushPassPurchaseOverlay = document.getElementById('crushPassPurchaseOverlay');
+  const crushPassBuyBtn = document.getElementById('crushPassBuyBtn');
+  const crushPassCancelPurchaseBtn = document.getElementById('crushPassCancelPurchaseBtn');
+  const crushPassPurchaseCard = document.getElementById('crushPassPurchaseCard');
 
   let crushPassAnimating = false;
+  /** Reward payload waiting for user to "crack open" the ticket after purchase. */
+  let crushPassPendingReward = null;
   /** @type {ReturnType<typeof setInterval> | null} */
   let crushPassTimerInterval = null;
   /** @type {ReturnType<typeof setTimeout> | null} */
@@ -615,44 +661,49 @@ export function initMap() {
     }
   }
 
-  function formatCrushPassCountdown(ms) {
+  function formatCrushPassActiveCountdown(ms) {
     const d = Math.floor(ms / 86400000);
     const h = Math.floor((ms % 86400000) / 3600000);
     const m = Math.floor((ms % 3600000) / 60000);
-    if (d > 0) return `${d}d ${h}h until next claim`;
-    if (h > 0) return `${h}h ${m}m until next claim`;
-    return `${Math.max(1, m)}m until next claim`;
+    if (d > 0) return `${d}d ${h}h ${m}m`;
+    if (h > 0) return `${h}h ${m}m`;
+    return `${Math.max(1, m)}m`;
+  }
+
+  function openCrushPassPurchaseOverlay() {
+    crushPassPurchaseOverlay?.classList.add('active');
+    crushPassPurchaseOverlay?.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeCrushPassPurchaseOverlay() {
+    crushPassPurchaseOverlay?.classList.remove('active');
+    crushPassPurchaseOverlay?.setAttribute('aria-hidden', 'true');
   }
 
   function renderCrushPassTimer() {
     if (!crushPassTimer) return;
-    if (Inventory.canClaimCrushPass()) {
-      crushPassTimer.textContent = 'Tap the pass to claim your weekly reward!';
+    if (Inventory.hasCrushPass()) {
+      const ms = Inventory.crushPassExpiresIn();
+      crushPassTimer.textContent = `Pass active — expires in ${formatCrushPassActiveCountdown(ms)}`;
     } else {
-      const ms = Inventory.nextCrushPassAvailableIn();
-      crushPassTimer.textContent =
-        ms > 0
-          ? `Already claimed this week — ${formatCrushPassCountdown(ms)}`
-          : 'Already claimed this week.';
+      crushPassTimer.textContent = 'Tap to get this week\'s pass!';
     }
     updateCrushPassHint();
   }
 
   function updateCrushPassHint() {
-    const hint = document.getElementById('crushPassHint');
-    if (!hint) return;
-    const split = crushPassTicket?.classList.contains('crush-pass-ticket--split');
-    const show =
-      !!crushPassOverlay?.classList.contains('active') &&
-      Inventory.canClaimCrushPass() &&
-      !crushPassAnimating &&
-      !split;
-    hint.classList.toggle('crush-pass-hint--active', show);
-    hint.setAttribute('aria-hidden', show ? 'false' : 'true');
+    if (!crushPassHint) return;
+    const show = !!crushPassPendingReward && !crushPassAnimating;
+    crushPassHint.classList.toggle('crush-pass-hint--active', show);
+    crushPassHint.setAttribute('aria-hidden', show ? 'false' : 'true');
+    const priceEl = crushPassHint.querySelector('.crush-pass-hint__price');
+    if (priceEl) priceEl.textContent = show ? 'Tap!' : '$4.99';
   }
 
   function resetCrushPassUI() {
     crushPassAnimating = false;
+    // NOTE: crushPassPendingReward is intentionally NOT cleared here so that
+    // openCrushPassOverlay can inspect it after calling resetCrushPassUI.
     crushPassOverlay?.classList.remove('crush-pass-overlay--burst');
     crushPassTicket?.classList.remove('crush-pass-ticket--shake', 'crush-pass-ticket--split');
     crushPassBurst?.classList.remove('crush-pass-burst--active');
@@ -670,6 +721,12 @@ export function initMap() {
     if (!crushPassOverlay) return;
     clearCrushPassTimeouts();
     resetCrushPassUI();
+    const hasPending = !!crushPassPendingReward;
+    const active = Inventory.hasCrushPass();
+    // Manage-row visible only when pass is active and no unclaimed reward is waiting
+    if (crushPassManageRow) crushPassManageRow.hidden = !active || hasPending;
+    // Hide the $4.99 hint banner only when active and nothing to claim
+    crushPassHint?.classList.toggle('crush-pass-hint--hidden', active && !hasPending);
     crushPassOverlay.classList.add('active');
     crushPassOverlay.setAttribute('aria-hidden', 'false');
     renderCrushPassTimer();
@@ -681,13 +738,57 @@ export function initMap() {
 
   function closeCrushPassOverlay() {
     clearCrushPassTimeouts();
+    crushPassPendingReward = null; // discard unclaimed reward if user dismisses
     if (crushPassTimerInterval) {
       clearInterval(crushPassTimerInterval);
       crushPassTimerInterval = null;
     }
     crushPassOverlay?.classList.remove('active');
     crushPassOverlay?.setAttribute('aria-hidden', 'true');
+    crushPassHint?.classList.remove('crush-pass-hint--hidden');
+    if (crushPassManageRow) crushPassManageRow.hidden = true;
     resetCrushPassUI();
+  }
+
+  function scheduleCrushPassRewardFly() {
+    const invBtn = document.getElementById('inventoryMapOpen');
+    const flyEl = crushPassFlyTarget;
+    if (!flyEl || !invBtn) {
+      closeCrushPassOverlay();
+      return;
+    }
+    const runFly = () => {
+      const ir = flyEl.getBoundingClientRect();
+      const tr = invBtn.getBoundingClientRect();
+      const dx = tr.left + tr.width / 2 - (ir.left + ir.width / 2);
+      const dy = tr.top + tr.height / 2 - (ir.top + ir.height / 2);
+      flyEl.style.setProperty('--crush-fly-x', `${dx}px`);
+      flyEl.style.setProperty('--crush-fly-y', `${dy}px`);
+      void flyEl.offsetWidth;
+      let flyFinished = false;
+      const finishFly = () => {
+        if (flyFinished) return;
+        flyFinished = true;
+        if (crushPassFlyT) {
+          clearTimeout(crushPassFlyT);
+          crushPassFlyT = null;
+        }
+        if (crushPassFlyTransitionEnd) {
+          flyEl.removeEventListener('transitionend', crushPassFlyTransitionEnd);
+          crushPassFlyTransitionEnd = null;
+        }
+        closeCrushPassOverlay();
+      };
+      crushPassFlyTransitionEnd = e => {
+        if (e.target !== flyEl || e.propertyName !== 'transform') return;
+        finishFly();
+      };
+      flyEl.addEventListener('transitionend', crushPassFlyTransitionEnd);
+      /** Fallback if transitionend does not fire (tab hidden, reduced motion quirks). */
+      crushPassFlyT = setTimeout(finishFly, 900);
+      flyEl.classList.add('crush-pass-burst__pile--fly');
+    };
+    requestAnimationFrame(() => requestAnimationFrame(runFly));
   }
 
   /**
@@ -731,89 +832,99 @@ export function initMap() {
     }
   }
 
+  function startCrushPassRewardCelebration(reward) {
+    if (!reward) return;
+    crushPassAnimating = true;
+    if (crushPassManageRow) crushPassManageRow.hidden = true;
+    updateCrushPassHint();
+    renderCrushPassBurstReward(reward);
+    if (crushPassRewardLabel) crushPassRewardLabel.textContent = reward.label;
+    crushPassBurst?.classList.add('crush-pass-burst--active');
+    crushPassBurst?.setAttribute('aria-hidden', 'false');
+    crushPassOverlay?.classList.add('crush-pass-overlay--burst');
+    renderCrushPassTimer();
+
+    const CRUSH_PASS_HOLD_BEFORE_FLY_MS = 2200;
+    crushPassBurstT = setTimeout(() => {
+      crushPassBurstT = null;
+      scheduleCrushPassRewardFly();
+    }, CRUSH_PASS_HOLD_BEFORE_FLY_MS);
+  }
+
+  function shakeTicket() {
+    if (!crushPassTicket) return;
+    crushPassTicket.classList.remove('crush-pass-ticket--shake');
+    crushPassTicket.offsetHeight; // reflow to restart animation
+    crushPassTicket.classList.add('crush-pass-ticket--shake');
+    setTimeout(() => crushPassTicket?.classList.remove('crush-pass-ticket--shake'), 620);
+  }
+
   function handleCrushPassTicketActivate() {
     if (!crushPassTicket || crushPassAnimating) return;
 
-    if (!Inventory.canClaimCrushPass()) {
-      crushPassTicket.classList.remove('crush-pass-ticket--shake');
-      crushPassTicket.offsetHeight;
-      crushPassTicket.classList.add('crush-pass-ticket--shake');
-      setTimeout(() => crushPassTicket?.classList.remove('crush-pass-ticket--shake'), 620);
-      renderCrushPassTimer();
+    if (crushPassPendingReward) {
+      // Tear the ticket open and celebrate!
+      const reward = crushPassPendingReward;
+      crushPassPendingReward = null;
+      crushPassAnimating = true;
+      updateCrushPassHint(); // hides the "Tap!" arrow now
+      crushPassTicket.classList.add('crush-pass-ticket--split');
+      crushPassSplitT = setTimeout(() => {
+        crushPassSplitT = null;
+        startCrushPassRewardCelebration(reward);
+      }, 550);
       return;
     }
 
-    crushPassAnimating = true;
-    crushPassTicket.classList.add('crush-pass-ticket--split');
-    updateCrushPassHint();
-
-    crushPassSplitT = setTimeout(() => {
-      crushPassSplitT = null;
-      const reward = Inventory.claimCrushPass();
-      if (!reward) {
-        resetCrushPassUI();
-        renderCrushPassTimer();
-        return;
-      }
-      renderCrushPassBurstReward(reward);
-      if (crushPassRewardLabel) crushPassRewardLabel.textContent = reward.label;
-      crushPassBurst?.classList.add('crush-pass-burst--active');
-      crushPassBurst?.setAttribute('aria-hidden', 'false');
-      crushPassOverlay?.classList.add('crush-pass-overlay--burst');
-      renderCrushPassTimer();
-
-      /** Time to read reward + sun before flying toward inventory */
-      const CRUSH_PASS_HOLD_BEFORE_FLY_MS = 2200;
-
-      crushPassBurstT = setTimeout(() => {
-        crushPassBurstT = null;
-        const invBtn = document.getElementById('inventoryMapOpen');
-        const flyEl = crushPassFlyTarget;
-        if (!flyEl || !invBtn) {
-          closeCrushPassOverlay();
-          return;
-        }
-        const runFly = () => {
-          const ir = flyEl.getBoundingClientRect();
-          const tr = invBtn.getBoundingClientRect();
-          const dx = tr.left + tr.width / 2 - (ir.left + ir.width / 2);
-          const dy = tr.top + tr.height / 2 - (ir.top + ir.height / 2);
-          flyEl.style.setProperty('--crush-fly-x', `${dx}px`);
-          flyEl.style.setProperty('--crush-fly-y', `${dy}px`);
-          void flyEl.offsetWidth;
-          let flyFinished = false;
-          const finishFly = () => {
-            if (flyFinished) return;
-            flyFinished = true;
-            if (crushPassFlyT) {
-              clearTimeout(crushPassFlyT);
-              crushPassFlyT = null;
-            }
-            if (crushPassFlyTransitionEnd) {
-              flyEl.removeEventListener('transitionend', crushPassFlyTransitionEnd);
-              crushPassFlyTransitionEnd = null;
-            }
-            closeCrushPassOverlay();
-          };
-          crushPassFlyTransitionEnd = e => {
-            if (e.target !== flyEl || e.propertyName !== 'transform') return;
-            finishFly();
-          };
-          flyEl.addEventListener('transitionend', crushPassFlyTransitionEnd);
-          /** Fallback if transitionend does not fire (tab hidden, reduced motion quirks). */
-          crushPassFlyT = setTimeout(finishFly, 900);
-          flyEl.classList.add('crush-pass-burst__pile--fly');
-        };
-        requestAnimationFrame(() => requestAnimationFrame(runFly));
-      }, CRUSH_PASS_HOLD_BEFORE_FLY_MS);
-    }, 550);
+    // No pending reward — just a friendly shake to show "nothing to do right now"
+    shakeTicket();
   }
 
   crushPassBtn?.addEventListener('click', e => {
     e.stopPropagation();
-    openCrushPassOverlay();
+    if (Inventory.hasCrushPass()) openCrushPassOverlay();
+    else openCrushPassPurchaseOverlay();
   });
   crushPassOverlay?.querySelector('.crush-pass-overlay__backdrop')?.addEventListener('click', () => {
+    closeCrushPassOverlay();
+  });
+  crushPassPurchaseOverlay?.querySelector('.crush-pass-purchase-overlay__backdrop')?.addEventListener('click', () => {
+    closeCrushPassPurchaseOverlay();
+  });
+  crushPassBuyBtn?.addEventListener('click', e => {
+    e.stopPropagation();
+    const reward = Inventory.purchaseCrushPass();
+    if (!reward) return;
+    closeCrushPassPurchaseOverlay();
+    refreshCrushPassChrome();
+    crushPassPendingReward = reward; // set BEFORE openCrushPassOverlay reads it
+    openCrushPassOverlay();
+    // Give the overlay a frame to render, then shake the ticket as a "tap me!" invite
+    requestAnimationFrame(() => {
+      shakeTicket();
+      // Repeat the shake once more after a short pause for emphasis
+      setTimeout(shakeTicket, 900);
+    });
+  });
+  crushPassCancelPurchaseBtn?.addEventListener('click', e => {
+    e.stopPropagation();
+    closeCrushPassPurchaseOverlay();
+  });
+  crushPassPurchaseCard?.addEventListener('click', () => {
+    crushPassPurchaseCard.classList.remove('crush-pass-purchase-card--shake');
+    void crushPassPurchaseCard.offsetWidth; // reflow to restart animation
+    crushPassPurchaseCard.classList.add('crush-pass-purchase-card--shake');
+    setTimeout(() => crushPassPurchaseCard?.classList.remove('crush-pass-purchase-card--shake'), 620);
+  });
+  crushPassRenewBtn?.addEventListener('click', e => {
+    e.stopPropagation();
+    closeCrushPassOverlay();
+    openCrushPassPurchaseOverlay();
+  });
+  crushPassCancelSubscriptionBtn?.addEventListener('click', e => {
+    e.stopPropagation();
+    Inventory.cancelCrushPass();
+    refreshCrushPassChrome();
     closeCrushPassOverlay();
   });
   crushPassTicket?.addEventListener('click', e => {
@@ -877,12 +988,17 @@ export function initMap() {
   Inventory.onInventoryChange(() => {
     if (inventoryOverlay?.classList.contains('active')) renderInventoryGrid();
     if (crushPassOverlay?.classList.contains('active')) renderCrushPassTimer();
+    refreshCrushPassChrome();
   });
 
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
     if (inventoryOverlay?.classList.contains('active')) {
       closeInventory();
+      return;
+    }
+    if (crushPassPurchaseOverlay?.classList.contains('active')) {
+      closeCrushPassPurchaseOverlay();
       return;
     }
     if (crushPassOverlay?.classList.contains('active')) {

@@ -22,6 +22,36 @@ const DEFAULT_BOOSTERS = { row: 1, col: 1, colorBomb: 1, hammer: 1, shuffle: 1 }
 const DEFAULT_CURRENCIES = { coins: 0, gems: 0, xp: 0 };
 const DEFAULT_SHARDS = { necklace: 0, crown: 0, plooshie: 0 };
 
+/** Regular (pink) life cap. Ice hearts add on top (see `FROZEN_LIVES_MAX`). */
+const LIVES_MAX = 3;
+const FROZEN_LIVES_MAX = 2;
+const LIFE_REGEN_MS = 8 * 60 * 60 * 1000;
+
+/**
+ * If pass window ended, deactivate perks and clear bonus ice hearts.
+ * @returns {boolean} Whether state was mutated (caller may persist wallet blob).
+ */
+function syncCrushPassExpiryIfNeeded(s) {
+  if (!s.crushPassExpiresAt) return false;
+  const exp = Date.parse(s.crushPassExpiresAt);
+  if (!Number.isFinite(exp) || Date.now() < exp) return false;
+  let changed = false;
+  if (s.crushPassActive) {
+    s.crushPassActive = false;
+    changed = true;
+  }
+  s.crushPassExpiresAt = null;
+  if ((s.frozenLives || 0) > 0) {
+    s.frozenLives = 0;
+    changed = true;
+  }
+  if (s.lives > LIVES_MAX) {
+    s.lives = LIVES_MAX;
+    changed = true;
+  }
+  return changed;
+}
+
 function emptyState() {
   return {
     boosters: { ...DEFAULT_BOOSTERS },
@@ -29,9 +59,14 @@ function emptyState() {
     shards: { ...DEFAULT_SHARDS },
     lastDailySpin: null,  // ISO date string 'YYYY-MM-DD' (UTC)
     dailySpinHistory: [], // [{ date, reward, at }]
-    lastCrushPass: null, // ISO week key, e.g. "2026-W20" (UTC-based ISO week)
-    crushPassHistory: [], // [{ week, at, boostersEach, shardBonus? }]
-    lives: 5, // regular hearts 0–5
+    crushPassHistory: [], // purchase / renewal audit — [{ week, at, boostersEach, shardBonus? }]
+    crushPassActive: false,
+    crushPassExpiresAt: null, // ISO — end of pass window
+    crushPassPurchasedAt: null,
+    crushPassStreakWeeks: 0,
+    crushPassStreakHistory: [], // [{ week, purchasedAt }] last 52
+    crushPassLastPurchaseWeek: null, // ISO week key for streak math
+    lives: LIVES_MAX, // regular hearts; pass grants +2 ice; HUD shows LIVES_MAX + FROZEN_LIVES_MAX slots
     lastLifeRegenAt: null, // ISO — anchor for 8h regen; null when lives are full
     frozenLives: 0, // weekly-pass bonus 0–2
   };
@@ -66,10 +101,26 @@ export function getInventory() {
   s.shards = { ...DEFAULT_SHARDS, ...(s.shards || {}) };
   if (!Array.isArray(s.dailySpinHistory)) s.dailySpinHistory = [];
   if (!Array.isArray(s.crushPassHistory)) s.crushPassHistory = [];
-  if (s.lastCrushPass === undefined) s.lastCrushPass = null;
-  if (s.lives === undefined || s.lives === null) s.lives = 5;
+  if (s.crushPassActive === undefined) s.crushPassActive = false;
+  if (s.crushPassExpiresAt === undefined) s.crushPassExpiresAt = null;
+  if (s.crushPassPurchasedAt === undefined) s.crushPassPurchasedAt = null;
+  if (s.crushPassStreakWeeks === undefined || s.crushPassStreakWeeks === null) s.crushPassStreakWeeks = 0;
+  if (!Array.isArray(s.crushPassStreakHistory)) s.crushPassStreakHistory = [];
+  if (s.crushPassLastPurchaseWeek === undefined) s.crushPassLastPurchaseWeek = null;
+  let schemaDirty = false;
+  if (s.lastCrushPass !== undefined) {
+    delete s.lastCrushPass;
+    schemaDirty = true;
+  }
+  if (s.lives === undefined || s.lives === null) s.lives = LIVES_MAX;
+  else s.lives = Math.min(Number(s.lives) || 0, LIVES_MAX);
   if (s.frozenLives === undefined || s.frozenLives === null) s.frozenLives = 0;
   if (s.lastLifeRegenAt === undefined) s.lastLifeRegenAt = null;
+  const passDirty = syncCrushPassExpiryIfNeeded(s);
+  if (passDirty || schemaDirty) {
+    writeAll(all);
+    dispatchInventoryChange();
+  }
   return s;
 }
 
@@ -168,24 +219,51 @@ export function nextSpinAvailableIn() {
   return Math.max(0, next - now);
 }
 
+export function hasCrushPass() {
+  const s = getInventory();
+  if (!s.crushPassActive || !s.crushPassExpiresAt) return false;
+  const exp = Date.parse(s.crushPassExpiresAt);
+  return Number.isFinite(exp) && Date.now() < exp;
+}
+
+export function crushPassExpiresIn() {
+  const s = getInventory();
+  if (!hasCrushPass()) return 0;
+  return Math.max(0, Date.parse(s.crushPassExpiresAt) - Date.now());
+}
+
+export function getScoreMultiplier() {
+  return hasCrushPass() ? 2 : 1;
+}
+
+export function getDailyWheelMultiplier() {
+  return hasCrushPass() ? 2 : 1;
+}
+
 /** Apply a reward string (e.g. "5 Gems", "100 XP", "Ice Boost"). Returns the parsed effect. */
 export function applyDailyReward(rewardText) {
   const s = getInventory();
-  const effect = { type: 'none', amount: 0 };
+  const mult = getDailyWheelMultiplier();
+  const effect = { type: 'none', amount: 0, wheelMultiplier: mult };
   const m = /^(\d+)\s+(Gems|Coins|XP)$/i.exec(rewardText);
   if (m) {
-    const qty = parseInt(m[1], 10);
+    const qty = parseInt(m[1], 10) * mult;
     const kind = m[2].toLowerCase();
     if (kind === 'gems') { s.currencies.gems += qty; effect.type = 'gems'; }
     else if (kind === 'coins') { s.currencies.coins += qty; effect.type = 'coins'; }
     else if (kind === 'xp') { s.currencies.xp += qty; effect.type = 'xp'; }
     effect.amount = qty;
   } else if (/ice boost/i.test(rewardText)) {
-    // Ice Boost → grant a random booster
     const pool = ['row', 'col', 'colorBomb', 'hammer', 'shuffle'];
-    const pick = pool[Math.floor(Math.random() * pool.length)];
-    s.boosters[pick] = (s.boosters[pick] || 0) + 1;
-    effect.type = 'booster'; effect.booster = pick; effect.amount = 1;
+    effect.type = 'booster';
+    effect.boosterGrants = [];
+    for (let i = 0; i < mult; i++) {
+      const pick = pool[Math.floor(Math.random() * pool.length)];
+      s.boosters[pick] = (s.boosters[pick] || 0) + 1;
+      effect.boosterGrants.push(pick);
+    }
+    effect.amount = mult;
+    effect.booster = effect.boosterGrants[0];
   } else if (/try again/i.test(rewardText)) {
     effect.type = 'none';
   }
@@ -199,11 +277,7 @@ export function applyDailyReward(rewardText) {
   return effect;
 }
 
-// ── Daily lives (8h regen per heart, max 5 + up to 2 frozen from weekly pass) ──
-
-const LIVES_MAX = 5;
-const FROZEN_LIVES_MAX = 2;
-const LIFE_REGEN_MS = 8 * 60 * 60 * 1000;
+// ── Daily lives (8h regen per heart, max 3 regular + up to 2 frozen from Crush Pass) ──
 
 /**
  * Apply regen ticks to `s` in memory. Returns whether `s` was mutated.
@@ -251,6 +325,11 @@ function applyLifeRegenToState(s) {
 
 export function getMaxLives() {
   return LIVES_MAX;
+}
+
+/** Heart slots rendered in the map HUD (regular cap + max ice). */
+export function getLivesHudSlotCount() {
+  return LIVES_MAX + FROZEN_LIVES_MAX;
 }
 
 /** Snapshot after applying regen. Persists if regen added lives. */
@@ -322,33 +401,7 @@ export function grantFrozenLives(n = 2) {
   return getLives();
 }
 
-// ── Weekly Crush Pass (UTC ISO week, one claim per week) ──────
-
-/**
- * Dev: set `true` to ignore the weekly cooldown (claim as many times as you like).
- * Or at runtime: `__pengu.setCrushPassRewardDebug(true)` — see entry.js.
- */
-export const DEBUG_CRUSH_PASS_REWARD = false;
-
-function crushPassRewardDebugEnabled() {
-  if (DEBUG_CRUSH_PASS_REWARD) return true;
-  try {
-    return !!(typeof window !== 'undefined' && window.__pengu && window.__pengu.crushPassRewardDebug);
-  } catch (_) {
-    return false;
-  }
-}
-
-/** Toggle Crush Pass cooldown bypass (persists only for this page load unless you set window.__pengu.crushPassRewardDebug). */
-export function setCrushPassRewardDebug(on) {
-  if (typeof window === 'undefined') return;
-  window.__pengu ||= {};
-  window.__pengu.crushPassRewardDebug = !!on;
-}
-
-export function getCrushPassRewardDebug() {
-  return crushPassRewardDebugEnabled();
-}
+// ── Weekly Crush Pass (purchasable weekly subscription, mock checkout) ─────
 
 /** ISO week key "YYYY-Www" in UTC (ISO 8601 week date). */
 function crushPassWeekKeyUTC(now = new Date()) {
@@ -360,16 +413,7 @@ function crushPassWeekKeyUTC(now = new Date()) {
   return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
 }
 
-/** Next Monday 00:00:00.000 UTC (unlock boundary after a claimed week). */
-function nextMondayMidnightUTC(from = new Date()) {
-  const d = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate()));
-  const dow = d.getUTCDay();
-  let add = (8 - dow) % 7;
-  if (add === 0) add = 7;
-  d.setUTCDate(d.getUTCDate() + add);
-  d.setUTCHours(0, 0, 0, 0);
-  return d.getTime();
-}
+const CRUSH_PASS_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 
 const CRUSH_PASS_BOOSTER_ICONS = {
   row: '/assets/boosters-2d/row-clear.png',
@@ -424,26 +468,34 @@ function rollCrushPassShardBonusId() {
   return CRUSH_PASS_SHARD_BONUS_WEIGHTS[0].id;
 }
 
-export function canClaimCrushPass() {
-  if (crushPassRewardDebugEnabled()) return true;
+/** Stops renewal display / clears perks immediately (mock cancel). */
+export function cancelCrushPass() {
   const s = getInventory();
-  return s.lastCrushPass !== crushPassWeekKeyUTC();
-}
-
-export function nextCrushPassAvailableIn() {
-  if (crushPassRewardDebugEnabled()) return 0;
-  if (canClaimCrushPass()) return 0;
-  return Math.max(0, nextMondayMidnightUTC() - Date.now());
+  s.crushPassActive = false;
+  s.crushPassExpiresAt = null;
+  s.frozenLives = 0;
+  if (s.lives > LIVES_MAX) s.lives = LIVES_MAX;
+  saveInventory(s);
+  dispatchInventoryChange();
 }
 
 /**
- * Claim this week's Crush Pass: 3 of each booster, plus a random shard ~15% of the time.
- * Returns { kind, id, label, boosters, shardBonus? } for the celebration UI.
+ * Mock purchase: activates ~7d window (extends from current expiry if already active),
+ * grants boosters, optional shard, +2 ice hearts. Returns celebration payload or null.
  */
-export function claimCrushPass() {
-  if (!canClaimCrushPass()) return null;
+export function purchaseCrushPass() {
   const week = crushPassWeekKeyUTC();
   const s = getInventory();
+  const now = Date.now();
+  let baseExpiry = now;
+  if (s.crushPassActive && s.crushPassExpiresAt) {
+    const cur = Date.parse(s.crushPassExpiresAt);
+    if (Number.isFinite(cur) && cur > baseExpiry) baseExpiry = cur;
+  }
+
+  s.crushPassActive = true;
+  s.crushPassPurchasedAt = new Date().toISOString();
+  s.crushPassExpiresAt = new Date(baseExpiry + CRUSH_PASS_EXPIRY_MS).toISOString();
 
   for (const id of CRUSH_PASS_BOOSTER_IDS) {
     s.boosters[id] = (s.boosters[id] || 0) + CRUSH_PASS_BOOSTERS_EACH;
@@ -462,10 +514,22 @@ export function claimCrushPass() {
     };
   }
 
-  s.lastCrushPass = week;
+  const prevWeekKey = crushPassWeekKeyUTC(new Date(now - 7 * 86400000));
+  const lastPw = s.crushPassLastPurchaseWeek;
+  if (lastPw === week) {
+    // stacked renewal in the same ISO week — keep streak
+  } else if (lastPw === prevWeekKey) {
+    s.crushPassStreakWeeks = (s.crushPassStreakWeeks || 0) + 1;
+  } else {
+    s.crushPassStreakWeeks = 1;
+  }
+  s.crushPassLastPurchaseWeek = week;
+  s.crushPassStreakHistory.push({ week, purchasedAt: s.crushPassPurchasedAt });
+  if (s.crushPassStreakHistory.length > 52) s.crushPassStreakHistory = s.crushPassStreakHistory.slice(-52);
+
   s.crushPassHistory.push({
     week,
-    at: new Date().toISOString(),
+    at: s.crushPassPurchasedAt,
     boostersEach: CRUSH_PASS_BOOSTERS_EACH,
     shardBonus: shardBonus ? { kind: 'shard', id: shardBonus.id } : null,
   });
@@ -491,6 +555,7 @@ export function claimCrushPass() {
       label: `Lucky! ${shardBonus.label} — ${bundleLabel}`,
       boosters,
       shardBonus,
+      streakWeeks: s.crushPassStreakWeeks,
     };
   }
   return {
@@ -498,6 +563,7 @@ export function claimCrushPass() {
     id: 'bundle',
     label: bundleLabel,
     boosters,
+    streakWeeks: s.crushPassStreakWeeks,
   };
 }
 

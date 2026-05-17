@@ -1388,7 +1388,7 @@ async function processMatches() {
   combo = 0;
   let m = findMatches();
   while (m.size > 0) {
-    combo++; score += Math.round(m.size * 10 * combo * TRAITS.scoreMultiplier);
+    combo++; score += Math.round(m.size * 10 * combo * TRAITS.scoreMultiplier * Inventory.getScoreMultiplier());
     // Mid-level shard drops: any 4+ run rolls each shard independently
     // (necklace 20% · crown 10% · plooshie 5%). A match can award 0..3.
     for (const run of (m.runs || [])) {

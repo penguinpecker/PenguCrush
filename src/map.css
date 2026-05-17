@@ -328,6 +328,30 @@
   transform: translateX(-50%) scale(0.97);
 }
 
+.crush-pass--active .crush-pass__img {
+  filter: drop-shadow(0 0 12px rgba(160, 220, 255, 0.9))
+          drop-shadow(0 0 24px rgba(100, 200, 255, 0.55));
+}
+
+.crush-pass--active::after {
+  content: 'ACTIVE';
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Fredoka', sans-serif;
+  font-size: clamp(8px, 2vmin, 11px);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #fff;
+  background: linear-gradient(180deg, #5ce0f0, #28b8d8);
+  border-radius: 999px;
+  padding: 1px 8px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 2;
+}
+
 /* ═══ Lives HUD (map screen) ═══ */
 .lives-hud {
   position: fixed;
@@ -388,6 +412,18 @@
   transform: translate(-6%, -48%);
 }
 
+.lives-hud--pass .lives-hud__badge-count {
+  color: #d8f8ff;
+  text-shadow:
+    0 0 10px rgba(100, 210, 255, 0.75),
+    0 1px 2px rgba(0, 40, 80, 0.65);
+}
+
+.lives-hud--pass .lives-hud__regen {
+  color: #7ec8e8;
+  text-shadow: 0 0 6px rgba(120, 210, 255, 0.45);
+}
+
 .lives-hud__mid {
   flex: 1 1 auto;
   min-width: 0;
@@ -415,6 +451,63 @@
   object-fit: contain;
   display: block;
   filter: drop-shadow(0 1px 2px rgba(0, 40, 100, 0.35));
+}
+
+/* ── Locked ice-heart slot (no Crush Pass) ─────────────────── */
+
+.lives-hud__heart--locked {
+  /* Override the img filter from .lives-hud__heart so pseudo-elements
+     aren't affected — filtering is handled on the inner img instead. */
+  filter: none;
+  position: relative;
+  cursor: pointer;
+}
+
+.lives-hud__heart--locked-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  opacity: 0.32;
+  filter: grayscale(0.7) drop-shadow(0 1px 2px rgba(0, 40, 100, 0.25));
+}
+
+/* Lock badge — bottom-right corner */
+.lives-hud__heart--locked::after {
+  content: '🔒';
+  position: absolute;
+  bottom: -2px;
+  right: -4px;
+  font-size: clamp(6px, 1.4vmin, 9px);
+  line-height: 1;
+  pointer-events: none;
+  filter: none;
+}
+
+/* Hover tooltip — appears above the slot */
+.lives-hud__heart--locked::before {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(8, 18, 38, 0.93);
+  border: 1px solid rgba(100, 180, 255, 0.3);
+  color: #d8f4ff;
+  font-family: 'Fredoka', sans-serif;
+  font-size: clamp(9px, 1.8vmin, 12px);
+  font-weight: 600;
+  white-space: nowrap;
+  padding: 3px 8px;
+  border-radius: 6px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: 200;
+}
+
+.lives-hud__heart--locked:hover::before {
+  opacity: 1;
 }
 
 .lives-hud__regen {
@@ -523,6 +616,10 @@
   display: flex;
 }
 
+.crush-pass-hint--hidden {
+  display: none !important;
+}
+
 .crush-pass-hint__cluster {
   display: flex;
   align-items: center;
@@ -628,6 +725,194 @@
   color: #d8f4ff;
   text-align: center;
   text-shadow: 0 2px 10px rgba(0, 0, 0, 0.55);
+}
+
+.crush-pass-manage {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: clamp(8px, 2vmin, 12px);
+  width: min(340px, 90vw);
+  margin: clamp(4px, 1vmin, 10px) 0 0;
+}
+
+.crush-pass-manage__btn {
+  font-family: 'Fredoka', sans-serif;
+  font-size: clamp(14px, 3.2vmin, 18px);
+  font-weight: 800;
+  border: none;
+  border-radius: 999px;
+  padding: 0.55em 1.2em;
+  cursor: pointer;
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.crush-pass-manage__btn--renew {
+  color: #fff;
+  background: linear-gradient(180deg, #5ce0f0, #28b8d8);
+  box-shadow: 0 4px 14px rgba(40, 160, 200, 0.45);
+}
+
+.crush-pass-manage__btn--renew:hover {
+  filter: brightness(1.06);
+  transform: scale(1.02);
+}
+
+.crush-pass-manage__btn--cancel {
+  color: #d8e8f0;
+  background: rgba(20, 40, 60, 0.55);
+  border: 1px solid rgba(140, 200, 255, 0.35);
+}
+
+.crush-pass-manage__btn--cancel:hover {
+  background: rgba(30, 55, 80, 0.65);
+}
+
+/* Mock purchase modal (Crush Pass) */
+.crush-pass-purchase-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 240;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.25s ease, visibility 0.25s ease;
+}
+
+.crush-pass-purchase-overlay.active {
+  pointer-events: auto;
+  opacity: 1;
+  visibility: visible;
+}
+
+.crush-pass-purchase-overlay__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(5, 15, 30, 0.72);
+  backdrop-filter: blur(4px);
+}
+
+.crush-pass-purchase-modal {
+  position: relative;
+  z-index: 1;
+  width: min(380px, 94vw);
+  max-height: min(90vh, 640px);
+  overflow: auto;
+  padding: clamp(18px, 4vmin, 28px);
+  border-radius: clamp(14px, 3vmin, 22px);
+  background: linear-gradient(165deg, #1a3a55 0%, #0d2038 100%);
+  border: 1px solid rgba(120, 210, 255, 0.35);
+  box-shadow:
+    0 12px 48px rgba(0, 20, 50, 0.55),
+    0 0 24px rgba(80, 190, 255, 0.2);
+  color: #e8f6ff;
+}
+
+.crush-pass-purchase-card {
+  display: block;
+  width: min(200px, 65%);
+  height: auto;
+  margin: 0 auto clamp(6px, 1.5vmin, 12px);
+  cursor: pointer;
+  filter: drop-shadow(0 6px 22px rgba(80, 200, 255, 0.45))
+          drop-shadow(0 2px 8px rgba(0, 30, 70, 0.5));
+  transition: transform 0.18s ease, filter 0.18s ease;
+  transform-origin: center 60%;
+  user-select: none;
+}
+
+.crush-pass-purchase-card:hover {
+  transform: scale(1.05) rotate(-1.5deg);
+  filter: drop-shadow(0 8px 28px rgba(100, 220, 255, 0.65))
+          drop-shadow(0 2px 10px rgba(0, 30, 70, 0.5));
+}
+
+.crush-pass-purchase-card--shake {
+  animation: crush-pass-card-shake 0.6s ease;
+}
+
+@keyframes crush-pass-card-shake {
+  0%, 100% { transform: rotate(0deg) scale(1); }
+  15%       { transform: rotate(-4deg) scale(1.06); }
+  30%       { transform: rotate(4deg)  scale(1.06); }
+  45%       { transform: rotate(-3deg) scale(1.04); }
+  60%       { transform: rotate(3deg)  scale(1.04); }
+  75%       { transform: rotate(-1.5deg) scale(1.02); }
+  90%       { transform: rotate(1.5deg)  scale(1.02); }
+}
+
+.crush-pass-purchase-title {
+  font-family: 'Fredoka', sans-serif;
+  font-size: clamp(20px, 4.5vmin, 26px);
+  font-weight: 800;
+  margin: 0 0 0.6em;
+  text-align: center;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
+}
+
+.crush-pass-purchase-perks {
+  margin: 0 0 1em 1.1em;
+  padding: 0;
+  font-family: 'Fredoka', sans-serif;
+  font-size: clamp(13px, 3vmin, 16px);
+  font-weight: 600;
+  line-height: 1.45;
+  color: #c8e8f8;
+}
+
+.crush-pass-purchase-perks li {
+  margin-bottom: 0.35em;
+}
+
+.crush-pass-purchase-price {
+  font-family: 'Fredoka', sans-serif;
+  font-size: clamp(17px, 3.8vmin, 22px);
+  font-weight: 800;
+  text-align: center;
+  margin: 0.3em 0 1em;
+  color: #fffbe8;
+  text-shadow: 0 0 14px rgba(255, 220, 120, 0.4);
+}
+
+.crush-pass-purchase-btn {
+  display: block;
+  width: 100%;
+  font-family: 'Fredoka', sans-serif;
+  font-size: clamp(15px, 3.4vmin, 18px);
+  font-weight: 800;
+  border: none;
+  border-radius: 999px;
+  padding: 0.65em 1em;
+  margin-bottom: 0.65em;
+  cursor: pointer;
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.crush-pass-purchase-btn--buy {
+  color: #fff;
+  background: linear-gradient(180deg, #5ce0f0, #28b8d8);
+  box-shadow: 0 6px 20px rgba(40, 160, 200, 0.5);
+}
+
+.crush-pass-purchase-btn--buy:hover {
+  filter: brightness(1.08);
+  transform: scale(1.02);
+}
+
+.crush-pass-purchase-btn--cancel {
+  color: #c0d8e8;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(140, 200, 255, 0.25);
+}
+
+.crush-pass-purchase-btn--cancel:hover {
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .crush-pass-burst {

@@ -73,9 +73,6 @@ Object.assign(window.__pengu ||= {}, {
     setCurrentLevel(lvl);
     window.location.href = '/?page=play';
   },
-  /** Crush Pass: bypass weekly cooldown for testing (`true` / `false`). */
-  setCrushPassRewardDebug: Inventory.setCrushPassRewardDebug,
-  getCrushPassRewardDebug: Inventory.getCrushPassRewardDebug,
 });
 
 let mapInited = false;

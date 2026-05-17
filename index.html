@@ -75,9 +75,13 @@
             <img src="/assets/ui/arrow.png" class="crush-pass-hint__arrow" alt="" draggable="false" />
           </div>
         </div>
-        <div class="crush-pass-ticket" id="crushPassTicket" role="button" tabindex="0" aria-label="Open Weekly Crush Pass reward">
+        <div class="crush-pass-ticket" id="crushPassTicket" role="button" tabindex="0" aria-label="Weekly Crush Pass ticket">
           <img class="crush-pass-ticket__left" src="/assets/ui/crush-pass-left.png" alt="" draggable="false" />
           <img class="crush-pass-ticket__right" src="/assets/ui/crush-pass-right.png" alt="" draggable="false" />
+        </div>
+        <div class="crush-pass-manage" id="crushPassManageRow" hidden>
+          <button type="button" class="crush-pass-manage__btn crush-pass-manage__btn--renew" id="crushPassRenewBtn">Renew pass</button>
+          <button type="button" class="crush-pass-manage__btn crush-pass-manage__btn--cancel" id="crushPassCancelSubscriptionBtn">Cancel renewal</button>
         </div>
         <p class="crush-pass-popup__timer" id="crushPassTimer" aria-live="polite"></p>
         <div class="crush-pass-burst" id="crushPassBurst" aria-hidden="true">
@@ -90,11 +94,33 @@
       </div>
     </div>
 
+    <div class="crush-pass-purchase-overlay" id="crushPassPurchaseOverlay" aria-hidden="true">
+      <div class="crush-pass-purchase-overlay__backdrop"></div>
+      <div class="crush-pass-purchase-modal" role="dialog" aria-modal="true" aria-labelledby="crushPassPurchaseTitle">
+        <img src="/assets/ui/crush-pass.png"
+             class="crush-pass-purchase-card"
+             id="crushPassPurchaseCard"
+             draggable="false"
+             alt="Weekly Crush Pass card — tap to wiggle" />
+        <h2 class="crush-pass-purchase-title" id="crushPassPurchaseTitle">Weekly Crush Pass</h2>
+        <ul class="crush-pass-purchase-perks">
+          <li>3× each booster</li>
+          <li>+2 bonus ice hearts (5 lives this week)</li>
+          <li>2× score multiplier all week</li>
+          <li>2× daily wheel rewards all week</li>
+          <li>Lucky shard bonus (15% chance)</li>
+        </ul>
+        <p class="crush-pass-purchase-price">$4.99 / week</p>
+        <button type="button" id="crushPassBuyBtn" class="crush-pass-purchase-btn crush-pass-purchase-btn--buy">Buy Pass</button>
+        <button type="button" id="crushPassCancelPurchaseBtn" class="crush-pass-purchase-btn crush-pass-purchase-btn--cancel">Not now</button>
+      </div>
+    </div>
+
     <div class="lives-hud" id="livesHud" aria-label="Lives">
       <img class="lives-hud__bg" src="/assets/ui/lives/lives-container.png" draggable="false" alt="" />
       <div class="lives-hud__inner">
         <div class="lives-hud__badge">
-          <span class="lives-hud__badge-count" id="livesCount">5</span>
+          <span class="lives-hud__badge-count" id="livesCount">3</span>
         </div>
         <div class="lives-hud__mid">
           <div class="lives-hud__hearts" id="livesHearts"></div>
