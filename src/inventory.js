@@ -31,6 +31,9 @@ function emptyState() {
     dailySpinHistory: [], // [{ date, reward, at }]
     lastCrushPass: null, // ISO week key, e.g. "2026-W20" (UTC-based ISO week)
     crushPassHistory: [], // [{ week, at, boostersEach, shardBonus? }]
+    lives: 5, // regular hearts 0–5
+    lastLifeRegenAt: null, // ISO — anchor for 8h regen; null when lives are full
+    frozenLives: 0, // weekly-pass bonus 0–2
   };
 }
 
@@ -64,6 +67,9 @@ export function getInventory() {
   if (!Array.isArray(s.dailySpinHistory)) s.dailySpinHistory = [];
   if (!Array.isArray(s.crushPassHistory)) s.crushPassHistory = [];
   if (s.lastCrushPass === undefined) s.lastCrushPass = null;
+  if (s.lives === undefined || s.lives === null) s.lives = 5;
+  if (s.frozenLives === undefined || s.frozenLives === null) s.frozenLives = 0;
+  if (s.lastLifeRegenAt === undefined) s.lastLifeRegenAt = null;
   return s;
 }
 
@@ -193,13 +199,136 @@ export function applyDailyReward(rewardText) {
   return effect;
 }
 
+// ── Daily lives (8h regen per heart, max 5 + up to 2 frozen from weekly pass) ──
+
+const LIVES_MAX = 5;
+const FROZEN_LIVES_MAX = 2;
+const LIFE_REGEN_MS = 8 * 60 * 60 * 1000;
+
+/**
+ * Apply regen ticks to `s` in memory. Returns whether `s` was mutated.
+ * @param {ReturnType<typeof emptyState>} s
+ */
+function applyLifeRegenToState(s) {
+  s.lives = Math.max(0, Math.min(LIVES_MAX, Number(s.lives) || 0));
+  s.frozenLives = Math.max(0, Math.min(FROZEN_LIVES_MAX, Number(s.frozenLives) || 0));
+  let changed = false;
+
+  if (s.lives >= LIVES_MAX) {
+    if (s.lives !== LIVES_MAX) {
+      s.lives = LIVES_MAX;
+      changed = true;
+    }
+    if (s.lastLifeRegenAt != null) {
+      s.lastLifeRegenAt = null;
+      changed = true;
+    }
+    return changed;
+  }
+
+  if (s.lastLifeRegenAt == null) {
+    s.lastLifeRegenAt = new Date().toISOString();
+    return true;
+  }
+
+  const anchor = Date.parse(s.lastLifeRegenAt);
+  const elapsed = Date.now() - anchor;
+  if (elapsed < LIFE_REGEN_MS) return changed;
+  const gained = Math.min(LIVES_MAX - s.lives, Math.floor(elapsed / LIFE_REGEN_MS));
+  if (gained <= 0) return changed;
+
+  s.lives += gained;
+  changed = true;
+  const newAnchor = anchor + gained * LIFE_REGEN_MS;
+  if (s.lives >= LIVES_MAX) {
+    s.lives = LIVES_MAX;
+    s.lastLifeRegenAt = null;
+  } else {
+    s.lastLifeRegenAt = new Date(newAnchor).toISOString();
+  }
+  return changed;
+}
+
+export function getMaxLives() {
+  return LIVES_MAX;
+}
+
+/** Snapshot after applying regen. Persists if regen added lives. */
+export function getLives() {
+  const s = getInventory();
+  const changed = applyLifeRegenToState(s);
+  if (changed) {
+    saveInventory(s);
+    dispatchInventoryChange();
+  }
+  return {
+    lives: s.lives,
+    frozenLives: s.frozenLives,
+    total: s.lives + s.frozenLives,
+  };
+}
+
+/** Ms until the next regular life from regen; 0 if full or regen is due now (call getLives to apply). */
+export function nextLifeRegenIn() {
+  getLives();
+  const s = getInventory();
+  if (s.lives >= LIVES_MAX) return 0;
+  if (!s.lastLifeRegenAt) return LIFE_REGEN_MS;
+  const elapsed = Date.now() - Date.parse(s.lastLifeRegenAt);
+  if (elapsed >= LIFE_REGEN_MS) return 0;
+  return Math.max(0, LIFE_REGEN_MS - elapsed);
+}
+
+/**
+ * Spend one life (regular first, then frozen). Returns false if none left.
+ */
+export function consumeLife() {
+  getLives();
+  const s = getInventory();
+  const total = s.lives + s.frozenLives;
+  if (total <= 0) return false;
+  if (s.lives > 0) {
+    s.lives -= 1;
+  } else {
+    s.frozenLives -= 1;
+  }
+  if (s.lives < LIVES_MAX && !s.lastLifeRegenAt) {
+    s.lastLifeRegenAt = new Date().toISOString();
+  }
+  saveInventory(s);
+  dispatchInventoryChange();
+  return true;
+}
+
+/** Shop / IAP: add regular lives up to max. */
+export function addLives(n = 1) {
+  if (n <= 0) return getLives();
+  getLives();
+  const s = getInventory();
+  s.lives = Math.min(LIVES_MAX, s.lives + n);
+  if (s.lives >= LIVES_MAX) s.lastLifeRegenAt = null;
+  saveInventory(s);
+  dispatchInventoryChange();
+  return getLives();
+}
+
+/** Weekly pass: add frozen capacity hearts (capped at 2). */
+export function grantFrozenLives(n = 2) {
+  if (n <= 0) return getLives();
+  const s = getInventory();
+  s.frozenLives = Math.min(FROZEN_LIVES_MAX, (s.frozenLives || 0) + n);
+  saveInventory(s);
+  dispatchInventoryChange();
+  return getLives();
+}
+
 // ── Weekly Crush Pass (UTC ISO week, one claim per week) ──────
 
 /**
  * Dev: set `true` to ignore the weekly cooldown (claim as many times as you like).
  * Or at runtime: `__pengu.setCrushPassRewardDebug(true)` — see entry.js.
  */
-export const DEBUG_CRUSH_PASS_REWARD = false; // true;
+export const DEBUG_CRUSH_PASS_REWARD = false;
 
 function crushPassRewardDebugEnabled() {
   if (DEBUG_CRUSH_PASS_REWARD) return true;
@@ -341,6 +470,9 @@ export function claimCrushPass() {
     shardBonus: shardBonus ? { kind: 'shard', id: shardBonus.id } : null,
   });
   if (s.crushPassHistory.length > 52) s.crushPassHistory = s.crushPassHistory.slice(-52);
+
+  s.frozenLives = Math.min(FROZEN_LIVES_MAX, (s.frozenLives || 0) + 2);
+
   saveInventory(s);
   dispatchInventoryChange();
 

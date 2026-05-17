@@ -305,6 +305,81 @@ export function initMap() {
 
   const overlay = document.getElementById('popupOverlay');
   let currentPopupLevel = null;
+  const popupPlayBtn = document.getElementById('popupPlay');
+
+  const LIFE_HEART_FULL = '/assets/ui/lives/heart-full.png';
+  const LIFE_HEART_ICE = '/assets/ui/lives/heart-ice.png';
+  const LIFE_HEART_EMPTY = '/assets/ui/lives/heart-empty.png';
+
+  function formatNextLifeCountdown(ms) {
+    const totalSec = Math.max(0, Math.floor(ms / 1000));
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const sec = totalSec % 60;
+    return `${h}h ${m}m ${sec}s`;
+  }
+
+  function renderLivesHud() {
+    const { lives, frozenLives, total } = Inventory.getLives();
+    const livesMax = Inventory.getMaxLives();
+
+    const countEl = document.getElementById('livesCount');
+    const rowEl = document.getElementById('livesHearts');
+    const regenEl = document.getElementById('livesRegen');
+
+    if (countEl) countEl.textContent = String(total);
+
+    if (rowEl) {
+      rowEl.innerHTML = '';
+      for (let slot = 1; slot <= livesMax; slot++) {
+        const img = document.createElement('img');
+        img.className = 'lives-hud__heart';
+        img.draggable = false;
+        img.alt = '';
+        const filled = slot <= lives + frozenLives;
+        if (!filled) {
+          img.src = LIFE_HEART_EMPTY;
+        } else {
+          const isLastTwoSlots = slot >= livesMax - 1;
+          if (isLastTwoSlots) {
+            img.src = LIFE_HEART_ICE;
+          } else if (slot <= lives) {
+            img.src = LIFE_HEART_FULL;
+          } else {
+            img.src = LIFE_HEART_ICE;
+          }
+        }
+        rowEl.appendChild(img);
+      }
+    }
+
+    if (regenEl) {
+      if (lives >= livesMax) regenEl.textContent = 'Full!';
+      else {
+        const ms = Inventory.nextLifeRegenIn();
+        regenEl.textContent =
+          ms <= 0
+            ? 'Next life soon…'
+            : `Next life in: ${formatNextLifeCountdown(ms)}`;
+      }
+    }
+
+    if (popupPlayBtn) {
+      const inactive = total <= 0;
+      popupPlayBtn.disabled = inactive;
+      popupPlayBtn.classList.toggle('pop-play--disabled', inactive);
+    }
+  }
+
+  window.addEventListener('pengu:inventory', renderLivesHud);
+
+  const livesBuyBtn = document.getElementById('livesBuyBtn');
+  livesBuyBtn?.addEventListener('click', () => {
+    alert('Shop coming soon!');
+  });
+
+  setInterval(renderLivesHud, 1000);
+  renderLivesHud();
 
   function openPopup(lv) {
     currentPopupLevel = lv;
@@ -327,6 +402,7 @@ export function initMap() {
     document.getElementById('popupBest').textContent = lv.best > 0 ? lv.best.toLocaleString() : '\u2014';
     renderShardSlots(document.getElementById('popupShards'), { counts: Inventory.getShards(), variant: 'card' });
     overlay.classList.add('active');
+    renderLivesHud();
   }
 
   function closePopup() { overlay.classList.remove('active'); currentPopupLevel = null; }
@@ -334,8 +410,18 @@ export function initMap() {
   document.getElementById('popupClose').addEventListener('click', closePopup);
   document.getElementById('popupBack').addEventListener('click', closePopup);
   overlay.addEventListener('click', e => { if (e.target === overlay) closePopup(); });
-  document.getElementById('popupPlay').addEventListener('click', () => {
-    if (currentPopupLevel) window.__pengu.goToLevel(currentPopupLevel.id);
+  popupPlayBtn?.addEventListener('click', () => {
+    if (!currentPopupLevel) return;
+    const { total } = Inventory.getLives();
+    if (total <= 0) {
+      alert('No lives left! Wait for the next free life or get more from the shop.');
+      return;
+    }
+    if (!Inventory.consumeLife()) {
+      alert('No lives left!');
+      return;
+    }
+    window.__pengu.goToLevel(currentPopupLevel.id);
   });
 
   // Daily wheel (map screen)

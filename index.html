@@ -90,6 +90,22 @@
       </div>
     </div>
 
+    <div class="lives-hud" id="livesHud" aria-label="Lives">
+      <img class="lives-hud__bg" src="/assets/ui/lives/lives-container.png" draggable="false" alt="" />
+      <div class="lives-hud__inner">
+        <div class="lives-hud__badge">
+          <span class="lives-hud__badge-count" id="livesCount">5</span>
+        </div>
+        <div class="lives-hud__mid">
+          <div class="lives-hud__hearts" id="livesHearts"></div>
+          <div class="lives-hud__regen" id="livesRegen" aria-live="polite">Full!</div>
+        </div>
+        <button type="button" class="lives-hud__plus" id="livesBuyBtn" aria-label="Get more lives">
+          <img src="/assets/ui/lives/plus-button.png" draggable="false" alt="" />
+        </button>
+      </div>
+    </div>
+
     <!-- AGW wallet button -->
     <button class="agw-btn" id="agwBtn">Connect Wallet</button>
 
