@@ -374,8 +374,9 @@ export function initMap() {
   window.addEventListener('pengu:inventory', renderLivesHud);
 
   const livesBuyBtn = document.getElementById('livesBuyBtn');
-  livesBuyBtn?.addEventListener('click', () => {
-    alert('Shop coming soon!');
+  livesBuyBtn?.addEventListener('click', e => {
+    e.stopPropagation();
+    document.getElementById('shopOverlay')?.classList.add('active');
   });
 
   setInterval(renderLivesHud, 1000);

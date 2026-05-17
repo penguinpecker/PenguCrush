@@ -269,8 +269,15 @@ document.querySelectorAll('.shop-tag[data-item]').forEach(tagEl => {
     if (tagEl.disabled) return;
     tagEl.disabled = true;
     const origLabel = labelEl ? labelEl.textContent : null;
-    const newCount = Inventory.addBooster(itemType, qty);
-    if (labelEl) labelEl.textContent = `+${qty} (${newCount})`;
+    let flashText = '';
+    if (itemType === 'lives') {
+      const snap = Inventory.addLives(qty);
+      flashText = `+${qty} (${snap.total})`;
+    } else {
+      const newCount = Inventory.addBooster(itemType, qty);
+      flashText = `+${qty} (${newCount})`;
+    }
+    if (labelEl) labelEl.textContent = flashText;
     setTimeout(() => {
       if (labelEl && origLabel) labelEl.textContent = origLabel;
       tagEl.disabled = false;
