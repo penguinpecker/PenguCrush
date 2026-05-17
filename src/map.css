@@ -288,7 +288,7 @@
   left: 50%;
   transform: translateX(-50%);
   z-index: 100;
-  width: min(85px, 13vw);
+  width: min(128px, 19.5vw);
   padding: 0;
   border: none;
   background: transparent;
@@ -1257,7 +1257,7 @@
     top: max(8px, env(safe-area-inset-top));
     left: max(8px, env(safe-area-inset-left));
     transform: none;
-    width: clamp(52px, 15vw, 70px);
+    width: clamp(78px, 22.5vw, 105px);
   }
 
   .crush-pass:hover,
