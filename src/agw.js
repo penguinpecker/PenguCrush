@@ -174,7 +174,7 @@ export async function connectAGW() {
 
   _publicClient = createPublicClient({
     chain: abstract,
-    transport: http(),
+    transport: http(getAbstractRpcUrl()),
   });
 
   // Build the higher-level AGW client for session-key APIs. Falls back to null
@@ -285,9 +285,18 @@ export async function ensureWalletClient() {
   return _walletClient;
 }
 
+/// Resolve the Abstract mainnet RPC URL. Prefers a custom URL injected at
+/// build time via VITE_ABSTRACT_RPC_URL (typically an Alchemy/Infura/QuickNode
+/// dedicated endpoint, set in Vercel env so it never lands in git). Falls back
+/// to viem's default public RPC if unset — rate-limited but functional.
+function getAbstractRpcUrl() {
+  const fromEnv = (import.meta.env?.VITE_ABSTRACT_RPC_URL || '').trim();
+  return fromEnv || undefined;
+}
+
 /** Get viem PublicClient (for reads) */
 export function getPublicClient() {
-  return _publicClient || createPublicClient({ chain: abstract, transport: http() });
+  return _publicClient || createPublicClient({ chain: abstract, transport: http(getAbstractRpcUrl()) });
 }
 
 /** Read contract (convenience) */

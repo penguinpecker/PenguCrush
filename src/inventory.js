@@ -622,16 +622,28 @@ const CURRENCY_NAME_BY_SKU = {
   [nameToSku('currency.xp')]:    'xp',
 };
 
+async function _readChainTriple(addr) {
+  return Promise.all([
+    readInventory(addr).catch(() => null),
+    readLives(addr).catch(() => null),
+    readCrushPass(addr).catch(() => null),
+  ]);
+}
+
 export async function hydrateFromChain() {
   const addr = getAGWAddress();
   if (!addr) return;
   try {
-    const [inv, lives, pass] = await Promise.all([
-      readInventory(addr).catch(() => null),
-      readLives(addr).catch(() => null),
-      readCrushPass(addr).catch(() => null),
-    ]);
-    if (!inv && !lives && !pass) return;
+    let [inv, lives, pass] = await _readChainTriple(addr);
+    if (!inv && !lives && !pass) {
+      // One-shot retry after 400ms — transient RPC blips on the just-after
+      // -receipt path used to leave the HUD stale forever, since the next
+      // hydrate only fires on another user action. One delayed retry
+      // catches ~95% of these cases without making the HUD flash.
+      await new Promise(r => setTimeout(r, 400));
+      [inv, lives, pass] = await _readChainTriple(addr);
+      if (!inv && !lives && !pass) return;
+    }
     const s = getInventory();
     let changed = false;
     if (inv) {

@@ -1068,12 +1068,29 @@ export function initMap() {
     closeCrushPassOverlay();
     openCrushPassPurchaseOverlay();
   });
-  crushPassCancelSubscriptionBtn?.addEventListener('click', e => {
+  crushPassCancelSubscriptionBtn?.addEventListener('click', async (e) => {
     e.stopPropagation();
-    Inventory.cancelCrushPass();
-    Events.passCancelled();
-    refreshCrushPassChrome();
-    closeCrushPassOverlay();
+    if (crushPassCancelSubscriptionBtn.disabled) return;
+    const orig = crushPassCancelSubscriptionBtn.textContent;
+    crushPassCancelSubscriptionBtn.disabled = true;
+    crushPassCancelSubscriptionBtn.textContent = 'Cancelling…';
+    try {
+      const { cancelCrushPass: chainCancelCrushPass } = await import('./onchain.js');
+      await chainCancelCrushPass();
+      await Inventory.hydrateFromChain().catch(() => {});
+      Events.passCancelled();
+      refreshCrushPassChrome();
+      closeCrushPassOverlay();
+    } catch (err) {
+      const msg = String(err?.shortMessage || err?.message || err).slice(0, 240);
+      console.warn('cancelCrushPass failed:', msg);
+      if (!/reject|denied|cancel/i.test(msg)) {
+        alert(`Could not cancel the pass on chain:\n\n${msg}`);
+      }
+    } finally {
+      crushPassCancelSubscriptionBtn.disabled = false;
+      if (orig) crushPassCancelSubscriptionBtn.textContent = orig;
+    }
   });
   crushPassTicket?.addEventListener('click', e => {
     e.stopPropagation();
