@@ -25,13 +25,23 @@ Contracts (LEGACY — will be deprecated by v2):
   v1 proxy owner               0x5fc1542618222BC6ECD0912e9B1F8D9a929Ed331
   Authorized relayer (v1)      0x6cB7318BCb62bec46F4A48E0E8d4E4E9EB0Ce6d3
 
-New deployer / treasury (v2):
+New deployer / treasury / relayer (v2):
   Deployer EOA                 0xDdbbc73A42814c42943095cc7F51762fb038BC9A
-    Funded on Abstract:        0.01945 ETH (2026-05-18)
-    Nonce at fund time:        0
-  Treasury                     same as deployer (rotates via setTreasury later)
-  Price quote relayer          same as deployer (will be split later)
-  Life-regen relayer           TBD (separate EOA, funded ~0.01 ETH)
+                               (also owner + treasury at deploy time)
+  Relayer EOA                  0xeF95BD4e26109D7B8933CEc500C7358d8E91CF31
+                               (rotated in 2026-05-18 via setPriceRelayer +
+                                setWheelRelayer; lower-privilege signing-only
+                                + offline regen-sweep tx sender)
+    txs: 0x393015e3…685e87 (setPriceRelayer)
+         0xa565ea05…3c1f0 (setWheelRelayer)
+    Relayer key stored in Supabase Vault (encrypted at rest via pgsodium,
+    decryptable only by service_role via public.get_vault_secret RPC).
+    NOTE: relayer key was pasted in chat once during the v2 bring-up so
+    a leak window exists in transcript. Rotate before any meaningful
+    value moves through this EOA. Functionally, the relayer cannot move
+    funds — only sign EIP-712 quotes / wheel rolls and send claimRegenBatch
+    txs from its own balance.
+  Treasury                     0xDdbbc73A…BC9A (same as deployer for now)
 
 Backend:
   Supabase project ref         saftqlwxmdqxzfuwdgtu (V2, ap-south-1, created 2026-05-18)
@@ -43,10 +53,11 @@ Backend:
                                pengu-regen-sweep (DEPLOYED, ACTIVE,
                                                   scheduled hourly via pg_cron
                                                   at minute :07 UTC)
-  Required Supabase secrets    RELAYER_PRIVATE_KEY   ← USER MUST ADD via
-  (set in dashboard, not       LIFE_REGEN_RELAYER_PK   dashboard before shop
-   in any file)                                       and wheel work
-                               (dashboard URL: settings/functions on V2 project)
+  Required Supabase secrets    RELAYER_PRIVATE_KEY — stored in Supabase Vault
+  (encrypted at rest)          (vault.secrets), accessed via the
+                               public.get_vault_secret(text) security-definer
+                               RPC. Edge functions fall back to Deno.env if
+                               the dashboard secret is ever set there too.
 
 Frontend:
   Vercel project               penguinpeckers-projects/pengu-crush
@@ -150,6 +161,32 @@ Frontend:
     - Solidity 0.8.24: require(cond, CustomError()) NOT supported, must
       use if(!cond) revert CustomError(); pattern
     - Never call renounceOwnership on UUPS — locks impl forever
+
+2026-05-18 — Relayer rotated to separate EOA + Vault wired
+  ▸ User confirmed intent: relayer must be a separate EOA from deployer
+    (signing-only + low-balance hot wallet; deployer stays cold for admin).
+  ▸ Pasted relayer key → derives to 0xeF95BD4e26109D7B8933CEc500C7358d8E91CF31.
+  ▸ Stored into Supabase Vault via vault.create_secret() (pgsodium-encrypted).
+    Verified round-trip: vault.decrypted_secrets returns 66-char key.
+  ▸ Added public.get_vault_secret(p_name text) security-definer RPC so edge
+    functions can read the secret without exposing vault schema to PostgREST.
+    Revoked execute from anon/authenticated; service_role only.
+  ▸ Re-deployed all 3 edge functions (v3) to fetch the relayer key via the
+    RPC (with Deno.env precedence preserved for future dashboard-secret use).
+  ▸ Rotated on-chain priceRelayer + wheelRelayer to 0xeF95BD4e…CF31 via
+    setPriceRelayer + setWheelRelayer (txs 0x393015e3…685e87,
+    0xa565ea05…3c1f0). Signed locally with deployer key (.env.local).
+  ▸ END-TO-END VERIFIED:
+    - curl /pengu-quote-price → returns real EIP-712 signature
+    - Signature recovers to 0xeF95BD4e…CF31 (matches on-chain priceRelayer)
+    - Wheel endpoint returns roll + signature, slot index from on-chain
+      wheelConfig weighted RNG
+    - CoinGecko ETH/USD feed live: $2.98 → 0.00141 ETH at current spot
+  ▸ Outstanding: relayer wallet has 0 ETH; needs funding for the hourly
+    regen-sweep cron to actually send claimRegenBatch. Signing works
+    without ETH balance.
+  ▸ Security note in records: relayer private key passed through chat once
+    during bring-up. Consider rotating before any meaningful value moves.
 
 2026-05-18 — SHIPPED V2 to production
   ▸ Pushed bf947ff..413867b to origin/main. User authorization: explicit
@@ -392,8 +429,14 @@ When something gets deployed, append:
                                                        + on-chain LevelCheckpoint
                                                        every 5 moves
 [ ] Mid-game RESUME UI on level open (snapshot save works, restore deferred)
-[ ] Split deployer/treasury/relayer EOAs            → all same wallet for now
-                                                       (0xDdbbc73A…BC9A)
+[x] Split deployer/treasury/relayer EOAs            → relayer rotated to
+                                                       0xeF95BD4e…CF31 (separate
+                                                       lower-privilege EOA).
+                                                       Deployer + treasury still
+                                                       collapsed for now.
+[ ] Fund relayer (currently 0.0 ETH) so regen-sweep cron can send
+    claimRegenBatch txs each hour. User stated they're funding it.
+[ ] Rotate relayer key (transcript exposure during bring-up)
 [x] Wheel "Ice Boost" semantics                     → random pool resolved on
                                                        chain via setRandomPool;
                                                        wheel relayer rolls slot
