@@ -2,7 +2,7 @@
 // Signs an EIP-712 ShopQuote that PenguCrushV2 verifies during shop purchases.
 // POST { buyer, skuName, qty, currency } → { quote, signature, ttlSec }
 
-import { signShopQuote, sku, randomNonce, getEthUsdPrice, usdMicrosToWei, SKU_UNIT_USD_MICROS, type ShopQuote } from './_shared/eip712.ts';
+import { signShopQuote, sku, randomNonce, getEthUsdPrice, usdMicrosToWei, SKU_UNIT_USD_MICROS, EthUsdUnavailable, type ShopQuote } from './_shared/eip712.ts';
 
 const CORS = {
   'access-control-allow-origin': '*',
@@ -27,8 +27,20 @@ Deno.serve(async (req) => {
 
     const totalUsdMicros = unit * BigInt(qty);
     let amount: bigint;
-    if (currency === 'USDC') amount = totalUsdMicros;
-    else { const ethUsd = await getEthUsdPrice(); amount = usdMicrosToWei(totalUsdMicros, ethUsd); }
+    if (currency === 'USDC') {
+      amount = totalUsdMicros;
+    } else {
+      try {
+        const ethUsd = await getEthUsdPrice();
+        amount = usdMicrosToWei(totalUsdMicros, ethUsd);
+      } catch (e) {
+        if (e instanceof EthUsdUnavailable) {
+          // Fail-closed: don't mint a mis-priced quote. Client should retry.
+          return json({ error: 'eth_usd_unavailable', retryAfterSec: 30 }, 503);
+        }
+        throw e;
+      }
+    }
 
     const skuHash = sku(skuName);
     const nonce = randomNonce();

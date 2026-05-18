@@ -81,30 +81,23 @@ export async function fetchLeaderboard(limit = 20) {
 // ═══════════════════════════════════════════════════
 //  WRITE — save level result via edge function
 // ═══════════════════════════════════════════════════
-export async function saveLevelResult({ wallet, level, score, stars, movesUsed, completed }) {
-  // V2 supabase uses the `rpc_upsert_player_progress` Postgres function
-  // (security definer, bypasses RLS) instead of the legacy edge function.
-  // The on-chain `submitLevel` tx is the source of truth; this mirror is for
-  // fast leaderboard reads via the Supabase view.
+/**
+ * Mirror the on-chain `submitLevel` result into Supabase for fast leaderboard
+ * reads. The on-chain tx is the source of truth.
+ *
+ * NOTE — security hardening 2026-05-18: `rpc_upsert_player_progress` had its
+ * EXECUTE grant revoked from anon (audit finding H2: anyone could inflate the
+ * leaderboard). This function is now a graceful no-op for anon writes; the
+ * leaderboard mirror stays empty until a signed-write edge function lands.
+ * Frontend leaderboard reads should pivot to on-chain `getPlayers` +
+ * `getLeaderboardBatch` (follow-up).
+ */
+export async function saveLevelResult({ wallet }) {
   if (!wallet) return null;
-  try {
-    const { data, error } = await supabase.rpc('rpc_upsert_player_progress', {
-      p_wallet: wallet.toLowerCase(),
-      p_level: level,
-      p_score: score,
-      p_stars: stars,
-      p_moves_used: movesUsed,
-      p_completed: !!completed,
-    });
-    if (error) {
-      console.error('Save progress failed:', error.message);
-      return null;
-    }
-    return { success: true, playerId: data };
-  } catch (err) {
-    console.error('Save progress failed:', err);
-    return null;
-  }
+  // Skip the direct RPC — it's anon-revoked. Real on-chain write happens via
+  // submitLevel() in src/game.js. Returning null is the explicit "no mirror"
+  // signal; callers already treat null as benign.
+  return null;
 }
 
 // ═══════════════════════════════════════════════════

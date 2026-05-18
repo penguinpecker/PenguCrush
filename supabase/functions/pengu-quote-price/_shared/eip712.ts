@@ -97,20 +97,39 @@ export const SKU_UNIT_USD_MICROS: Record<string, bigint> = {
   'pass.weekly':       4_990_000n,
 };
 
-/// Dynamic ETH/USD spot. CoinGecko free tier; fallback to env if rate-limited.
+/// Dynamic ETH/USD spot. CoinGecko free tier — FAILS CLOSED if upstream is
+/// down so we don't silently underprice quotes when ETH moons during a CG
+/// outage. Caller is expected to catch and return a 503 to the client.
+/// To explicitly opt back into the (dangerous) fallback, set the env var
+/// `ETH_USD_PRICE_FALLBACK_ALLOWED=true` and provide `ETH_USD_FALLBACK`.
+export class EthUsdUnavailable extends Error {
+  constructor(reason: string) { super(`ETH/USD price unavailable: ${reason}`); }
+}
+
 export async function getEthUsdPrice(): Promise<number> {
+  let lastErr: unknown;
   try {
-    const r = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd');
+    const r = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd', {
+      signal: AbortSignal.timeout(4000),
+    });
     if (!r.ok) throw new Error(`coingecko ${r.status}`);
     const j = await r.json();
     const p = Number(j?.ethereum?.usd);
     if (Number.isFinite(p) && p > 100 && p < 100_000) return p;
     throw new Error(`bad price ${p}`);
   } catch (err) {
-    const fallback = Number(Deno.env.get('ETH_USD_FALLBACK') || '3000');
-    console.warn('CoinGecko ETH/USD lookup failed, using fallback:', err, fallback);
-    return fallback;
+    lastErr = err;
   }
+  // Fail-closed by default. Operator can opt-in to the fallback via env if they
+  // accept the silent-mispricing risk for development environments.
+  if (Deno.env.get('ETH_USD_PRICE_FALLBACK_ALLOWED') === 'true') {
+    const fallback = Number(Deno.env.get('ETH_USD_FALLBACK') || '0');
+    if (Number.isFinite(fallback) && fallback > 100 && fallback < 100_000) {
+      console.warn('CoinGecko ETH/USD failed, using opted-in fallback:', lastErr, fallback);
+      return fallback;
+    }
+  }
+  throw new EthUsdUnavailable(String((lastErr as Error)?.message || lastErr || 'unknown'));
 }
 
 export function usdMicrosToWei(usdMicros: bigint, ethUsd: number): bigint {

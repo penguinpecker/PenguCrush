@@ -182,18 +182,26 @@ updateNav();
 let lbDataLoaded = false;
 
 function shortAddr(addr) {
-  if (!addr) return '???';
+  // Only accept canonical 0x + 40 hex; anything else gets normalized so it
+  // cannot smuggle HTML into the leaderboard render (defense-in-depth even
+  // though buildRow now uses textContent, not innerHTML).
+  if (typeof addr !== 'string') return '???';
+  if (!/^0x[a-fA-F0-9]{40}$/.test(addr)) return '???';
   return addr.slice(0, 6) + '...' + addr.slice(-4);
 }
 
 function buildRow(rank, wallet, xp) {
   const cls = rank === 1 ? 'lb-row--gold' : rank === 2 ? 'lb-row--silver' : rank === 3 ? 'lb-row--bronze' : '';
-  return `<div class="lb-row ${cls}">
-    <div class="lb-rank">${rank}</div>
-    <div class="lb-penguin">🐧</div>
-    <div class="lb-addr">${shortAddr(wallet)}</div>
-    <div class="lb-xp">${xp.toLocaleString()} XP</div>
-  </div>`;
+  // Build via createElement + textContent so wallet text can never be parsed
+  // as HTML, even if Supabase rows are later modified by a malicious party.
+  const row = document.createElement('div');
+  row.className = 'lb-row' + (cls ? ' ' + cls : '');
+  const rankEl = document.createElement('div'); rankEl.className = 'lb-rank';    rankEl.textContent = String(rank);
+  const peng   = document.createElement('div'); peng.className   = 'lb-penguin'; peng.textContent   = '🐧';
+  const addrEl = document.createElement('div'); addrEl.className = 'lb-addr';    addrEl.textContent = shortAddr(wallet);
+  const xpEl   = document.createElement('div'); xpEl.className   = 'lb-xp';      xpEl.textContent   = `${Number(xp || 0).toLocaleString()} XP`;
+  row.append(rankEl, peng, addrEl, xpEl);
+  return row;
 }
 
 async function loadLeaderboard() {
@@ -212,24 +220,38 @@ async function loadLeaderboard() {
 
     loading?.classList.remove('active');
 
+    const placeholder = (text) => {
+      const r = document.createElement('div'); r.className = 'lb-row';
+      const a = document.createElement('div'); a.className = 'lb-addr';
+      a.style.cssText = 'text-align:center;width:100%';
+      a.textContent = text;
+      r.appendChild(a);
+      return r;
+    };
     if (!data || data.length === 0) {
-      leftCol.innerHTML = '<div class="lb-row"><div class="lb-addr" style="text-align:center;width:100%">No players yet!</div></div>';
+      leftCol.appendChild(placeholder('No players yet!'));
       Events.leaderboardLoadSuccess(0);
       return;
     }
 
-    // Split into 2 columns: 1-13 left, 14-25 right
+    // Split into 2 columns: 1-13 left, 14-25 right. Append DOM nodes so wallet
+    // text can never be re-parsed as HTML.
     const mid = Math.min(13, data.length);
     for (let i = 0; i < data.length; i++) {
       const row = buildRow(i + 1, data[i].wallet_address, data[i].total_score || 0);
-      if (i < mid) leftCol.innerHTML += row;
-      else rightCol.innerHTML += row;
+      if (i < mid) leftCol.appendChild(row);
+      else rightCol.appendChild(row);
     }
     lbDataLoaded = true;
     Events.leaderboardLoadSuccess(data.length);
   } catch (err) {
     loading?.classList.remove('active');
-    leftCol.innerHTML = '<div class="lb-row"><div class="lb-addr" style="text-align:center;width:100%">Failed to load</div></div>';
+    const r = document.createElement('div'); r.className = 'lb-row';
+    const a = document.createElement('div'); a.className = 'lb-addr';
+    a.style.cssText = 'text-align:center;width:100%';
+    a.textContent = 'Failed to load';
+    r.appendChild(a);
+    leftCol.appendChild(r);
     console.error('Leaderboard error:', err);
     Events.leaderboardLoadFail(String(err?.message || err).slice(0, 100));
   }

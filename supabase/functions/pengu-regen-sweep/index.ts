@@ -2,16 +2,20 @@
 // Hourly cron (pg_cron @ minute :07). Sweeps registered players whose 8h
 // life-regen tick is due and calls PenguCrushV2.claimRegenBatch so a
 // LifeRegenerated event fires for each offline player too.
+//
+// AUTH: requires `x-cron-secret` request header matching vault.secrets/CRON_SECRET.
+// pg_cron is configured to send it; ad-hoc curls without the header get 401.
+// Closes audit finding H4 (unauthenticated public sweep → relayer-gas burn).
 
 import { createPublicClient, createWalletClient, http } from 'npm:viem@^2.47.12';
 import { privateKeyToAccount } from 'npm:viem@^2.47.12/accounts';
 import { abstract } from 'npm:viem@^2.47.12/chains';
-import { getRelayerKey } from './_shared/vault.ts';
+import { getRelayerKey, getCronSecret, constantTimeEqual } from './_shared/vault.ts';
 
 const CORS = {
   'access-control-allow-origin': '*',
   'access-control-allow-methods': 'POST,GET,OPTIONS',
-  'access-control-allow-headers': 'content-type,authorization,apikey',
+  'access-control-allow-headers': 'content-type,authorization,apikey,x-cron-secret',
 };
 const PENGUCRUSH_ADDRESS = '0x06aCb91c46aD1359825560B19A9556118Aeb1896' as const;
 
@@ -31,6 +35,16 @@ const BATCH_SIZE = 50;
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
+  // Auth gate — require x-cron-secret matching vault.secrets/CRON_SECRET
+  try {
+    const provided = req.headers.get('x-cron-secret') || '';
+    if (!provided) return json({ error: 'unauthorized' }, 401);
+    const expected = await getCronSecret();
+    if (!constantTimeEqual(provided, expected)) return json({ error: 'unauthorized' }, 401);
+  } catch (e) {
+    console.error('auth failure:', e);
+    return json({ error: 'auth_internal' }, 500);
+  }
   try {
     const pk = await getRelayerKey() as `0x${string}`;
     const publicClient = createPublicClient({ chain: abstract, transport: http() });
@@ -81,7 +95,7 @@ Deno.serve(async (req) => {
     return json({ swept: eligible.length, batches: txHashes.length, txHashes });
   } catch (err) {
     console.error('pengu-regen-sweep error:', err);
-    return json({ error: (err as Error).message || String(err) }, 500);
+    return json({ error: 'server_error' }, 500);
   }
 });
 

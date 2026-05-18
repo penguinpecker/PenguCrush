@@ -436,6 +436,54 @@ ADR-005 (2026-05-18) — AGW session keys for in-game txs
 When something gets deployed, append:
   YYYY-MM-DD  contract  proxy_address  impl_address  tx_hash  network
 
+2026-05-18 — Security hardening pass 1 (audit fixes #1-#7)
+  ▸ Fix #1 — supabase/config.toml project_id corrected to
+    saftqlwxmdqxzfuwdgtu (was abandoned project ref).
+  ▸ Fix #2 — rpc_upsert_player_progress: wallet regex + level/score/
+    stars/moves bounds + EXECUTE revoked from anon/authenticated.
+    pengu_players.wallet_address constraint check added.
+    Frontend saveLevelResult now a graceful no-op (returns null);
+    leaderboard mirror stays empty until a signed-write edge function
+    lands. Follow-up: pivot leaderboard reads to on-chain getPlayers +
+    getLeaderboardBatch.
+  ▸ Fix #3 — pengu_game_snapshots: wallet regex constraint + INSERT
+    trigger caps each wallet at 30 active snapshots. RLS policies
+    rewritten to require wallet format match.
+  ▸ Fix #4 — entry.js buildRow now uses document.createElement +
+    textContent instead of innerHTML += interpolation. shortAddr
+    validates 0x+40hex before slicing; non-matching returns '???'.
+    Also re-templated the placeholder rows to use createElement.
+  ▸ Fix #5 — CRON_SECRET (32-byte hex) inserted into vault.secrets;
+    pg_cron job pengu-regen-sweep-hourly reissued to pass header
+    `x-cron-secret`. Edge function v4 enforces constant-time compare
+    against the secret; returns 401 without it (verified live).
+  ▸ Fix #6 — getEthUsdPrice now FAILS CLOSED. New EthUsdUnavailable
+    error; index.ts returns HTTP 503 retryAfterSec:30 instead of
+    silently quoting at $3000. Opt-in flag
+    ETH_USD_PRICE_FALLBACK_ALLOWED=true + ETH_USD_FALLBACK still
+    available for dev environments.
+  ▸ Fix #7 — Content-Security-Policy meta added to index.html:
+    script-src self + googletagmanager + gstatic, style-src self +
+    fonts.googleapis, img-src self + data + blob + https, connect-src
+    self + *.supabase.co + Abstract RPC + GA + Privy. object-src none,
+    base-uri self, form-action self.
+  ▸ Live verification:
+    - quote-price returns valid signed quote for ETH purchase
+    - regen-sweep without secret → 401 unauthorized
+    - regen-sweep with bad secret → 401 unauthorized
+    - regen-sweep with correct secret → 200 {swept:0}
+    - direct supabase.rpc('rpc_upsert_player_progress',...) from anon
+      → 42501 permission denied
+  ▸ Migration applied: 20260518111500_v2_security_hardening
+    (local file omits the CRON_SECRET value; insert separately on
+    fresh-project replay).
+  ▸ Out-of-scope this pass (contract upgrade required, queued for V2.1):
+    audit findings #8-#17 — startLevel-required precondition, shard
+    array cap, server-side stars validation, Pyth wiring or removal,
+    ETH overpay refund, totalScore uint64, journal hash in event,
+    per-relayer nonce separation, owner→multisig transfer (declined
+    by user this session).
+
 ═══════════════════════════════════════════════════════════════════════════════
 5. OUTSTANDING QUESTIONS / TODO
 ═══════════════════════════════════════════════════════════════════════════════
