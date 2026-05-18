@@ -85,16 +85,21 @@ export function randomNonce(): string {
   return n.toString();
 }
 
-/// USD-denominated per-unit prices (micros = 6 decimals). Must match
-/// on-chain `skuPriceUsdMicros` mapping seeded in PenguCrushV2.initialize().
-export const SKU_UNIT_USD_MICROS: Record<string, bigint> = {
-  'booster.row':       2_980_000n,
-  'booster.col':       2_980_000n,
-  'booster.colorBomb': 2_980_000n,
-  'booster.hammer':    2_980_000n,
-  'booster.shuffle':   2_980_000n,
-  'life.regular':      2_990_000n,
-  'pass.weekly':       4_990_000n,
+/// Canonical bundle definitions. The UI sells one bundle per click — the
+/// label IS the bundle total, not a per-unit cost.
+///   booster.* = 4 boosters for $2.98 (flat)
+///   life.regular = 5 lives for $2.99 (flat)
+///   pass.weekly = 1 pass for $4.99
+/// The server clamps `qty` to `size`, so a client cannot request 99
+/// boosters and pay $2.98 by tampering with the request.
+export const SKU_BUNDLES: Record<string, { size: number; priceMicros: bigint }> = {
+  'booster.row':       { size: 4, priceMicros: 2_980_000n },
+  'booster.col':       { size: 4, priceMicros: 2_980_000n },
+  'booster.colorBomb': { size: 4, priceMicros: 2_980_000n },
+  'booster.hammer':    { size: 4, priceMicros: 2_980_000n },
+  'booster.shuffle':   { size: 4, priceMicros: 2_980_000n },
+  'life.regular':      { size: 5, priceMicros: 2_990_000n },
+  'pass.weekly':       { size: 1, priceMicros: 4_990_000n },
 };
 
 /// Dynamic ETH/USD spot. CoinGecko free tier — FAILS CLOSED if upstream is

@@ -2,7 +2,7 @@
 // Signs an EIP-712 ShopQuote that PenguCrushV2 verifies during shop purchases.
 // POST { buyer, skuName, qty, currency } → { quote, signature, ttlSec }
 
-import { signShopQuote, sku, randomNonce, getEthUsdPrice, usdMicrosToWei, SKU_UNIT_USD_MICROS, EthUsdUnavailable, type ShopQuote } from './_shared/eip712.ts';
+import { signShopQuote, sku, randomNonce, getEthUsdPrice, usdMicrosToWei, SKU_BUNDLES, EthUsdUnavailable, type ShopQuote } from './_shared/eip712.ts';
 
 const CORS = {
   'access-control-allow-origin': '*',
@@ -18,14 +18,16 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const buyer = (body?.buyer || '').toLowerCase();
     const skuName = body?.skuName;
-    const qty = Math.max(1, Math.min(99, Number(body?.qty || 1)));
     const currency = (body?.currency || 'ETH').toUpperCase();
     if (!/^0x[a-f0-9]{40}$/.test(buyer)) return json({ error: 'bad buyer' }, 400);
-    const unit = SKU_UNIT_USD_MICROS[skuName];
-    if (!unit) return json({ error: 'unknown sku' }, 400);
+    const bundle = SKU_BUNDLES[skuName];
+    if (!bundle) return json({ error: 'unknown sku' }, 400);
     if (!['ETH', 'USDC'].includes(currency)) return json({ error: 'bad currency' }, 400);
 
-    const totalUsdMicros = unit * BigInt(qty);
+    // Server is the source of truth for bundle size + price. Ignore any
+    // qty in the request body — clients buy exactly one bundle per click.
+    const qty = bundle.size;
+    const totalUsdMicros = bundle.priceMicros;
     let amount: bigint;
     if (currency === 'USDC') {
       amount = totalUsdMicros;
