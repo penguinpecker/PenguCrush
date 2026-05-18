@@ -2,13 +2,21 @@
   "abstractMainnet": {
     "PenguCrushV2": {
       "proxy": "0x06aCb91c46aD1359825560B19A9556118Aeb1896",
+      "implementation": "0xa742dd48E82B970770A557f89f062769B5A764B9",
       "owner": "0xDdbbc73A42814c42943095cc7F51762fb038BC9A",
-      "treasury": "0xDdbbc73A42814c42943095cc7F51762fb038BC9A",
-      "priceRelayer": "0xDdbbc73A42814c42943095cc7F51762fb038BC9A",
-      "wheelRelayer": "0xDdbbc73A42814c42943095cc7F51762fb038BC9A",
+      "treasury": "0xBCaFE23d6D072d65d87E138AfFefc61342D73d0b",
+      "treasuryRotationTx": "0x89ba2a44f1b7fff76362320752abddde68cfa17c8c6797638eb08088e4e12053",
+      "priceRelayer": "0xeF95BD4e26109D7B8933CEc500C7358d8E91CF31",
+      "wheelRelayer": "0xeF95BD4e26109D7B8933CEc500C7358d8E91CF31",
+      "relayerRotationTxs": [
+        "0x393015e301284460cea0b256e8bbc60f4dda54af5f62adc40e019cc88d685e87",
+        "0xa565ea05e21514182bfd0d8d4a7d0443fcf453fde33dc2db47da88b15dc3c1f0"
+      ],
       "usdc": "0x84A71ccD554Cc1b02749b35d22F684CC8ec987e1",
       "pyth": "0x8739d5024B5143278E2b15Bd9e7C26f6CEc658F1",
       "pythEthUsdId": "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
+      "pythGuardEnabled": false,
+      "abscanVerificationIds": { "proxy": 12781, "implementation": 12780 },
       "deployedAt": "2026-05-18T07:09:28.151Z",
       "deployedBy": "0xDdbbc73A42814c42943095cc7F51762fb038BC9A"
     }
