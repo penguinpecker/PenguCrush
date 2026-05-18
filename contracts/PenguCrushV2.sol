@@ -257,8 +257,14 @@ contract PenguCrushV2 is
     // though the journal itself is still authored by the player.
     address public validatorRelayer;
 
+    // ── V2.3 additions (starter pack) ──
+    // True after a wallet has called `claimStarterPack` once. The starter
+    // pack grants 1 of every enabled Booster-kind item on chain so the HUD
+    // doesn't have to lie about default inventory. Permissionless + idempotent.
+    mapping(address => bool) public claimedStarterPack;
+
     // -- Reserved for upgrades --
-    uint256[37] private __gap; // shrunk from 38 to make room for validatorRelayer
+    uint256[36] private __gap; // shrunk from 37 to make room for claimedStarterPack
 
     // ═══════════════════════════════════════════════════════════════
     //  EVENTS
@@ -286,6 +292,8 @@ contract PenguCrushV2 is
     /// matching journalHash entries (audit fix #10).
     event LevelValidated(address indexed player, uint16 indexed level, bytes32 indexed journalHash);
     event ValidatorRelayerUpdated(address oldRelayer, address newRelayer);
+    /// V2.3: emitted on the one-time per-wallet starter-pack grant.
+    event StarterPackClaimed(address indexed player);
 
     // -- Items / inventory --
     event BoosterUsed(address indexed player, bytes32 indexed sku, uint16 atLevel, uint32 balanceAfter);
@@ -396,6 +404,8 @@ contract PenguCrushV2 is
     error ValidatorNotConfigured(); // validatorRelayer is the zero address
     error ValidatorBadSigner();     // sig didn't recover to validatorRelayer
     error ValidatorPlayerMismatch();// signed payload's player != msg.sender
+    // V2.3 (starter pack)
+    error StarterPackAlreadyClaimed();
 
     // ═══════════════════════════════════════════════════════════════
     //  INITIALIZER
@@ -599,6 +609,32 @@ contract PenguCrushV2 is
     function levelCheckpoint(uint16 level, uint16 moveNum, bytes32 snapshotHash) external whenGameplayActive {
         if (level < 1 || level > maxLevel) revert InvalidLevel();
         emit LevelCheckpoint(msg.sender, level, moveNum, snapshotHash);
+    }
+
+    /// V2.3: one-time per-wallet starter pack — 1 of every enabled Booster-kind
+    /// item. Permissionless (any player can call for themselves). Idempotent
+    /// guard via `claimedStarterPack[msg.sender]`. Iterates `itemSkus[]` so
+    /// new Booster items registered later via `registerItem` get included
+    /// automatically.
+    function claimStarterPack() external whenGameplayActive {
+        if (claimedStarterPack[msg.sender]) revert StarterPackAlreadyClaimed();
+        claimedStarterPack[msg.sender] = true;
+        _registerIfNeeded(msg.sender);
+        uint256 n = itemSkus.length;
+        for (uint256 i = 0; i < n; i++) {
+            bytes32 sku = itemSkus[i];
+            ItemConfig memory cfg = items[sku];
+            if (cfg.kind != ItemKind.Booster || !cfg.enabled) continue;
+            // Only grant if balance is currently 0 — protects against
+            // re-claim via a future upgrade that adds a `resetStarterPack`
+            // path. Today the `claimedStarterPack` flag already prevents
+            // double-claim, so this is belt-and-suspenders.
+            if (boosterBalance[msg.sender][sku] == 0) {
+                boosterBalance[msg.sender][sku] = 1;
+                emit BoosterGranted(msg.sender, sku, 1, 1);
+            }
+        }
+        emit StarterPackClaimed(msg.sender);
     }
 
     function _submitLevelInternal(address player, LevelJournal calldata j) internal {

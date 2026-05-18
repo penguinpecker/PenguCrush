@@ -3,7 +3,7 @@ import './map.css';
 import { getAGWAddress, isSignedIn, connectAGW, signInWithAGW, getAgwClient } from './agw.js';
 import * as Inventory from './inventory.js';
 import { isLevelUnlocked } from './progress.js';
-import { buyBoosterETH, buyLivesETH } from './onchain.js';
+import { buyBoosterETH, buyLivesETH, claimStarterPack, readStarterPackClaimed } from './onchain.js';
 import { hasActiveSession, grantSession } from './session-key.js';
 import { Events, setAnalyticsUser } from './analytics.js';
 import './dev-stars.js'; // adds window.__pengu.starDev() — no UI unless enabled
@@ -75,6 +75,24 @@ Object.assign(window.__pengu ||= {}, {
   goToLevel(lvl) {
     setCurrentLevel(lvl);
     window.location.href = '/?page=play';
+  },
+  /// Wipes all PenguCrush localStorage + sessionStorage and reloads. Useful
+  /// when the local cache diverges from chain truth (e.g. stale "1 star" on
+  /// level 1 while the on-chain submitLevel never landed). Run from the
+  /// browser console: __pengu.resetLocalData()
+  resetLocalData() {
+    const PREFIXES = [
+      'pengucrush_', 'pengu_', // app-scoped keys
+    ];
+    const remove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && PREFIXES.some(p => k.startsWith(p))) remove.push(k);
+    }
+    for (const k of remove) localStorage.removeItem(k);
+    sessionStorage.clear();
+    console.log(`🗑 wiped ${remove.length} localStorage keys + all sessionStorage`);
+    setTimeout(() => location.reload(), 100);
   },
 });
 
@@ -427,11 +445,24 @@ homePlayBtn?.addEventListener('click', async () => {
     if (!hasActiveSession()) {
       const client = getAgwClient();
       if (client) {
-        grantSession(client)
-          .then(r => Events.sessionKeyGranted(r?.sessionAddress))
-          .catch(err => Events.sessionKeyFailed(String(err?.message || err).slice(0, 100)));
+        try {
+          const r = await grantSession(client);
+          Events.sessionKeyGranted(r?.sessionAddress);
+        } catch (err) {
+          Events.sessionKeyFailed(String(err?.message || err).slice(0, 100));
+        }
       }
     }
+    // V2.3 — claim the one-time starter pack (1 of each booster on chain).
+    // Idempotent: chain reverts StarterPackAlreadyClaimed if it ran before,
+    // and the read-check below skips even attempting. Session-key safe.
+    try {
+      const already = await readStarterPackClaimed(getAGWAddress()).catch(() => true);
+      if (!already) {
+        await claimStarterPack().catch(() => {});
+        await Inventory.hydrateFromChain().catch(() => {});
+      }
+    } catch (_) { /* non-fatal */ }
     window.location.href = '/?page=map';
   } catch (err) {
     console.error('AGW connect/sign-in error:', err);

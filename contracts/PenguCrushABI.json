@@ -248,6 +248,11 @@
   },
   {
     "inputs": [],
+    "name": "StarterPackAlreadyClaimed",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "TooManyShards",
     "type": "error"
   },
@@ -1320,6 +1325,19 @@
       {
         "indexed": true,
         "internalType": "address",
+        "name": "player",
+        "type": "address"
+      }
+    ],
+    "name": "StarterPackClaimed",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
         "name": "submitter",
         "type": "address"
       },
@@ -2142,6 +2160,32 @@
     "name": "claimRegenFor",
     "outputs": [],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "claimStarterPack",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "claimedStarterPack",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {

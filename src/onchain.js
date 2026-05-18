@@ -166,6 +166,20 @@ export function claimRegen() {
   return chainWrite('claimRegen', 'claimRegen', []);
 }
 
+/// V2.3 — one-time per-wallet starter pack: 1 of every enabled Booster on chain.
+/// Permissionless + idempotent (chain reverts StarterPackAlreadyClaimed on 2nd
+/// call). Session-key safe so it runs silently after the user's first SIWE.
+export function claimStarterPack() {
+  return chainWrite('claimStarterPack', 'claimStarterPack', []);
+}
+
+/// Read whether this wallet has already claimed the starter pack.
+export async function readStarterPackClaimed(player) {
+  const p = player || getAGWAddress();
+  if (!p) return false;
+  return chainRead('claimedStarterPack', [p]);
+}
+
 export function cancelCrushPass() {
   return chainWrite('cancelCrushPass', 'cancelCrushPass', []);
 }

@@ -56,6 +56,9 @@ const GAMEPLAY_METHODS = [
   'levelCheckpoint(uint16,uint16,bytes32)',
   'claimRegen()',
   'cancelCrushPass()',
+  // V2.3 — one-time starter pack grant, idempotent. Session-key safe so the
+  // auto-claim after first sign-in runs without prompting.
+  'claimStarterPack()',
   // Wheel + signed-quote functions: included since they don't move ETH
   // (wheel takes server-signed roll; quote-signed shop functions stay OUT
   // of the policy and will fail the validator, falling back to AGW prompt
