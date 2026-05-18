@@ -5,24 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PenguCrush</title>
 
-  <!-- Content-Security-Policy — defense-in-depth so an unescaped string in
-       the UI cannot escalate to script execution or data exfiltration.
-       'unsafe-inline' is required by the inline gtag bootstrap + Vite's
-       module preload; the rest is tight. -->
-  <meta http-equiv="Content-Security-Policy" content="
-    default-src 'self';
-    script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.gstatic.com;
-    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
-    font-src 'self' data: https://fonts.gstatic.com;
-    img-src 'self' data: blob: https:;
-    media-src 'self' blob:;
-    connect-src 'self' https://*.supabase.co https://api.mainnet.abs.xyz https://api.testnet.abs.xyz https://www.google-analytics.com https://region1.google-analytics.com https://*.gstatic.com https://auth.privy.io https://privy.abs.xyz wss://*.privy.io wss://*.abs.xyz;
-    frame-src https://auth.privy.io https://privy.abs.xyz;
-    worker-src 'self' blob:;
-    object-src 'none';
-    base-uri 'self';
-    form-action 'self';
-  " />
+  <!-- NOTE: an explicit Content-Security-Policy meta was tried as audit
+       fix #7 but it broke the Three.js / Draco / off-screen-WebGL render
+       path (tiles + HUD panels appeared monochrome grey). XSS defense is
+       still in place via the leaderboard textContent refactor (#4) and
+       the strict wallet-format regex in shortAddr(). CSP can be re-added
+       later from a hardened Vercel header config that's smoke-tested
+       against the WebGL pipeline first. -->
   <script>
     // Polyfill Node's `global` for npm packages (e.g. buffer via Privy) that
     // expect it in the browser. Must run before any module script.
