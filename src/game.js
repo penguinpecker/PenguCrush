@@ -130,7 +130,6 @@ if (CONFIG.bg) {
   document.body.style.background = `url('${CONFIG.bg}') center/cover no-repeat fixed`;
 }
 
-console.log(`🐧 Level ${levelNum} | Era ${CONFIG.era} | ${GRID}x${GRID} | ${CONFIG.moves}${TRAITS.bonusMoves ? `(+${TRAITS.bonusMoves})` : ''} moves | x${TRAITS.scoreMultiplier.toFixed(3)} score | Tiles: ${TILE_TYPES.join(', ')}`);
 
 // ═══════════════════════════════════════════════════════════════
 //  THREE.JS SETUP — transparent canvas so BG shows through
@@ -1671,14 +1670,11 @@ function showLevelPopup(won) {
       boostersUsed: {},
       completed: won,
       durationMs,
-    }).then(res => {
-      if (res?.success) console.log('🐧 Progress saved to Supabase:', res);
-      else console.warn('🐧 Supabase save failed:', res);
-    });
+    }).catch(() => {});
 
-    // On-chain: submitLevel batches the full per-level journal in one tx via
-    // the AGW session key (no prompt). Win AND fail both submitted so the
-    // gamesPlayed / gamesWon / gamesFailed stats track accurately.
+    // On-chain: submitLevel routes through pengu-validate-level (server
+    // bounds + EIP-712 signs) then submitLevelValidated. Fire-and-forget;
+    // the chain is the source of truth, the local UI already painted.
     chainSubmitLevel({
       level: levelNum,
       score,
@@ -1690,9 +1686,7 @@ function showLevelPopup(won) {
       shardsEarned: journal.shardsEarned,
       bigCombos: journal.bigCombos,
       fallerPenalties: fallerDropsPenalized,
-    }).then(r => {
-      if (r?.hash) console.log('🐧 submitLevel mined:', r.hash);
-    }).catch(err => console.warn('🐧 submitLevel failed (non-fatal):', err?.message || err));
+    }).catch(() => {});
     // Clear any mid-game snapshot now that the level is over
     clearMidGameSnapshot(levelNum).catch(() => {});
   }
@@ -2527,15 +2521,11 @@ function fillBoosters(qty = 10) {
 }
 
 async function init() {
-  console.log('🐧 PenguCrush loading...');
-
   // Fire-and-forget on-chain startLevel: consumes 1 life + emits LevelStarted.
   // Via AGW session key so no wallet prompt. If the session isn't granted yet,
   // the call falls back to a prompt (which the user just answered to play).
   Events.levelStart(levelNum);
-  chainStartLevel(levelNum).then(r => {
-    if (r?.hash) console.log('🐧 startLevel mined:', r.hash);
-  }).catch(err => console.warn('🐧 startLevel failed (non-fatal):', err?.message || err));
+  chainStartLevel(levelNum).catch(() => {});
 
   await preloadAssets(() => {});
   await ensureHammerSwingModel();
@@ -2551,10 +2541,6 @@ async function init() {
   initBoard();
   animate();
 
-  // Give a healthy test supply on first load
-  fillBoosters(10);
-
-  console.log('🐧 PenguCrush ready!  Tip: Shift+B in-game or window.__pengu.fillBoosters() to refill.');
 }
 
 let shardPulseId = null;

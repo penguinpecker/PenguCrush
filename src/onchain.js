@@ -54,47 +54,35 @@ function isDisabled() {
  * tx, no prompt). Otherwise route through the user's AGW (prompts).
  */
 async function chainWrite(label, functionName, args, options = {}) {
-  if (isDisabled()) return null;
-  const account = getAGWAddress();
-  if (!account) {
-    console.warn(`onchain ${label}: wallet not connected — skipping`);
-    return null;
+  if (isDisabled()) {
+    // The kill switch is supposed to be a debug aid, not a silent UX win.
+    // Throwing makes callers (UI handlers) show "Failed" instead of a fake "+1 ✓".
+    throw new Error(`onchain disabled (VITE_ONCHAIN_DISABLED set)`);
   }
+  const account = getAGWAddress();
+  if (!account) throw new Error('wallet not connected');
   // Shop / value-bearing calls always go through the main wallet so the user
   // explicitly authorizes the payment. Caller signals via `requireUserPrompt`.
   const wantSession = !options.requireUserPrompt;
   const sessionClient = wantSession ? await getSessionClient(functionName).catch(() => null) : null;
   const client = sessionClient || getWalletClient();
-  if (!client) {
-    console.warn(`onchain ${label}: no client — skipping`);
-    return null;
+  if (!client) throw new Error('wallet client missing — reconnect AGW');
+  const hash = await client.writeContract({
+    address: PENGUCRUSH_ADDRESS,
+    abi: penguCrushAbi,
+    functionName,
+    args,
+    account,
+    chain: abstract,
+    value: options.value || 0n,
+  });
+  if (options.waitForReceipt !== false) {
+    const pc = getPublicClient();
+    const receipt = await pc.waitForTransactionReceipt({ hash, confirmations: 1 });
+    if (receipt.status !== 'success') throw new Error(`reverted (status=${receipt.status})`);
+    return { hash, receipt, used: sessionClient ? 'session' : 'wallet' };
   }
-  try {
-    const hash = await client.writeContract({
-      address: PENGUCRUSH_ADDRESS,
-      abi: penguCrushAbi,
-      functionName,
-      args,
-      account,
-      chain: abstract,
-      value: options.value || 0n,
-    });
-    if (options.waitForReceipt !== false) {
-      const pc = getPublicClient();
-      const receipt = await pc.waitForTransactionReceipt({ hash, confirmations: 1 });
-      if (receipt.status !== 'success') {
-        throw new Error(`reverted (status=${receipt.status})`);
-      }
-      console.log(`✓ onchain ${label} mined:`, hash);
-      return { hash, receipt, used: sessionClient ? 'session' : 'wallet' };
-    }
-    console.log(`✓ onchain ${label} sent:`, hash);
-    return { hash, used: sessionClient ? 'session' : 'wallet' };
-  } catch (err) {
-    const msg = err?.shortMessage || err?.message || String(err);
-    console.warn(`✗ onchain ${label} failed:`, msg);
-    throw err;
-  }
+  return { hash, used: sessionClient ? 'session' : 'wallet' };
 }
 
 async function chainRead(functionName, args = []) {
@@ -333,13 +321,3 @@ export async function readSkuPriceUsdMicros(skuName) {
   return Number(await chainRead('skuPriceUsdMicros', [sku(skuName)]));
 }
 
-// ═══════════════════════════════════════════════════════════════
-//  LEGACY shims — kept so inventory.js can still import names
-// ═══════════════════════════════════════════════════════════════
-
-/** @deprecated — moved to startLevel + submitLevel. Kept for transition. */
-export function logLevelOnchain(_args) { return null; }
-export function logBoosterUseOnchain(_t) { return null; }
-export function logBoosterPurchaseOnchain(_t, _q) { return null; }
-export function logDailySpinOnchain(_r) { return null; }
-export function logSessionPingOnchain(_t) { return null; }

@@ -300,7 +300,7 @@ document.querySelectorAll('.shop-tag[data-item]').forEach(tagEl => {
     }
     tagEl.disabled = true;
     const origLabel = labelEl ? labelEl.textContent : null;
-    if (labelEl) labelEl.textContent = 'Pending…';
+    if (labelEl) labelEl.textContent = 'Sign tx…';
     Events.shopBuyStart(itemType, qty, 'ETH');
     try {
       let r;
@@ -309,13 +309,14 @@ document.querySelectorAll('.shop-tag[data-item]').forEach(tagEl => {
       } else {
         r = await buyBoosterETH(`booster.${itemType}`, qty);
       }
-      // Pull fresh on-chain balances into the localStorage cache so UI updates.
-      Inventory.hydrateFromChain().catch(() => {});
-      Events.shopBuySuccess(itemType, qty, 'ETH', r?.hash);
-      if (labelEl) labelEl.textContent = `+${qty} ✓`;
+      if (!r?.hash) throw new Error('no tx hash returned');
+      // Chain credited the booster/lives in the same tx. Pull fresh on-chain
+      // balances so the HUD reflects truth. NO optimistic increment.
+      await Inventory.hydrateFromChain().catch(() => {});
+      Events.shopBuySuccess(itemType, qty, 'ETH', r.hash);
+      if (labelEl) labelEl.textContent = '✓ Confirmed';
     } catch (err) {
       const msg = String(err?.shortMessage || err?.message || err).slice(0, 100);
-      console.warn('Shop purchase failed:', msg);
       Events.shopBuyFail(itemType, qty, 'ETH', msg);
       if (labelEl) labelEl.textContent = 'Failed';
     } finally {
@@ -419,13 +420,9 @@ homePlayBtn?.addEventListener('click', async () => {
     if (!hasActiveSession()) {
       const client = getAgwClient();
       if (client) {
-        grantSession(client).then(r => {
-          console.log('🐧 session-key granted:', r?.sessionAddress);
-          Events.sessionKeyGranted(r?.sessionAddress);
-        }).catch(err => {
-          console.warn('🐧 session-key grant skipped:', err?.message || err);
-          Events.sessionKeyFailed(String(err?.message || err).slice(0, 100));
-        });
+        grantSession(client)
+          .then(r => Events.sessionKeyGranted(r?.sessionAddress))
+          .catch(err => Events.sessionKeyFailed(String(err?.message || err).slice(0, 100)));
       }
     }
     window.location.href = '/?page=map';

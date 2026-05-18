@@ -587,24 +587,29 @@ export function initMap() {
     dailySpinEl.style.transition = `transform ${duration}s cubic-bezier(0.17, 0.67, 0.12, 0.99)`;
     dailySpinEl.style.transform = `rotate(${dailyWheelRotation}deg)`;
 
-    const done = () => {
+    const done = async () => {
       dailySpinning = false;
-      const won = sliceIndexUnderPointer(dailyWheelRotation);
-      const rewardText = DAILY_REWARDS[won];
-      // Fire chain spin in background — server-signed roll, no client tampering.
-      // Local Inventory.applyDailyReward mirrors the effect for instant UI.
-      chainSpinWheel().then(r => {
-        if (r?.hash) console.log('🐧 daily wheel mined:', r.hash);
-        Inventory.hydrateFromChain().catch(() => {});
-      }).catch(err => {
-        console.warn('🐧 daily wheel failed (non-fatal):', err?.message || err);
-        Events.wheelSpinFail(String(err?.message || err).slice(0, 100));
-      });
-      const effect = Inventory.applyDailyReward(rewardText);
-      Events.wheelSpinComplete(rewardText);
-      if (dailyResult) {
-        dailyResult.textContent = formatDailyWheelResult(rewardText, effect);
-        dailyResult.hidden = false;
+      // The visual landing slot is decorative — the on-chain spin returns the
+      // canonical slot index (signed by the wheel relayer). We fire chain
+      // first and read the actual reward from the spinDailyWheel receipt's
+      // DailySpin event. Local Inventory.applyDailyReward removed (was
+      // double-crediting on top of the chain grant).
+      try {
+        const r = await chainSpinWheel();
+        if (!r?.hash) throw new Error('no tx hash returned');
+        await Inventory.hydrateFromChain().catch(() => {});
+        Events.wheelSpinComplete(r.hash);
+        if (dailyResult) {
+          dailyResult.textContent = 'Reward credited! Check inventory.';
+          dailyResult.hidden = false;
+        }
+      } catch (err) {
+        const msg = String(err?.shortMessage || err?.message || err).slice(0, 100);
+        Events.wheelSpinFail(msg);
+        if (dailyResult) {
+          dailyResult.textContent = 'Spin failed — try again.';
+          dailyResult.hidden = false;
+        }
       }
       refreshSpinButtonState();
     };
@@ -915,15 +920,29 @@ export function initMap() {
     if (crushPassBuyBtn.disabled) return;
     crushPassBuyBtn.disabled = true;
     const origText = crushPassBuyBtn.textContent;
-    crushPassBuyBtn.textContent = 'Confirm payment…';
+    crushPassBuyBtn.textContent = 'Sign tx…';
     Events.passBuyStart();
     try {
       const r = await buyCrushPassETH();
+      if (!r?.hash) throw new Error('no tx hash returned');
+      // Chain already credited boosters + frozen lives + (possibly) the shard
+      // bonus. Pull fresh on-chain state into the local cache so the
+      // celebration screen reads truth instead of double-crediting via the
+      // legacy `Inventory.purchaseCrushPass()` mock.
       await Inventory.hydrateFromChain().catch(() => {});
-      const reward = Inventory.purchaseCrushPass();
-      if (!reward) return;
-      Events.passBuySuccess(r?.hash);
-      if (reward.shardBonus?.id) Events.passShardBonus(reward.shardBonus.id);
+      Events.passBuySuccess(r.hash);
+      // Build the celebration payload from current chain state. The 5 booster
+      // SKUs are seeded; show "+3 of each" since that's the contract default
+      // (passBoostersEach storage var). Shard bonus is read from chain.
+      const reward = {
+        kind: 'weekly_pass',
+        label: '3 of each booster',
+        boosters: ['row','col','colorBomb','hammer','shuffle'].map(id => ({
+          id, count: 3,
+          icon: `/assets/boosters-2d/${id === 'colorBomb' ? 'color-bomb' : id === 'row' ? 'row-clear' : id === 'col' ? 'col-clear' : id}.png`,
+          label: id,
+        })),
+      };
       closeCrushPassPurchaseOverlay();
       refreshCrushPassChrome();
       crushPassPendingReward = reward;
@@ -934,9 +953,8 @@ export function initMap() {
       });
     } catch (err) {
       const msg = String(err?.shortMessage || err?.message || err).slice(0, 100);
-      console.warn('Crush Pass purchase failed:', msg);
       Events.passBuyFail(msg);
-      alert('Pass purchase failed — see console.');
+      alert('Pass purchase failed: ' + msg);
     } finally {
       crushPassBuyBtn.textContent = origText;
       crushPassBuyBtn.disabled = false;

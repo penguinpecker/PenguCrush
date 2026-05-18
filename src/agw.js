@@ -201,7 +201,6 @@ export async function connectAGW() {
   }
 
   persist(_address);
-  console.log(`🐧 AGW connected — wallet: ${_address} (signer: ${_signerAddress})`);
   return _address;
 }
 

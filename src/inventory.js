@@ -15,14 +15,18 @@
 import { getAGWAddress } from './agw.js';
 import { supabase } from './supabase.js';
 import {
-  logBoosterUseOnchain, logBoosterPurchaseOnchain, logDailySpinOnchain,
   readInventory, readLives, readCrushPass, sku as nameToSku,
-  buyCrushPassETH,
 } from './onchain.js';
 
 const LS_KEY = 'pengucrush_inventory_v1';
 
-const DEFAULT_BOOSTERS = { row: 1, col: 1, colorBomb: 1, hammer: 1, shuffle: 1 };
+// Defaults are ALL ZERO. localStorage is now strictly a fast-render mirror of
+// chain state; it must not lie about what the player owns. On first connect,
+// `hydrateFromChain()` populates from chain (also zero for a brand-new wallet,
+// so the player has to buy / earn via shop or wheel). Lives are an exception:
+// the contract treats `lastConsumedAt == 0` as "full lives" for new wallets,
+// so DEFAULT here matches that.
+const DEFAULT_BOOSTERS = { row: 0, col: 0, colorBomb: 0, hammer: 0, shuffle: 0 };
 const DEFAULT_CURRENCIES = { coins: 0, gems: 0, xp: 0 };
 const DEFAULT_SHARDS = { necklace: 0, crown: 0, plooshie: 0 };
 
@@ -146,13 +150,15 @@ export function getAllBoosters() {
   return { ...getInventory().boosters };
 }
 
+/// Optimistic cache write — chain is settled at submitLevel via the journal
+/// (for in-game `consumeBooster`) or via buyBoosterETH (for shop purchases).
+/// Callers of this fn are expected to have already triggered the chain side;
+/// hydrateFromChain() will overwrite if the chain disagrees.
 export function addBooster(type, qty = 1) {
   const s = getInventory();
   s.boosters[type] = (s.boosters[type] || 0) + qty;
   saveInventory(s);
   dispatchInventoryChange();
-  // Fire-and-forget onchain activity event
-  logBoosterPurchaseOnchain(type, qty);
   return s.boosters[type];
 }
 
@@ -163,7 +169,6 @@ export function consumeBooster(type) {
   s.boosters[type] = cur - 1;
   saveInventory(s);
   dispatchInventoryChange();
-  logBoosterUseOnchain(type);
   return s.boosters[type];
 }
 
@@ -277,7 +282,6 @@ export function applyDailyReward(rewardText) {
   if (s.dailySpinHistory.length > 60) s.dailySpinHistory = s.dailySpinHistory.slice(-60);
   saveInventory(s);
   dispatchInventoryChange();
-  logDailySpinOnchain(rewardText);
   return effect;
 }
 
@@ -503,7 +507,6 @@ export function purchaseCrushPass() {
 
   for (const id of CRUSH_PASS_BOOSTER_IDS) {
     s.boosters[id] = (s.boosters[id] || 0) + CRUSH_PASS_BOOSTERS_EACH;
-    logBoosterPurchaseOnchain(id, CRUSH_PASS_BOOSTERS_EACH);
   }
 
   let shardBonus = null;
