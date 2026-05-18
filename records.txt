@@ -414,7 +414,32 @@ ADR-005 (2026-05-18) — AGW session keys for in-game txs
 4. DEPLOYMENT HISTORY
 ═══════════════════════════════════════════════════════════════════════════════
 
-2026-05-18  PenguCrushV2
+2026-05-18  PenguCrushV2.1 (audit-hardening upgrade)
+  proxy            0x06aCb91c46aD1359825560B19A9556118Aeb1896 (unchanged)
+  new impl         0xe45A09e7B5816a16f6DA0cAd18c265DBFa174B91
+  upgrade tx       0xf70ba8abef3c39bab5be1ab10d86d49f49c49f42dd93bb03377113f477cea4d0
+  abscan verified  ID 12782
+  changes — audit fixes:
+    #8  startLevel now stamps levelStartedAt; submitLevel reverts if 0 ←
+        closes infinite-plays exploit (life consumption mandatory)
+    #9  MAX_SHARDS_PER_SUBMIT = 16; per-shard maxBalance set via admin:
+          shard.necklace → 9999 (tx 0x22bb1e58…87b29)
+          shard.crown    → 5000 (tx 0x2052efe1…5ebf)
+          shard.plooshie → 2500 (tx 0x749a8eae…7ba6b)
+    #11 Pyth state vars + setPythConfig retained but now explicitly
+        documented as DEAD CODE (no read site in _verifyShopQuote)
+    #13 ETH shop fns now require msg.value == q.amount (exact);
+        overpayment reverts with ExactPaymentRequired instead of
+        silently transferring excess to treasury
+    #15 Wheel nonces moved to usedWheelNonces map; usedNonces is now
+        shop-only (no collision between relayers)
+    #16 LevelSubmitted event gains bytes32 journalHash so indexers can
+        detect calldata rewrites without decoding the struct
+  storage layout — manually verified compatible, OZ plugin's auto-check
+    rejected gap-shrink-with-mappings pattern so passed
+    unsafeSkipStorageCheck after review (see upgrade script comments)
+
+2026-05-18  PenguCrushV2 (original deploy)
   proxy            0x06aCb91c46aD1359825560B19A9556118Aeb1896
   implementation   0xa742dd48E82B970770A557f89f062769B5A764B9
   owner            0xDdbbc73A42814c42943095cc7F51762fb038BC9A

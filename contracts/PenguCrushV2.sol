@@ -74,7 +74,16 @@ contract PenguCrushV2 is
     uint8  public constant MAX_STARS         = 3;
     /// Wheel slot count is mutable, but capped to avoid griefing via gas.
     uint8  public constant WHEEL_SLOT_HARD_CAP = 16;
-    /// Pyth guardrail tolerance in basis points (200 = 2%).
+    /// Audit fix #9: cap submitLevel shard journal so a modified client can't
+    /// mint an arbitrarily large bag of shards in one call.
+    uint8  public constant MAX_SHARDS_PER_SUBMIT = 16;
+    /// Pyth guardrail tolerance in basis points (200 = 2%). NOTE V2.1: the
+    /// `pyth`, `pythEthUsdId`, `pythGuardEnabled` state vars + setPythConfig
+    /// setter are RESERVED for a future on-chain price-check feature. They are
+    /// NOT currently consulted in `_verifyShopQuote` — there is no Pyth read
+    /// path on chain today. Setting `pythGuardEnabled = true` therefore does
+    /// nothing. Do not rely on this guardrail until a future upgrade wires
+    /// `IPyth.getPriceUnsafe(...)` into the shop quote flow.
     uint16 public constant PYTH_GUARD_TOLERANCE_BPS = 200;
 
     // ═══════════════════════════════════════════════════════════════
@@ -229,8 +238,20 @@ contract PenguCrushV2 is
     uint16 public passShardBonusBps;     // 1500 = 15% chance
     uint32 public passDurationSeconds;   // 7 days default
 
+    // ── V2.1 additions (audit fixes #8, #15) ──
+    // Tracks the timestamp at which startLevel was successfully called for
+    // (player, level). submitLevel requires this to be non-zero (closes the
+    // exploit where a modified client could call submitLevel without ever
+    // consuming a life via startLevel). Cleared after each submitLevel so
+    // retrying a level requires another startLevel.
+    mapping(address => mapping(uint16 => uint64)) public levelStartedAt;
+    // Wheel-roll nonces live in their own map so a shop nonce can never
+    // collide with a wheel nonce (each relayer can issue nonces independently).
+    // Shop nonces continue to live in `usedNonces` above for storage compat.
+    mapping(uint256 => bool) public usedWheelNonces;
+
     // -- Reserved for upgrades --
-    uint256[40] private __gap;
+    uint256[38] private __gap; // shrunk from 40; reserves balance maintained
 
     // ═══════════════════════════════════════════════════════════════
     //  EVENTS
@@ -239,6 +260,8 @@ contract PenguCrushV2 is
     // -- Player progress --
     event PlayerRegistered(address indexed player, uint64 at);
     event LevelStarted(address indexed player, uint16 indexed level, uint64 at);
+    /// V2.1: added `journalHash` so off-chain indexers can detect calldata
+    /// rewrites without decoding the full struct from each tx (audit fix #16).
     event LevelSubmitted(
         address indexed player,
         uint16 indexed level,
@@ -246,7 +269,8 @@ contract PenguCrushV2 is
         uint8 stars,
         uint16 movesUsed,
         bool completed,
-        bool newBest
+        bool newBest,
+        bytes32 journalHash
     );
     event HighestLevelAdvanced(address indexed player, uint16 newHighest);
     event LevelCheckpoint(address indexed player, uint16 indexed level, uint16 moveNum, bytes32 snapshotHash);
@@ -352,6 +376,10 @@ contract PenguCrushV2 is
     error ZeroQty();
     error TooManySlots();
     error EthForUsdcCall();
+    // V2.1 additions (audit fixes #8, #9, #13)
+    error LevelNotStarted();      // submitLevel without prior startLevel
+    error TooManyShards();        // shardsEarned.length > MAX_SHARDS_PER_SUBMIT
+    error ExactPaymentRequired(); // msg.value != quote.amount on ETH shop fns
 
     // ═══════════════════════════════════════════════════════════════
     //  INITIALIZER
@@ -503,12 +531,19 @@ contract PenguCrushV2 is
     //  PLAYER — start / submit / checkpoint
     // ═══════════════════════════════════════════════════════════════
 
-    /// Begin a level. Consumes 1 life (regular first, then frozen). Session-key safe.
+    /// Begin a level. Consumes 1 life (regular first, then frozen) and stamps
+    /// `levelStartedAt[player][level]` so that `submitLevel` knows a startLevel
+    /// actually happened (audit fix #8). Session-key safe.
+    ///
+    /// If a previous startLevel was never followed by a submitLevel, calling
+    /// startLevel again consumes another life and overwrites the timestamp —
+    /// the previous attempt is silently abandoned.
     function startLevel(uint16 level) external whenGameplayActive {
         if (level < 1 || level > maxLevel) revert InvalidLevel();
         _materializePassExpiry(msg.sender);
         _consumeLife(msg.sender);
         _registerIfNeeded(msg.sender);
+        levelStartedAt[msg.sender][level] = uint64(block.timestamp);
         emit LevelStarted(msg.sender, level, uint64(block.timestamp));
     }
 
@@ -533,6 +568,15 @@ contract PenguCrushV2 is
         if (j.level < 1 || j.level > maxLevel) revert InvalidLevel();
         if (j.stars > MAX_STARS) revert InvalidStars();
         if (player == address(0)) revert ZeroAddress();
+        // Audit fix #8: submitLevel only valid if the player (or an authorized
+        // submitter on their behalf) consumed a life via startLevel for this
+        // level. Closes the "skip startLevel → infinite plays" exploit.
+        if (levelStartedAt[player][j.level] == 0) revert LevelNotStarted();
+        // Clear before doing any work so a retry needs a fresh startLevel.
+        levelStartedAt[player][j.level] = 0;
+        // Audit fix #9: hard-cap the shard array so a modified client cannot
+        // mint an arbitrary bag of shards in one submission.
+        if (j.shardsEarned.length > MAX_SHARDS_PER_SUBMIT) revert TooManyShards();
         _registerIfNeeded(player);
 
         // Booster + shard journal — emit per item, update balances
@@ -587,7 +631,10 @@ contract PenguCrushV2 is
         ps.lastPlayedAt = uint64(block.timestamp);
         attempts[player][j.level]++;
 
-        emit LevelSubmitted(player, j.level, j.score, j.stars, j.movesUsed, j.completed, newBest);
+        // Audit fix #16: include journal hash so indexers can detect calldata
+        // rewrites without decoding the full struct per-tx.
+        bytes32 journalHash = keccak256(abi.encode(j));
+        emit LevelSubmitted(player, j.level, j.score, j.stars, j.movesUsed, j.completed, newBest, journalHash);
     }
 
     function _registerIfNeeded(address player) internal {
@@ -766,7 +813,7 @@ contract PenguCrushV2 is
         if (cfg.kind != ItemKind.Booster || !cfg.enabled) revert ItemDisabled_();
         if (q.qty == 0) revert ZeroQty();
         _verifyShopQuote(q, sig, sku, Currency.ETH);
-        if (msg.value < q.amount) revert InsufficientPayment();
+        if (msg.value != q.amount) revert ExactPaymentRequired();
 
         _registerIfNeeded(msg.sender);
         uint32 newBal = boosterBalance[msg.sender][sku] + q.qty;
@@ -805,7 +852,7 @@ contract PenguCrushV2 is
         bytes32 sku = keccak256("life.regular");
         if (q.qty == 0) revert ZeroQty();
         _verifyShopQuote(q, sig, sku, Currency.ETH);
-        if (msg.value < q.amount) revert InsufficientPayment();
+        if (msg.value != q.amount) revert ExactPaymentRequired();
 
         _registerIfNeeded(msg.sender);
         _grantRegularLives(msg.sender, uint8(q.qty));
@@ -835,7 +882,7 @@ contract PenguCrushV2 is
     ) external payable whenShopActive nonReentrant {
         bytes32 sku = keccak256("pass.weekly");
         _verifyShopQuote(q, sig, sku, Currency.ETH);
-        if (msg.value < q.amount) revert InsufficientPayment();
+        if (msg.value != q.amount) revert ExactPaymentRequired();
         _registerIfNeeded(msg.sender);
         _applyCrushPassPurchase(msg.sender, Currency.ETH, msg.value);
         emit ShopPurchase(msg.sender, sku, 1, Currency.ETH, msg.value, q.nonce);
@@ -955,7 +1002,10 @@ contract PenguCrushV2 is
 
     function spinDailyWheel(WheelRoll calldata roll, bytes calldata sig) external whenGameplayActive {
         if (block.timestamp > roll.deadline) revert WheelRollExpired();
-        if (usedNonces[roll.nonce]) revert QuoteNonceUsed();
+        // Audit fix #15: wheel nonces are now in their own map so a shop nonce
+        // collision cannot block a wheel roll (each relayer picks nonces
+        // independently). `usedNonces` is reserved for shop quotes only.
+        if (usedWheelNonces[roll.nonce]) revert QuoteNonceUsed();
         if (roll.player != msg.sender) revert WheelPlayerMismatch();
         uint64 today = uint64(block.timestamp / 86400);
         if (roll.dayUtc != today) revert WheelDayMismatch();
@@ -966,7 +1016,7 @@ contract PenguCrushV2 is
             WHEEL_ROLL_TYPEHASH, roll.player, roll.dayUtc, roll.slotIndex, roll.nonce, roll.deadline
         )));
         if (ECDSA.recover(digest, sig) != wheelRelayer) revert WheelBadSigner();
-        usedNonces[roll.nonce] = true;
+        usedWheelNonces[roll.nonce] = true;
         lastWheelDay[msg.sender] = today;
 
         WheelSlot memory s = wheelConfig[roll.slotIndex];

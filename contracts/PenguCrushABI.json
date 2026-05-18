@@ -80,6 +80,11 @@
   },
   {
     "inputs": [],
+    "name": "ExactPaymentRequired",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "ExpectedPause",
     "type": "error"
   },
@@ -141,6 +146,11 @@
   {
     "inputs": [],
     "name": "ItemNotFound",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "LevelNotStarted",
     "type": "error"
   },
   {
@@ -217,7 +227,7 @@
   },
   {
     "inputs": [],
-    "name": "ReentrancyGuardReentrantCall",
+    "name": "Reentrant",
     "type": "error"
   },
   {
@@ -234,6 +244,11 @@
   {
     "inputs": [],
     "name": "ShopPausedError",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "TooManyShards",
     "type": "error"
   },
   {
@@ -828,6 +843,12 @@
         "internalType": "bool",
         "name": "newBest",
         "type": "bool"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "journalHash",
+        "type": "bytes32"
       }
     ],
     "name": "LevelSubmitted",
@@ -1425,6 +1446,19 @@
   {
     "inputs": [],
     "name": "MAX_REGULAR_LIVES",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "MAX_SHARDS_PER_SUBMIT",
     "outputs": [
       {
         "internalType": "uint8",
@@ -2681,6 +2715,30 @@
         "internalType": "address",
         "name": "",
         "type": "address"
+      },
+      {
+        "internalType": "uint16",
+        "name": "",
+        "type": "uint16"
+      }
+    ],
+    "name": "levelStartedAt",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
       }
     ],
     "name": "lifeAccount",
@@ -3667,6 +3725,25 @@
       }
     ],
     "name": "usedNonces",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "usedWheelNonces",
     "outputs": [
       {
         "internalType": "bool",

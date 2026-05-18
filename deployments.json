@@ -2,7 +2,9 @@
   "abstractMainnet": {
     "PenguCrushV2": {
       "proxy": "0x06aCb91c46aD1359825560B19A9556118Aeb1896",
-      "implementation": "0xa742dd48E82B970770A557f89f062769B5A764B9",
+      "implementation": "0xe45A09e7B5816a16f6DA0cAd18c265DBFa174B91",
+      "previousImplementations": ["0xa742dd48E82B970770A557f89f062769B5A764B9"],
+      "v2_1_upgradeTx": "0xf70ba8abef3c39bab5be1ab10d86d49f49c49f42dd93bb03377113f477cea4d0",
       "owner": "0xDdbbc73A42814c42943095cc7F51762fb038BC9A",
       "treasury": "0xBCaFE23d6D072d65d87E138AfFefc61342D73d0b",
       "treasuryRotationTx": "0x89ba2a44f1b7fff76362320752abddde68cfa17c8c6797638eb08088e4e12053",
@@ -16,7 +18,7 @@
       "pyth": "0x8739d5024B5143278E2b15Bd9e7C26f6CEc658F1",
       "pythEthUsdId": "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
       "pythGuardEnabled": false,
-      "abscanVerificationIds": { "proxy": 12781, "implementation": 12780 },
+      "abscanVerificationIds": { "proxy": 12781, "implementation_v2_0": 12780, "implementation_v2_1": 12782 },
       "deployedAt": "2026-05-18T07:09:28.151Z",
       "deployedBy": "0xDdbbc73A42814c42943095cc7F51762fb038BC9A"
     }
