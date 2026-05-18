@@ -1178,7 +1178,10 @@ export function initMap() {
     const boosters = Inventory.getAllBoosters();
     const shards = Inventory.getShards();
     inventoryGrid.innerHTML = '';
+    let rendered = 0;
     for (const def of INVENTORY_MAP_SLOTS) {
+      const n = def.kind === 'booster' ? (boosters[def.id] ?? 0) : (shards[def.id] ?? 0);
+      if (n <= 0) continue; // hide empty items
       const cell = document.createElement('div');
       cell.className = 'inventory-slot';
       cell.title = def.label;
@@ -1189,11 +1192,17 @@ export function initMap() {
       icon.draggable = false;
       const qty = document.createElement('span');
       qty.className = 'inventory-slot__qty';
-      const n = def.kind === 'booster' ? (boosters[def.id] ?? 0) : (shards[def.id] ?? 0);
       qty.textContent = `×${n}`;
       cell.appendChild(icon);
       cell.appendChild(qty);
       inventoryGrid.appendChild(cell);
+      rendered++;
+    }
+    if (rendered === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'inventory-slot inventory-slot--empty';
+      empty.textContent = 'No items yet';
+      inventoryGrid.appendChild(empty);
     }
   }
 
