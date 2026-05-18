@@ -197,6 +197,57 @@ export async function submitLevel(journal) {
   return chainWrite('submitLevel', 'submitLevel', [j]);
 }
 
+/// V2.6 — fused submit + startLevel(nextLevel) in a single chain tx.
+/// Returns from chainWrite (hash + receipt). Falls back to TWO separate
+/// calls if the validator is unreachable, since the chain function requires
+/// a validator signature.
+export async function submitAndStartNext(journal, nextLevel) {
+  const j = {
+    level: Number(journal.level),
+    score: Number(journal.score),
+    stars: Number(journal.stars),
+    movesUsed: Number(journal.movesUsed),
+    completed: !!journal.completed,
+    durationMs: Number(journal.durationMs),
+    boostersUsed: journal.boostersUsed || [],
+    shardsEarned: journal.shardsEarned || [],
+    bigCombos: Number(journal.bigCombos || 0),
+    fallerPenalties: Number(journal.fallerPenalties || 0),
+  };
+  const player = getAGWAddress();
+  if (!player) throw new Error('not signed in');
+
+  // Ask the validator to bounds-check + sign the journal.
+  let signature = null;
+  try {
+    const url = `${QUOTE_API_BASE}/pengu-validate-level`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ player, journal: j }),
+    });
+    if (res.ok) {
+      const body = await res.json();
+      signature = body?.signature || null;
+    } else {
+      const text = await res.text().catch(() => '');
+      console.warn('validator rejected journal:', res.status, text);
+    }
+  } catch (err) {
+    console.warn('validator unreachable:', err?.message || err);
+  }
+  if (!signature) {
+    // Two-tx fallback. Still better than failing outright.
+    await chainWrite('submitLevel', 'submitLevel', [j]);
+    return chainWrite('startLevel', 'startLevel', [Number(nextLevel)]);
+  }
+  return chainWrite(
+    'submitAndStartNext',
+    'submitAndStartNext',
+    [j, signature, Number(nextLevel)]
+  );
+}
+
 export function levelCheckpoint(level, moveNum, snapshotHash) {
   return chainWrite('levelCheckpoint', 'levelCheckpoint',
     [Number(level), Number(moveNum), snapshotHash],

@@ -613,6 +613,35 @@ contract PenguCrushV2 is
         emit LevelValidated(msg.sender, j.level, jHash);
     }
 
+    /// V2.6 — fused submit + startLevel(nextLevel) in a single tx. Backs the
+    /// "Next" / "Replay" buttons on the level-complete popup so the player
+    /// only ever prompts/waits once. Atomicity: if the next-level start
+    /// reverts (e.g. NoLives), the submit also reverts and nothing changes
+    /// on chain.
+    function submitAndStartNext(
+        LevelJournal calldata j,
+        bytes calldata validatorSig,
+        uint16 nextLevel
+    ) external whenGameplayActive {
+        // ── validate + submit (same body as submitLevelValidated) ──
+        if (validatorRelayer == address(0)) revert ValidatorNotConfigured();
+        bytes32 jHash = keccak256(abi.encode(j));
+        bytes32 digest = _hashTypedDataV4(keccak256(abi.encode(
+            VALIDATION_TYPEHASH, msg.sender, jHash
+        )));
+        if (ECDSA.recover(digest, validatorSig) != validatorRelayer) revert ValidatorBadSigner();
+        _submitLevelInternal(msg.sender, j);
+        emit LevelValidated(msg.sender, j.level, jHash);
+
+        // ── start next level (same body as startLevel) ──
+        if (nextLevel < 1 || nextLevel > maxLevel) revert InvalidLevel();
+        _materializePassExpiry(msg.sender);
+        _consumeLife(msg.sender);
+        _registerIfNeeded(msg.sender);
+        levelStartedAt[msg.sender][nextLevel] = uint64(block.timestamp);
+        emit LevelStarted(msg.sender, nextLevel, uint64(block.timestamp));
+    }
+
     /// Mid-game tamper-detection trail. Frontend hashes snapshot before persisting
     /// to off-chain storage; if the off-chain row is later edited, hash mismatches.
     function levelCheckpoint(uint16 level, uint16 moveNum, bytes32 snapshotHash) external whenGameplayActive {

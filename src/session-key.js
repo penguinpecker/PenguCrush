@@ -53,6 +53,9 @@ const GAMEPLAY_METHODS = [
   // the normal flow once pengu-validate-level returns; MUST be in the policy
   // or every level-end will pop the AGW prompt.
   'submitLevelValidated((uint16,uint32,uint8,uint16,bool,uint32,bytes32[],bytes32[],uint16,uint16),bytes)',
+  // V2.6 fused submit + startLevel(nextLevel). Single-tx path for the level
+  // popup's Next / Replay buttons.
+  'submitAndStartNext((uint16,uint32,uint8,uint16,bool,uint32,bytes32[],bytes32[],uint16,uint16),bytes,uint16)',
   'levelCheckpoint(uint16,uint16,bytes32)',
   'claimRegen()',
   'cancelCrushPass()',

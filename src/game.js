@@ -3,7 +3,7 @@ import { createGLTFLoader } from './gltf-loader.js';
 import { getLevel, hasLevel } from './levels.js';
 import { getWallet, ensureWallet, saveLevelResult } from './supabase.js';
 import * as Inventory from './inventory.js';
-import { startLevel as chainStartLevel, submitLevel as chainSubmitLevel, levelCheckpoint as chainLevelCheckpoint, sku as nameToSku } from './onchain.js';
+import { startLevel as chainStartLevel, submitLevel as chainSubmitLevel, submitAndStartNext as chainSubmitAndStartNext, levelCheckpoint as chainLevelCheckpoint, sku as nameToSku } from './onchain.js';
 import { rollShardsForMatch, renderShardSlots, computeTraits } from './shards.js';
 import { saveSnapshot as saveMidGameSnapshot, loadSnapshot as loadMidGameSnapshot, clearSnapshot as clearMidGameSnapshot, hashSnapshot } from './mid-game.js';
 import { Events } from './analytics.js';
@@ -1584,11 +1584,11 @@ function getStars() {
 // ═══════════════════════════════════════════════════════════════
 //  LEVEL COMPLETE / FAIL POPUP
 // ═══════════════════════════════════════════════════════════════
-/// In-flight chainSubmitLevel promise. The Next / Replay / Map buttons
-/// await this so the page never reloads with the submit tx still pending —
-/// otherwise the next level stays locked, the leaderboard misses the run,
-/// and the user sees "Next sent me to home" or "leaderboard is empty".
-let submitLevelPromise = null;
+/// Journal cached at level-end and consumed by whichever popup button the
+/// user clicks. V2.6: chain calls are deferred to the button click and fired
+/// as ONE atomic tx (submit + next-startLevel together) — no more racing
+/// auto-submit on popup open and a fresh wallet prompt on Next.
+let pendingJournal = null;
 
 function showLevelPopup(won) {
   gameOver = true;
@@ -1678,12 +1678,12 @@ function showLevelPopup(won) {
       durationMs,
     }).catch(() => {});
 
-    // On-chain: submitLevel routes through pengu-validate-level (server
-    // bounds + EIP-712 signs) then submitLevelValidated. We KEEP a handle
-    // on the promise so the Next / Map buttons can await it before they
-    // navigate — without that, the page reload abandoned the in-flight tx
-    // and level N+1 stayed locked even after a clean win.
-    submitLevelPromise = chainSubmitLevel({
+    // V2.6 — DON'T auto-fire submit on popup open. Each button handler
+    // below makes its own one-shot chain call: Map → submitLevel,
+    // Next/Replay → submitAndStartNext (1 atomic tx). Caching the journal
+    // for the button click; popup state is the source of truth until the
+    // user picks where to go.
+    pendingJournal = {
       level: levelNum,
       score,
       stars,
@@ -1694,7 +1694,7 @@ function showLevelPopup(won) {
       shardsEarned: journal.shardsEarned,
       bigCombos: journal.bigCombos,
       fallerPenalties: fallerDropsPenalized,
-    }).then(r => ({ ok: true, r }), e => ({ ok: false, err: e }));
+    };
     // Accumulate this run's shards into the per-level lifetime tally so
     // the pre-game popup for this level shows "from this level" totals.
     Inventory.recordLevelShards(levelNum, levelShards);
@@ -1707,68 +1707,86 @@ function showLevelPopup(won) {
 }
 
 function setupLevelPopupButtons() {
-  async function awaitSubmitOrAlert(buttonEl, pendingLabel = 'Saving…') {
-    if (!submitLevelPromise) return true;
-    const origText = buttonEl ? buttonEl.textContent : null;
-    if (buttonEl) { buttonEl.disabled = true; buttonEl.textContent = pendingLabel; }
-    const r = await submitLevelPromise;
-    if (buttonEl) { buttonEl.disabled = false; if (origText) buttonEl.textContent = origText; }
-    if (r && r.ok) return true;
-    const err = r?.err;
-    const msg = String(err?.shortMessage || err?.message || err || 'unknown').slice(0, 240);
+  /// Common error path shared by all three popup buttons.
+  function explainAndAlert(err, defaultMsg) {
+    const msg = String(err?.shortMessage || err?.message || err).slice(0, 240);
     const lowBalance = /insufficient balance|insufficient funds|out of gas/i.test(msg);
-    if (!/reject|denied|cancel/i.test(msg)) {
-      alert(lowBalance
-        ? 'Your AGW wallet is out of ETH for gas on Abstract.\n\nFund your AGW address with a small amount of ETH on Abstract mainnet, then come back to this popup — your score is held until the chain accepts it.'
-        : `Couldn't save your level result on chain:\n\n${msg}\n\nThis level won't count and the next level stays locked until the chain accepts the result.`);
-    }
-    return false;
+    const noLives = /NoLives|no lives|0x[0-9a-f]{0,8}.*[Ll]ives/.test(msg);
+    if (/reject|denied|cancel/i.test(msg)) return; // user-initiated, no popup
+    alert(lowBalance
+      ? 'Your AGW wallet is out of ETH for gas on Abstract.\n\nFund your AGW address with a small amount of ETH on Abstract mainnet, then come back to this popup — your score is held until the chain accepts it.'
+      : noLives
+      ? 'No lives left. Wait for regen or buy more from the shop.'
+      : `${defaultMsg}\n\n${msg}`);
   }
 
-  /// Fire chainStartLevel for the destination level BEFORE navigating. The
-  /// chain debits the life + emits LevelStarted; without this gate the user
-  /// would land on /?page=play with no levelStartedAt set, so any later
-  /// submitLevel would revert and the level wouldn't count.
-  async function startNextLevelOrAlert(buttonEl, destLevel) {
-    const origText = buttonEl ? buttonEl.textContent : null;
-    if (buttonEl) { buttonEl.disabled = true; buttonEl.textContent = 'Confirming…'; }
-    try {
-      const { startLevel: chainStartLevel } = await import('./onchain.js');
-      await chainStartLevel(destLevel);
-      await Inventory.hydrateFromChain().catch(() => {});
-      return true;
-    } catch (err) {
-      const msg = String(err?.shortMessage || err?.message || err).slice(0, 240);
-      console.warn('startLevel failed:', msg);
-      const lowBalance = /insufficient balance|insufficient funds|out of gas/i.test(msg);
-      const noLives = /NoLives|no lives|0x[0-9a-f]{0,8}.*[Ll]ives/.test(msg);
-      if (!/reject|denied|cancel/i.test(msg)) {
-        alert(lowBalance
-          ? 'Your AGW wallet is out of ETH for gas on Abstract.\n\nFund your AGW address with a small amount of ETH on Abstract mainnet.'
-          : noLives
-          ? 'No lives left. Wait for regen or buy more from the shop.'
-          : `Could not start the next level on chain:\n\n${msg}`);
-      }
-      return false;
-    } finally {
-      if (buttonEl) { buttonEl.disabled = false; if (origText) buttonEl.textContent = origText; }
-    }
-  }
-
+  /// Map button — submit current level (1 tx), then go to map.
   document.getElementById('levelPopupMap').addEventListener('click', async (e) => {
-    if (!(await awaitSubmitOrAlert(e.currentTarget))) return;
-    window.__pengu.goToMap();
+    const btn = e.currentTarget;
+    if (btn.disabled || !pendingJournal) {
+      // No journal cached (fail-popup without a chain settle, or already
+      // submitted). Just navigate.
+      window.__pengu.goToMap();
+      return;
+    }
+    const orig = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      await chainSubmitLevel(pendingJournal);
+      pendingJournal = null;
+      await Inventory.hydrateFromChain().catch(() => {});
+      window.__pengu.goToMap();
+    } catch (err) {
+      console.warn('submitLevel (Map) failed:', err);
+      explainAndAlert(err, "Couldn't save your level result on chain.");
+      btn.disabled = false; if (orig) btn.textContent = orig;
+    }
   });
+
+  /// Replay button — fused submit + start same level (1 atomic tx).
   document.getElementById('levelPopupReplay').addEventListener('click', async (e) => {
-    if (!(await awaitSubmitOrAlert(e.currentTarget))) return;
-    if (!(await startNextLevelOrAlert(e.currentTarget, levelNum))) return;
-    window.__pengu.goToLevel(levelNum);
+    const btn = e.currentTarget;
+    if (btn.disabled) return;
+    const orig = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Confirming…';
+    try {
+      if (pendingJournal) {
+        await chainSubmitAndStartNext(pendingJournal, levelNum);
+        pendingJournal = null;
+      } else {
+        // No journal (failed run, started without a submit). Plain startLevel.
+        await chainStartLevel(levelNum);
+      }
+      await Inventory.hydrateFromChain().catch(() => {});
+      window.__pengu.goToLevel(levelNum);
+    } catch (err) {
+      console.warn('submitAndStartNext (Replay) failed:', err);
+      explainAndAlert(err, 'Could not restart this level on chain.');
+      btn.disabled = false; if (orig) btn.textContent = orig;
+    }
   });
+
+  /// Next button — fused submit + start NEXT level (1 atomic tx).
   document.getElementById('levelPopupNext').addEventListener('click', async (e) => {
-    if (!(await awaitSubmitOrAlert(e.currentTarget))) return;
+    const btn = e.currentTarget;
+    if (btn.disabled) return;
     if (!hasLevel(levelNum + 1)) return;
-    if (!(await startNextLevelOrAlert(e.currentTarget, levelNum + 1))) return;
-    window.__pengu.goToLevel(levelNum + 1);
+    const orig = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Confirming…';
+    try {
+      if (pendingJournal) {
+        await chainSubmitAndStartNext(pendingJournal, levelNum + 1);
+        pendingJournal = null;
+      } else {
+        await chainStartLevel(levelNum + 1);
+      }
+      await Inventory.hydrateFromChain().catch(() => {});
+      window.__pengu.goToLevel(levelNum + 1);
+    } catch (err) {
+      console.warn('submitAndStartNext (Next) failed:', err);
+      explainAndAlert(err, 'Could not advance to the next level on chain.');
+      btn.disabled = false; if (orig) btn.textContent = orig;
+    }
   });
 }
 
