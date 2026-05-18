@@ -301,10 +301,12 @@ function applyLifeRegenToState(s) {
   let changed = false;
 
   if (s.lives >= LIVES_MAX) {
-    if (s.lives !== LIVES_MAX) {
-      s.lives = LIVES_MAX;
-      changed = true;
-    }
+    // Already at or above the regen ceiling — regen does nothing. Do NOT
+    // clamp s.lives here: purchases legitimately stack above LIVES_MAX (up
+    // to LIVES_HARD_MAX = 10), and clamping every HUD tick was silently
+    // truncating chain truth back to 3 the moment hydrateFromChain wrote
+    // a higher value. The hard-cap clamp on entry (above) already bounds
+    // s.lives to LIVES_HARD_MAX.
     if (s.lastLifeRegenAt != null) {
       s.lastLifeRegenAt = null;
       changed = true;
