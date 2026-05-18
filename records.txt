@@ -27,13 +27,25 @@ Contracts (LEGACY — will be deprecated by v2):
 
 Owners / treasury / relayer (v2):
   Deployer EOA                 0xDdbbc73A42814c42943095cc7F51762fb038BC9A
-                               (contract owner; admin actions only)
+                               (contract owner; admin actions only —
+                                NOT being handed off to the multisig)
   Treasury (2/2 Safe multisig) 0xBCaFE23d6D072d65d87E138AfFefc61342D73d0b
                                owners: deployer + 0x04a2ba0b1f40dcee3649b61930e157759ceab701
                                threshold: 2-of-2
                                rotated via setTreasury tx
                                  0x89ba2a44f1b7fff76362320752abddde68cfa17c8c6797638eb08088e4e12053
                                  (block 62689611, 2026-05-18)
+                               NOTE: two extra owner-related txs on chain
+                               for this proxy are bogus — I mis-read a
+                               user question as "transfer ownership too"
+                               and proposed it via Ownable2Step
+                               transferOwnership; then cancelled. Owner
+                               never actually changed.
+                                 propose tx 0x34d30bdf6347a588ede930c8d3b1cea5959f1fbdc4fbbc0971e7b36c98f03a54
+                                 cancel  tx 0xa6ad1487b3bc9ae02daf5a3fe3e6b6733a1a0fdd238f4483677398ee2cfb161f
+                               After cancel: owner == pendingOwner == deployer,
+                               i.e. no live ownership proposal. Multisig
+                               cannot accept anything.
   Relayer EOA                  0xeF95BD4e26109D7B8933CEc500C7358d8E91CF31
                                (rotated in 2026-05-18 via setPriceRelayer +
                                 setWheelRelayer; lower-privilege signing-only
