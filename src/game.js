@@ -2596,29 +2596,38 @@ let shardPulseId = null;
 let shardPulseUntil = 0;
 let shardPulseTimer = null;
 
+/// Per-level shard count for the in-game HUD. Resets at every level start
+/// (this module is re-imported on each /?page=play navigation, so module
+/// init = level start). The Inventory popup still shows the LIFETIME total
+/// via Inventory.getShards().
+const levelShards = { necklace: 0, crown: 0, plooshie: 0 };
+
 function setupShardHud() {
   const el = document.getElementById('shardHud');
   if (!el) return;
   const refresh = () => {
     const hl = performance.now() < shardPulseUntil ? shardPulseId : null;
-    renderShardSlots(el, { counts: Inventory.getShards(), variant: 'hud', highlight: hl });
+    renderShardSlots(el, { counts: levelShards, variant: 'hud', highlight: hl });
   };
   refresh();
-  Inventory.onInventoryChange(refresh);
+  // No Inventory.onInventoryChange — the HUD is per-level, not lifetime.
 }
 
 function awardShard(id) {
   if (!id) return;
   shardPulseId = id;
   shardPulseUntil = performance.now() + 1200;
-  Inventory.addShard(id, 1); // local cache update; chain settles at submitLevel
+  levelShards[id] = (levelShards[id] || 0) + 1;
+  Inventory.addShard(id, 1); // lifetime total; chain settles at submitLevel
   const skuHash = SHARD_NAME_TO_SKU[id];
   if (skuHash) journal.shardsEarned.push(skuHash);
   Events.shardEarned(id, levelNum);
+  // Refresh HUD immediately to show the +1
+  const el = document.getElementById('shardHud');
+  if (el) renderShardSlots(el, { counts: levelShards, variant: 'hud', highlight: id });
   clearTimeout(shardPulseTimer);
   shardPulseTimer = setTimeout(() => {
-    const el = document.getElementById('shardHud');
-    if (el) renderShardSlots(el, { counts: Inventory.getShards(), variant: 'hud' });
+    if (el) renderShardSlots(el, { counts: levelShards, variant: 'hud' });
   }, 1250);
 }
 

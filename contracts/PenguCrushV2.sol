@@ -67,13 +67,15 @@ contract PenguCrushV2 is
     //  CONSTANTS
     // ═══════════════════════════════════════════════════════════════
 
-    /// Hard storage ceiling. Purchases stop adding once this is hit, so a
-    /// 5-pack at regular=8 fills to 10 (drops 3). 99 would fit in uint8 but
-    /// per product decision we keep this modest.
-    uint8  public constant MAX_REGULAR_LIVES = 10;
-    /// 8h regen fills up to this threshold and stops. Purchases can push
-    /// `regular` above it; regen never will.
-    /// Invariant after V2.4: lastConsumedAt == 0 iff regular >= REGEN_CAP_REGULAR.
+    /// Hard storage ceiling on regular lives. V2.5 product decision: total
+    /// HUD slots are 5 (3 regular + 2 ice). Purchases above 5 regular
+    /// waste, so we cap the stack at 5. Existing wallets at >5 from the
+    /// V2.4 window are NOT auto-rebased — extras stay on chain and burn
+    /// off as the player consumes lives; new purchases above 5 are wasted.
+    uint8  public constant MAX_REGULAR_LIVES = 5;
+    /// 8h regen fills up to this threshold and stops. Purchases push
+    /// `regular` above it (up to MAX_REGULAR_LIVES); regen never will.
+    /// Invariant: lastConsumedAt == 0 iff regular >= REGEN_CAP_REGULAR.
     uint8  public constant REGEN_CAP_REGULAR = 3;
     uint8  public constant MAX_FROZEN_LIVES  = 2;
     uint64 public constant REGEN_PERIOD      = 8 hours;

@@ -345,23 +345,30 @@ export function initMap() {
   function renderLivesHud() {
     const { lives, frozenLives, total } = Inventory.getLives();
     const livesMax = Inventory.getMaxLives();
-    // Regular slots grow when player holds more than the regen cap (from
-    // purchased overflow). Ice slots remain at FROZEN_LIVES_MAX on the right.
-    const regularSlots = Math.max(livesMax, lives);
-    const hudSlots = Inventory.getLivesHudSlotCount(lives);
+    // V2.5 — exactly LIVES_MAX + FROZEN_LIVES_MAX (=5) slots always.
+    // Regular hearts displace ice slots when stacked above the regen cap:
+    //   regularEnd = where regular hearts end on the row (3 normally,
+    //                up to 5 if the player bought into the ice zone)
+    // Slot <= regularEnd : pink slot (filled if slot <= lives, else empty)
+    // Slot >  regularEnd : ice slot   (filled if (slot-regularEnd) <= frozen)
+    const hudSlots = Inventory.getLivesHudSlotCount();
+    const regularEnd = Math.max(livesMax, Math.min(hudSlots, lives));
+    const visibleTotal = Math.min(hudSlots, lives + frozenLives);
 
     const countEl = document.getElementById('livesCount');
     const rowEl = document.getElementById('livesHearts');
     const regenEl = document.getElementById('livesRegen');
 
-    if (countEl) countEl.textContent = String(total);
+    if (countEl) countEl.textContent = String(visibleTotal);
 
     if (rowEl) {
       rowEl.innerHTML = '';
       const hasPass = Inventory.hasCrushPass();
       for (let slot = 1; slot <= hudSlots; slot++) {
-        const filled = slot <= lives + frozenLives;
-        const isIceSlot = slot > regularSlots; // ice slots sit to the right of all regular slots
+        const isIceSlot = slot > regularEnd;
+        const filled = isIceSlot
+          ? (slot - regularEnd) <= frozenLives
+          : slot <= lives;
         const isLocked = !filled && isIceSlot && !hasPass;
 
         if (isLocked) {

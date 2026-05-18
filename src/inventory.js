@@ -30,12 +30,17 @@ const DEFAULT_BOOSTERS = { row: 0, col: 0, colorBomb: 0, hammer: 0, shuffle: 0 }
 const DEFAULT_CURRENCIES = { coins: 0, gems: 0, xp: 0 };
 const DEFAULT_SHARDS = { necklace: 0, crown: 0, plooshie: 0 };
 
-/// Regen ceiling: the 8h regen tops up to this and stops.
-/// Hard cap: a purchased 5-pack at full hearts stacks up to this. The
-/// HUD grows horizontally beyond LIVES_MAX to show all lives held.
-/// Must match the on-chain V2.4 constants (REGEN_CAP_REGULAR + MAX_REGULAR_LIVES).
+/// V2.5 ceiling model:
+///   LIVES_MAX (=3)         regen target. 8h regen tops up to this and stops.
+///   FROZEN_LIVES_MAX (=2)  ice slots granted by Crush Pass.
+///   HUD always displays exactly LIVES_MAX + FROZEN_LIVES_MAX = 5 slots.
+///   Regular hearts overflow the ice positions when lives > LIVES_MAX
+///   (so a player at 5 regular hides their ice entirely).
+/// LIVES_HARD_MAX is a tolerant storage clamp — old V2.4 wallets may still
+/// hold 6–10 regular lives on chain; we don't truncate them locally, but
+/// the HUD never paints more than 5 slots either way.
 const LIVES_MAX = 3;
-const LIVES_HARD_MAX = 10;
+const LIVES_HARD_MAX = 99;
 const FROZEN_LIVES_MAX = 2;
 const LIFE_REGEN_MS = 8 * 60 * 60 * 1000;
 
@@ -347,12 +352,11 @@ export function getMaxLivesHard() {
   return LIVES_HARD_MAX;
 }
 
-/// Heart slots rendered in the map HUD: at least `LIVES_MAX` regular slots,
-/// grows to fit any extra lives the player has bought past the regen cap,
-/// plus the fixed FROZEN_LIVES_MAX ice slots.
-export function getLivesHudSlotCount(currentRegular = LIVES_MAX) {
-  const reg = Math.max(LIVES_MAX, Number(currentRegular) || LIVES_MAX);
-  return reg + FROZEN_LIVES_MAX;
+/// V2.5: HUD always shows exactly LIVES_MAX + FROZEN_LIVES_MAX (=5) slots.
+/// Extra regular lives stacked above LIVES_MAX displace the ice slots
+/// rather than growing the row.
+export function getLivesHudSlotCount() {
+  return LIVES_MAX + FROZEN_LIVES_MAX;
 }
 
 /** Snapshot after applying regen. Persists if regen added lives. */
