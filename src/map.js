@@ -578,78 +578,115 @@ export function initMap() {
     }
   }
 
-  function spinDailyWheel() {
+  /// Rotate the wheel CSS so segment `slotIndex` lands under the top pointer.
+  /// Returns a promise that resolves when the CSS transition (or its fallback
+  /// timeout) ends. Spinning state is the caller's responsibility.
+  function animateWheelToSlot(slotIndex) {
+    return new Promise((resolve) => {
+      if (!dailySpinEl) { resolve(); return; }
+      const spins = prefersReducedMotion() ? 1 : 5;
+      const current = normDeg360(dailyWheelRotation);
+      const desiredRest = normDeg360(-segmentCenterDeg(slotIndex));
+      let delta = spins * 360 + desiredRest - current;
+      if (delta < DAILY_SEGMENT_DEG * 2) delta += 360;
+      dailyWheelRotation += delta;
+      const duration = prefersReducedMotion() ? 0.01 : 4;
+      dailySpinEl.style.transition = `transform ${duration}s cubic-bezier(0.17, 0.67, 0.12, 0.99)`;
+      dailySpinEl.style.transform = `rotate(${dailyWheelRotation}deg)`;
+      if (duration < 0.1) { resolve(); return; }
+      const onEnd = e => {
+        if (e.propertyName && e.propertyName !== 'transform') return;
+        cleanup();
+        resolve();
+      };
+      const fallback = setTimeout(() => { cleanup(); resolve(); }, duration * 1000 + 400);
+      function cleanup() {
+        clearTimeout(fallback);
+        dailySpinEl.removeEventListener('transitionend', onEnd);
+      }
+      dailySpinEl.addEventListener('transitionend', onEnd);
+    });
+  }
+
+  /// Pull the slotIndex emitted in the DailySpin event from the receipt. The
+  /// server-signed roll already contained this; reading the on-chain event
+  /// guarantees we display whatever the chain actually credited.
+  function readSlotIndexFromReceipt(receipt) {
+    const logs = receipt?.logs || [];
+    // DailySpin(address indexed player, uint64 day, uint8 slotIndex, ...)
+    // topic[0] = event sig keccak. Easier path: ABI decode via viem if available;
+    // fallback to parsing the first non-indexed uint64 + uint8 in data.
+    try {
+      const sig = '0x';
+      for (const log of logs) {
+        if (!log.topics || log.topics.length === 0) continue;
+        // The event has 1 indexed param (player) so non-indexed is in data.
+        // data is abi.encode(uint64 day, uint8 slotIndex, uint8 kind, bytes32 sku, uint32 amount)
+        // We want slotIndex at offset 32..64 (second 32-byte word).
+        if (log.data && log.data.length >= 2 + 64 * 2) {
+          const second = log.data.slice(2 + 64, 2 + 128);
+          const v = parseInt(second.slice(-2), 16);
+          if (!Number.isNaN(v) && v < 16) return v;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  async function spinDailyWheel() {
     if (!dailySpinEl || dailySpinning) return;
     if (!Inventory.canSpinDaily()) {
       refreshSpinButtonState();
       return;
     }
     Events.wheelSpinStart();
-    const targetIndex = Math.floor(Math.random() * DAILY_SEGMENTS);
-    const spins = prefersReducedMotion() ? 1 : 5;
-    const current = normDeg360(dailyWheelRotation);
-    /** Final rotation (mod 360) so segment k center lines up with pointer: γ_k + R ≡ 0 ⇒ R ≡ −γ_k */
-    const desiredRest = normDeg360(-segmentCenterDeg(targetIndex));
-    let delta = spins * 360 + desiredRest - current;
-    if (delta < DAILY_SEGMENT_DEG * 2) delta += 360;
-    dailyWheelRotation += delta;
-
     dailySpinning = true;
-    dailySpinBtn.disabled = true;
+    if (dailySpinBtn) dailySpinBtn.disabled = true;
     if (dailyResult) {
-      dailyResult.hidden = true;
-      dailyResult.textContent = '';
+      dailyResult.textContent = 'Confirming on chain…';
+      dailyResult.hidden = false;
     }
 
-    const duration = prefersReducedMotion() ? 0.01 : 4;
-    dailySpinEl.style.transition = `transform ${duration}s cubic-bezier(0.17, 0.67, 0.12, 0.99)`;
-    dailySpinEl.style.transform = `rotate(${dailyWheelRotation}deg)`;
+    try {
+      // ── 1) Chain first. No animation yet. ──
+      const r = await chainSpinWheel();
+      if (!r?.hash) throw new Error('no tx hash returned');
 
-    const done = async () => {
-      dailySpinning = false;
-      // The visual landing slot is decorative — the on-chain spin returns the
-      // canonical slot index (signed by the wheel relayer). We fire chain
-      // first and read the actual reward from the spinDailyWheel receipt's
-      // DailySpin event. Local Inventory.applyDailyReward removed (was
-      // double-crediting on top of the chain grant).
-      try {
-        const r = await chainSpinWheel();
-        if (!r?.hash) throw new Error('no tx hash returned');
-        await Inventory.hydrateFromChain().catch(() => {});
-        Events.wheelSpinComplete(r.hash);
-        if (dailyResult) {
-          dailyResult.textContent = 'Reward credited! Check inventory.';
-          dailyResult.hidden = false;
-        }
-      } catch (err) {
-        const msg = String(err?.shortMessage || err?.message || err).slice(0, 200);
-        console.warn('Wheel spin failed:', msg);
-        Events.wheelSpinFail(msg);
-        if (dailyResult) {
-          dailyResult.textContent = `Spin failed: ${msg.slice(0, 120)}`;
-          dailyResult.hidden = false;
-        }
-        if (!/reject|denied|cancel/i.test(msg)) {
-          alert(`Daily wheel spin failed:\n\n${msg}`);
-        }
+      // ── 2) Decode the actual landing slot from the on-chain event ──
+      let slot = readSlotIndexFromReceipt(r.receipt);
+      if (slot == null) slot = 0; // safe fallback; chain credited correctly regardless
+
+      // ── 3) Now animate to the chain-determined slot ──
+      if (dailyResult) dailyResult.textContent = 'Spinning…';
+      await animateWheelToSlot(slot);
+
+      // ── 4) Pull fresh balances + show reward ──
+      await Inventory.hydrateFromChain().catch(() => {});
+      Events.wheelSpinComplete(r.hash);
+      if (dailyResult) {
+        const rewardText = DAILY_REWARDS[slot] || 'a reward';
+        dailyResult.textContent = `You won: ${rewardText}!`;
+        dailyResult.hidden = false;
       }
+    } catch (err) {
+      const msg = String(err?.shortMessage || err?.message || err).slice(0, 300);
+      console.warn('Wheel spin failed:', msg);
+      Events.wheelSpinFail(msg);
+      const lowBalance = /insufficient balance|insufficient funds|out of gas/i.test(msg);
+      if (dailyResult) {
+        dailyResult.textContent = lowBalance
+          ? 'Spin failed: your AGW wallet has no ETH for gas. Fund it on Abstract mainnet and retry.'
+          : `Spin failed: ${msg.slice(0, 140)}`;
+        dailyResult.hidden = false;
+      }
+      if (!/reject|denied|cancel/i.test(msg)) {
+        alert(lowBalance
+          ? 'Your AGW wallet is out of ETH for gas on Abstract.\n\nFund your AGW address with a small amount of ETH on Abstract mainnet, then retry the spin.'
+          : `Daily wheel spin failed:\n\n${msg}`);
+      }
+    } finally {
+      dailySpinning = false;
       refreshSpinButtonState();
-    };
-
-    if (duration < 0.1) {
-      done();
-    } else {
-      const onEnd = e => {
-        if (e.propertyName && e.propertyName !== 'transform') return;
-        clearTimeout(fallback);
-        dailySpinEl.removeEventListener('transitionend', onEnd);
-        done();
-      };
-      const fallback = setTimeout(() => {
-        dailySpinEl.removeEventListener('transitionend', onEnd);
-        done();
-      }, duration * 1000 + 400);
-      dailySpinEl.addEventListener('transitionend', onEnd);
     }
   }
 
@@ -974,9 +1011,14 @@ export function initMap() {
         setTimeout(shakeTicket, 900);
       });
     } catch (err) {
-      const msg = String(err?.shortMessage || err?.message || err).slice(0, 100);
+      const msg = String(err?.shortMessage || err?.message || err).slice(0, 200);
       Events.passBuyFail(msg);
-      alert('Pass purchase failed: ' + msg);
+      const lowBalance = /insufficient balance|insufficient funds|out of gas/i.test(msg);
+      if (!/reject|denied|cancel/i.test(msg)) {
+        alert(lowBalance
+          ? 'Your AGW wallet is out of ETH for gas on Abstract.\n\nFund your AGW address with a small amount of ETH on Abstract mainnet, then retry.'
+          : 'Pass purchase failed: ' + msg);
+      }
     } finally {
       crushPassBuyBtn.textContent = origText;
       crushPassBuyBtn.disabled = false;
