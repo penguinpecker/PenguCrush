@@ -30,16 +30,18 @@ const DEFAULT_BOOSTERS = { row: 0, col: 0, colorBomb: 0, hammer: 0, shuffle: 0 }
 const DEFAULT_CURRENCIES = { coins: 0, gems: 0, xp: 0 };
 const DEFAULT_SHARDS = { necklace: 0, crown: 0, plooshie: 0 };
 
-/// V2.5 ceiling model:
-///   LIVES_MAX (=3)         regen target. 8h regen tops up to this and stops.
-///   FROZEN_LIVES_MAX (=2)  ice slots granted by Crush Pass.
-///   HUD always displays exactly LIVES_MAX + FROZEN_LIVES_MAX = 5 slots.
-///   Regular hearts overflow the ice positions when lives > LIVES_MAX
-///   (so a player at 5 regular hides their ice entirely).
-/// LIVES_HARD_MAX is a tolerant storage clamp — old V2.4 wallets may still
-/// hold 6–10 regular lives on chain; we don't truncate them locally, but
-/// the HUD never paints more than 5 slots either way.
-const LIVES_MAX = 3;
+/// V2.7 ceiling model:
+///   LIVES_MAX (=5)         regen TARGET and storage cap on chain. The 8h
+///                          regen now fills regular all the way up to 5
+///                          (was 3 in V2.5/6 — caused "4/5 + Full!" bug).
+///   FROZEN_LIVES_MAX (=2)  bonus ice slots granted by Crush Pass — stack
+///                          on chain (total 7 possible) but the HUD only
+///                          paints LIVES_MAX (5) slots, with regulars
+///                          displacing ice positions as they fill.
+/// LIVES_HARD_MAX is a tolerant storage clamp — old V2.4 wallets may hold
+/// 6–10 regular on chain; the cache mirrors that but the HUD never paints
+/// more than 5 slots.
+const LIVES_MAX = 5;
 const LIVES_HARD_MAX = 99;
 const FROZEN_LIVES_MAX = 2;
 const LIFE_REGEN_MS = 8 * 60 * 60 * 1000;
@@ -389,11 +391,12 @@ export function getMaxLivesHard() {
   return LIVES_HARD_MAX;
 }
 
-/// V2.5: HUD always shows exactly LIVES_MAX + FROZEN_LIVES_MAX (=5) slots.
-/// Extra regular lives stacked above LIVES_MAX displace the ice slots
-/// rather than growing the row.
+/// V2.7: HUD always paints exactly 5 slots. Regular fills positions 1..lives;
+/// ice fills the remainder up to 5 if the player has frozen lives. Frozen
+/// can stack on chain past 5 (bonus from pass) but never grows the row.
+const HUD_TOTAL_SLOTS = 5;
 export function getLivesHudSlotCount() {
-  return LIVES_MAX + FROZEN_LIVES_MAX;
+  return HUD_TOTAL_SLOTS;
 }
 
 /** Snapshot after applying regen. Persists if regen added lives. */

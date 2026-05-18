@@ -1720,27 +1720,12 @@ function setupLevelPopupButtons() {
       : `${defaultMsg}\n\n${msg}`);
   }
 
-  /// Map button — submit current level (1 tx), then go to map.
-  document.getElementById('levelPopupMap').addEventListener('click', async (e) => {
-    const btn = e.currentTarget;
-    if (btn.disabled || !pendingJournal) {
-      // No journal cached (fail-popup without a chain settle, or already
-      // submitted). Just navigate.
-      window.__pengu.goToMap();
-      return;
-    }
-    const orig = btn.textContent;
-    btn.disabled = true; btn.textContent = 'Saving…';
-    try {
-      await chainSubmitLevel(pendingJournal);
-      pendingJournal = null;
-      await Inventory.hydrateFromChain().catch(() => {});
-      window.__pengu.goToMap();
-    } catch (err) {
-      console.warn('submitLevel (Map) failed:', err);
-      explainAndAlert(err, "Couldn't save your level result on chain.");
-      btn.disabled = false; if (orig) btn.textContent = orig;
-    }
+  /// Map button — zero chain calls, just navigate. The user is leaving;
+  /// score is discarded. If they want to record the run, they click
+  /// Next or Replay instead (both single-tx fused submits).
+  document.getElementById('levelPopupMap').addEventListener('click', () => {
+    pendingJournal = null;
+    window.__pengu.goToMap();
   });
 
   /// Replay button — fused submit + start same level (1 atomic tx).

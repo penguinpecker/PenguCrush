@@ -1574,6 +1574,19 @@
   },
   {
     "inputs": [],
+    "name": "REGEN_CAP_REGULAR",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "REGEN_PERIOD",
     "outputs": [
       {
@@ -3591,6 +3604,81 @@
       }
     ],
     "name": "startLevel",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint16",
+            "name": "level",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint32",
+            "name": "score",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint8",
+            "name": "stars",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint16",
+            "name": "movesUsed",
+            "type": "uint16"
+          },
+          {
+            "internalType": "bool",
+            "name": "completed",
+            "type": "bool"
+          },
+          {
+            "internalType": "uint32",
+            "name": "durationMs",
+            "type": "uint32"
+          },
+          {
+            "internalType": "bytes32[]",
+            "name": "boostersUsed",
+            "type": "bytes32[]"
+          },
+          {
+            "internalType": "bytes32[]",
+            "name": "shardsEarned",
+            "type": "bytes32[]"
+          },
+          {
+            "internalType": "uint16",
+            "name": "bigCombos",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "fallerPenalties",
+            "type": "uint16"
+          }
+        ],
+        "internalType": "struct PenguCrushV2.LevelJournal",
+        "name": "j",
+        "type": "tuple"
+      },
+      {
+        "internalType": "bytes",
+        "name": "validatorSig",
+        "type": "bytes"
+      },
+      {
+        "internalType": "uint16",
+        "name": "nextLevel",
+        "type": "uint16"
+      }
+    ],
+    "name": "submitAndStartNext",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"

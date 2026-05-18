@@ -343,17 +343,16 @@ export function initMap() {
   }
 
   function renderLivesHud() {
-    const { lives, frozenLives, total } = Inventory.getLives();
+    const { lives, frozenLives } = Inventory.getLives();
     const livesMax = Inventory.getMaxLives();
-    // V2.5 — exactly LIVES_MAX + FROZEN_LIVES_MAX (=5) slots always.
-    // Regular hearts displace ice slots when stacked above the regen cap:
-    //   regularEnd = where regular hearts end on the row (3 normally,
-    //                up to 5 if the player bought into the ice zone)
-    // Slot <= regularEnd : pink slot (filled if slot <= lives, else empty)
-    // Slot >  regularEnd : ice slot   (filled if (slot-regularEnd) <= frozen)
+    // V2.7 — exactly 5 slots. Slot fill order:
+    //   1..lives           pink filled
+    //   lives+1..lives+frozen (clamped to 5)  ice filled
+    //   rest               empty (ice icon if pass active, regular icon if not)
     const hudSlots = Inventory.getLivesHudSlotCount();
-    const regularEnd = Math.max(livesMax, Math.min(hudSlots, lives));
-    const visibleTotal = Math.min(hudSlots, lives + frozenLives);
+    const regularEnd = Math.min(hudSlots, lives);
+    const iceEnd    = Math.min(hudSlots, lives + frozenLives);
+    const visibleTotal = iceEnd;
 
     const countEl = document.getElementById('livesCount');
     const rowEl = document.getElementById('livesHearts');
@@ -365,10 +364,13 @@ export function initMap() {
       rowEl.innerHTML = '';
       const hasPass = Inventory.hasCrushPass();
       for (let slot = 1; slot <= hudSlots; slot++) {
-        const isIceSlot = slot > regularEnd;
-        const filled = isIceSlot
-          ? (slot - regularEnd) <= frozenLives
-          : slot <= lives;
+        const isRegularFilled = slot <= regularEnd;
+        const isIceFilled = !isRegularFilled && slot <= iceEnd;
+        const filled = isRegularFilled || isIceFilled;
+        // Empty slot is an "ice slot" (greyed/locked styling) only if the
+        // pass is active AND we're past the regular zone; otherwise it's
+        // a plain empty regular slot.
+        const isIceSlot = isIceFilled || (!filled && hasPass && slot > lives);
         const isLocked = !filled && isIceSlot && !hasPass;
 
         if (isLocked) {

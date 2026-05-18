@@ -67,16 +67,17 @@ contract PenguCrushV2 is
     //  CONSTANTS
     // ═══════════════════════════════════════════════════════════════
 
-    /// Hard storage ceiling on regular lives. V2.5 product decision: total
-    /// HUD slots are 5 (3 regular + 2 ice). Purchases above 5 regular
-    /// waste, so we cap the stack at 5. Existing wallets at >5 from the
-    /// V2.4 window are NOT auto-rebased — extras stay on chain and burn
-    /// off as the player consumes lives; new purchases above 5 are wasted.
+    /// Hard storage ceiling on regular lives. V2.5 product decision kept
+    /// in V2.7: total HUD slots are 5. Purchases above 5 regular waste.
+    /// Existing wallets at >5 from the V2.4 window are NOT auto-rebased.
     uint8  public constant MAX_REGULAR_LIVES = 5;
-    /// 8h regen fills up to this threshold and stops. Purchases push
-    /// `regular` above it (up to MAX_REGULAR_LIVES); regen never will.
+    /// V2.7 — regen fills all regular slots, matching MAX_REGULAR_LIVES.
+    /// Previously this was 3 (only the "regen zone" topped up, ice slots
+    /// were a separate pass-granted bonus) which let the HUD render 4/5
+    /// while still saying "Full!" — confusing players. Now the timer
+    /// keeps ticking until every regular slot is full.
     /// Invariant: lastConsumedAt == 0 iff regular >= REGEN_CAP_REGULAR.
-    uint8  public constant REGEN_CAP_REGULAR = 3;
+    uint8  public constant REGEN_CAP_REGULAR = 5;
     uint8  public constant MAX_FROZEN_LIVES  = 2;
     uint64 public constant REGEN_PERIOD      = 8 hours;
     uint8  public constant USDC_DECIMALS     = 6;
