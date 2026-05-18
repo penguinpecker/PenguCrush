@@ -6,6 +6,7 @@ import * as Inventory from './inventory.js';
 import { startLevel as chainStartLevel, submitLevel as chainSubmitLevel, levelCheckpoint as chainLevelCheckpoint, sku as nameToSku } from './onchain.js';
 import { rollShardsForMatch, renderShardSlots, computeTraits } from './shards.js';
 import { saveSnapshot as saveMidGameSnapshot, loadSnapshot as loadMidGameSnapshot, clearSnapshot as clearMidGameSnapshot, hashSnapshot } from './mid-game.js';
+import { Events } from './analytics.js';
 
 // ─── Per-level journal accumulated during play, submitted on-chain at end ────
 const journal = {
@@ -1409,7 +1410,8 @@ async function processMatches() {
   let m = findMatches();
   while (m.size > 0) {
     combo++; score += Math.round(m.size * 10 * combo * TRAITS.scoreMultiplier * Inventory.getScoreMultiplier());
-    if (combo >= 5) journal.bigCombos++;
+    if (combo === 5) { journal.bigCombos++; Events.bigCombo(combo, levelNum); }
+    else if (combo > 5) { journal.bigCombos++; /* extension of an already-tracked combo */ }
     // Mid-level shard drops: any 4+ run rolls each shard independently
     // (necklace 20% · crown 10% · plooshie 5%). A match can award 0..3.
     for (const run of (m.runs || [])) {
@@ -1493,6 +1495,7 @@ async function dropFallers() {
         fallerDropsPenalized++;
         updateHUD();
         showMsg('-1 Move!', 600);
+        Events.fallerPenalty(levelNum);
 
         // Refill with a normal tile
         const t = randomType();
@@ -1584,6 +1587,12 @@ function getStars() {
 // ═══════════════════════════════════════════════════════════════
 function showLevelPopup(won) {
   gameOver = true;
+  // Fire analytics first so we have a clean snapshot before any UI mutation
+  const movesUsedNow = CONFIG.moves - moves;
+  const durationMsNow = Math.round(performance.now() - gameStartTime);
+  const starsNow = won ? getStars() : 0;
+  if (won) Events.levelWin(levelNum, score, starsNow, movesUsedNow, durationMsNow);
+  else     Events.levelFail(levelNum, score, movesUsedNow, durationMsNow);
   const popup = document.getElementById('levelPopup');
   const title = document.getElementById('levelPopupTitle');
   const starsEl = document.getElementById('levelPopupStars');
@@ -2056,15 +2065,13 @@ async function useBoosterShuffle() {
 }
 
 function consumeBooster(type) {
-  // Local-only consumption — actual chain decrement happens at submitLevel
-  // via the journal. Inventory.consumeBooster updates localStorage cache.
   const remaining = Inventory.consumeBooster(type);
   boosterCharges[type] = remaining;
   updateBoosterUI();
   if (remaining <= 0) activeBooster = null;
-  // Record in journal for end-of-level submitLevel
   const skuHash = BOOSTER_NAME_TO_SKU[type];
   if (skuHash) journal.boostersUsed.push(skuHash);
+  Events.boosterUsed(type, levelNum);
 }
 
 function updateBoosterUI() {
@@ -2525,6 +2532,7 @@ async function init() {
   // Fire-and-forget on-chain startLevel: consumes 1 life + emits LevelStarted.
   // Via AGW session key so no wallet prompt. If the session isn't granted yet,
   // the call falls back to a prompt (which the user just answered to play).
+  Events.levelStart(levelNum);
   chainStartLevel(levelNum).then(r => {
     if (r?.hash) console.log('🐧 startLevel mined:', r.hash);
   }).catch(err => console.warn('🐧 startLevel failed (non-fatal):', err?.message || err));
@@ -2571,6 +2579,7 @@ function awardShard(id) {
   Inventory.addShard(id, 1); // local cache update; chain settles at submitLevel
   const skuHash = SHARD_NAME_TO_SKU[id];
   if (skuHash) journal.shardsEarned.push(skuHash);
+  Events.shardEarned(id, levelNum);
   clearTimeout(shardPulseTimer);
   shardPulseTimer = setTimeout(() => {
     const el = document.getElementById('shardHud');

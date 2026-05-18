@@ -3,6 +3,7 @@ import { getWallet, fetchPlayerProgress, buildMapProgress, connectAGW, disconnec
 import * as Inventory from './inventory.js';
 import { renderShardSlots, SHARDS } from './shards.js';
 import { buyCrushPassETH, spinDailyWheel as chainSpinWheel } from './onchain.js';
+import { Events, setAnalyticsUser } from './analytics.js';
 
 /** Map inventory grid: 5 boosters + 3 shards = 4×2 */
 const INVENTORY_MAP_SLOTS = [
@@ -147,6 +148,8 @@ function renderNodes(nodes, nodesContainer, openPopup) {
 }
 
 export function initMap() {
+  Events.mapView();
+  setAnalyticsUser(getWallet());
   const stage = document.getElementById('mapStage');
   const nodesContainer = document.getElementById('mapNodes');
 
@@ -262,6 +265,7 @@ export function initMap() {
     if (e.target === disconnectOverlay) closeDisconnectConfirm();
   });
   disconnectOkBtn?.addEventListener('click', () => {
+    Events.walletDisconnected();
     disconnectAGW();
     closeDisconnectConfirm();
     window.location.href = '/';
@@ -407,6 +411,7 @@ export function initMap() {
   renderLivesHud();
 
   function openPopup(lv) {
+    Events.levelPopupOpen(lv.id);
     currentPopupLevel = lv;
     const cfg = getLevel(lv.id);
     document.getElementById('popupLevelNum').textContent = lv.id;
@@ -561,6 +566,7 @@ export function initMap() {
       refreshSpinButtonState();
       return;
     }
+    Events.wheelSpinStart();
     const targetIndex = Math.floor(Math.random() * DAILY_SEGMENTS);
     const spins = prefersReducedMotion() ? 1 : 5;
     const current = normDeg360(dailyWheelRotation);
@@ -590,8 +596,12 @@ export function initMap() {
       chainSpinWheel().then(r => {
         if (r?.hash) console.log('🐧 daily wheel mined:', r.hash);
         Inventory.hydrateFromChain().catch(() => {});
-      }).catch(err => console.warn('🐧 daily wheel failed (non-fatal):', err?.message || err));
+      }).catch(err => {
+        console.warn('🐧 daily wheel failed (non-fatal):', err?.message || err);
+        Events.wheelSpinFail(String(err?.message || err).slice(0, 100));
+      });
       const effect = Inventory.applyDailyReward(rewardText);
+      Events.wheelSpinComplete(rewardText);
       if (dailyResult) {
         dailyResult.textContent = formatDailyWheelResult(rewardText, effect);
         dailyResult.hidden = false;
@@ -618,6 +628,7 @@ export function initMap() {
 
   dailyOpen?.addEventListener('click', e => {
     e.stopPropagation();
+    Events.wheelOpen();
     openDailyWheel();
     refreshSpinButtonState();
   });
@@ -889,6 +900,7 @@ export function initMap() {
 
   crushPassBtn?.addEventListener('click', e => {
     e.stopPropagation();
+    Events.passOpen();
     if (Inventory.hasCrushPass()) openCrushPassOverlay();
     else openCrushPassPurchaseOverlay();
   });
@@ -904,15 +916,14 @@ export function initMap() {
     crushPassBuyBtn.disabled = true;
     const origText = crushPassBuyBtn.textContent;
     crushPassBuyBtn.textContent = 'Confirm payment…';
+    Events.passBuyStart();
     try {
-      // Real on-chain purchase: AGW prompts the user for ETH payment.
-      // On success the contract grants boosters + frozen lives + maybe shard.
-      await buyCrushPassETH();
-      // Pull fresh on-chain state so the celebration reads the real grant.
+      const r = await buyCrushPassETH();
       await Inventory.hydrateFromChain().catch(() => {});
-      // Compose a celebration payload matching the local mock format
-      const reward = Inventory.purchaseCrushPass(); // updates local mirror
+      const reward = Inventory.purchaseCrushPass();
       if (!reward) return;
+      Events.passBuySuccess(r?.hash);
+      if (reward.shardBonus?.id) Events.passShardBonus(reward.shardBonus.id);
       closeCrushPassPurchaseOverlay();
       refreshCrushPassChrome();
       crushPassPendingReward = reward;
@@ -922,7 +933,9 @@ export function initMap() {
         setTimeout(shakeTicket, 900);
       });
     } catch (err) {
-      console.warn('Crush Pass purchase failed:', err?.shortMessage || err?.message || err);
+      const msg = String(err?.shortMessage || err?.message || err).slice(0, 100);
+      console.warn('Crush Pass purchase failed:', msg);
+      Events.passBuyFail(msg);
       alert('Pass purchase failed — see console.');
     } finally {
       crushPassBuyBtn.textContent = origText;
@@ -947,6 +960,7 @@ export function initMap() {
   crushPassCancelSubscriptionBtn?.addEventListener('click', e => {
     e.stopPropagation();
     Inventory.cancelCrushPass();
+    Events.passCancelled();
     refreshCrushPassChrome();
     closeCrushPassOverlay();
   });
@@ -1004,6 +1018,7 @@ export function initMap() {
 
   inventoryOpen?.addEventListener('click', e => {
     e.stopPropagation();
+    Events.inventoryOpen();
     openInventory();
   });
   inventoryClose?.addEventListener('click', () => closeInventory());

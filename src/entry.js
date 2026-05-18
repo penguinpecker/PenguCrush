@@ -5,6 +5,7 @@ import * as Inventory from './inventory.js';
 import { isLevelUnlocked } from './progress.js';
 import { buyBoosterETH, buyLivesETH } from './onchain.js';
 import { hasActiveSession, grantSession } from './session-key.js';
+import { Events, setAnalyticsUser } from './analytics.js';
 import './dev-stars.js'; // adds window.__pengu.starDev() — no UI unless enabled
 import './dev-shop.js';  // adds window.__pengu.shopDev() — align booster grid
 import './dev-booster-export.js'; // adds window.__pengu.exportBoosterPNGs()
@@ -155,10 +156,12 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
       return;
     }
     if (page === 'shop') {
+      Events.shopOpen();
       document.getElementById('shopOverlay')?.classList.add('active');
       return;
     }
     if (page === 'leaderboard') {
+      Events.leaderboardOpen();
       document.getElementById('lbOverlay')?.classList.add('active');
       loadLeaderboard();
       return;
@@ -211,6 +214,7 @@ async function loadLeaderboard() {
 
     if (!data || data.length === 0) {
       leftCol.innerHTML = '<div class="lb-row"><div class="lb-addr" style="text-align:center;width:100%">No players yet!</div></div>';
+      Events.leaderboardLoadSuccess(0);
       return;
     }
 
@@ -222,10 +226,12 @@ async function loadLeaderboard() {
       else rightCol.innerHTML += row;
     }
     lbDataLoaded = true;
+    Events.leaderboardLoadSuccess(data.length);
   } catch (err) {
     loading?.classList.remove('active');
     leftCol.innerHTML = '<div class="lb-row"><div class="lb-addr" style="text-align:center;width:100%">Failed to load</div></div>';
     console.error('Leaderboard error:', err);
+    Events.leaderboardLoadFail(String(err?.message || err).slice(0, 100));
   }
 }
 
@@ -273,19 +279,22 @@ document.querySelectorAll('.shop-tag[data-item]').forEach(tagEl => {
     tagEl.disabled = true;
     const origLabel = labelEl ? labelEl.textContent : null;
     if (labelEl) labelEl.textContent = 'Pending…';
+    Events.shopBuyStart(itemType, qty, 'ETH');
     try {
+      let r;
       if (itemType === 'lives') {
-        await buyLivesETH(qty);
+        r = await buyLivesETH(qty);
       } else {
-        // Map UI itemType ('row', 'col', 'colorBomb', 'hammer', 'shuffle')
-        // to chain SKU name 'booster.<type>'
-        await buyBoosterETH(`booster.${itemType}`, qty);
+        r = await buyBoosterETH(`booster.${itemType}`, qty);
       }
       // Pull fresh on-chain balances into the localStorage cache so UI updates.
       Inventory.hydrateFromChain().catch(() => {});
+      Events.shopBuySuccess(itemType, qty, 'ETH', r?.hash);
       if (labelEl) labelEl.textContent = `+${qty} ✓`;
     } catch (err) {
-      console.warn('Shop purchase failed:', err?.shortMessage || err?.message || err);
+      const msg = String(err?.shortMessage || err?.message || err).slice(0, 100);
+      console.warn('Shop purchase failed:', msg);
+      Events.shopBuyFail(itemType, qty, 'ETH', msg);
       if (labelEl) labelEl.textContent = 'Failed';
     } finally {
       setTimeout(() => {
@@ -329,6 +338,11 @@ leaveOverlay?.addEventListener('click', e => {
 });
 leaveOkBtn?.addEventListener('click', () => {
   closeLeaveConfirm();
+  // Best-effort level abandonment ping (we don't know movesUsed here cleanly)
+  try {
+    const lvl = parseInt(sessionStorage.getItem('pengu_current_level') || '0', 10);
+    if (lvl) Events.levelLeave(lvl, 0);
+  } catch (_) {}
   window.__pengu.goToMap();
 });
 document.addEventListener('keydown', e => {
@@ -347,19 +361,35 @@ const homePlayBtn = document.getElementById('homePlayBtn');
 homePlayBtn?.addEventListener('click', async () => {
   if (homePlayBtn.disabled) return;
   homePlayBtn.disabled = true;
+  Events.playClicked();
   try {
     if (hasSession()) {
       // Already signed in — refresh chain state in background, then navigate.
+      setAnalyticsUser(getAGWAddress());
       Inventory.hydrateFromChain().catch(() => {});
       window.location.href = '/?page=map';
       return;
     }
     if (!getAGWAddress()) {
-      await connectAGW();
+      Events.agwConnectStart();
+      try {
+        await connectAGW();
+        Events.agwConnectSuccess(getAGWAddress());
+      } catch (e) {
+        Events.agwConnectFail(String(e?.shortMessage || e?.message || e).slice(0, 100));
+        throw e;
+      }
     }
     if (!isSignedIn()) {
-      await signInWithAGW();
+      try {
+        await signInWithAGW();
+        Events.siweSignSuccess(getAGWAddress());
+      } catch (e) {
+        Events.siweSignFail(String(e?.shortMessage || e?.message || e).slice(0, 100));
+        throw e;
+      }
     }
+    setAnalyticsUser(getAGWAddress());
     // Pull chain state right after sign-in so the map HUD shows the truth.
     Inventory.hydrateFromChain().catch(() => {});
     // One-time AGW session-key grant so in-game txs auto-execute. Failures
@@ -369,8 +399,10 @@ homePlayBtn?.addEventListener('click', async () => {
       if (client) {
         grantSession(client).then(r => {
           console.log('🐧 session-key granted:', r?.sessionAddress);
+          Events.sessionKeyGranted(r?.sessionAddress);
         }).catch(err => {
           console.warn('🐧 session-key grant skipped:', err?.message || err);
+          Events.sessionKeyFailed(String(err?.message || err).slice(0, 100));
         });
       }
     }
