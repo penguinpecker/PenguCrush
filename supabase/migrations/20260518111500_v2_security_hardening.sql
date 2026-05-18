@@ -1,3 +1,5 @@
+-- (See also: 20260518120000_v2_tx_log.sql for the tx_log mirror.)
+--
 -- ═══════════════════════════════════════════════════════════════
 -- V2 security hardening — audit fixes #2, #3, #5
 --   #2 pengu_players + pengu_progress + rpc_upsert_player_progress:

@@ -622,11 +622,15 @@ export function initMap() {
           dailyResult.hidden = false;
         }
       } catch (err) {
-        const msg = String(err?.shortMessage || err?.message || err).slice(0, 100);
+        const msg = String(err?.shortMessage || err?.message || err).slice(0, 200);
+        console.warn('Wheel spin failed:', msg);
         Events.wheelSpinFail(msg);
         if (dailyResult) {
-          dailyResult.textContent = 'Spin failed — try again.';
+          dailyResult.textContent = `Spin failed: ${msg.slice(0, 120)}`;
           dailyResult.hidden = false;
+        }
+        if (!/reject|denied|cancel/i.test(msg)) {
+          alert(`Daily wheel spin failed:\n\n${msg}`);
         }
       }
       refreshSpinButtonState();

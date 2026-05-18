@@ -12,6 +12,7 @@ import { getWalletClient, ensureWalletClient, getAGWAddress, getPublicClient } f
 import { getSessionClient } from './session-key.js';
 import { abstract } from 'viem/chains';
 import { keccak256, toBytes, encodeAbiParameters, parseAbiParameters } from 'viem';
+import { logTxSubmitted, logTxResult, logTxError } from './tx-log.js';
 import penguCrushAbiJson from '../contracts/PenguCrushABI.json';
 
 const ENV = (import.meta.env || {});
@@ -54,38 +55,74 @@ function isDisabled() {
  * tx, no prompt). Otherwise route through the user's AGW (prompts).
  */
 async function chainWrite(label, functionName, args, options = {}) {
+  const account = getAGWAddress();
+  // Build a sanitized details payload for the tx log (no BigInts, no PII).
+  const logDetails = {
+    function: functionName,
+    valueWei: options.value ? String(options.value) : '0',
+    requireUserPrompt: !!options.requireUserPrompt,
+  };
+
   if (isDisabled()) {
-    // The kill switch is supposed to be a debug aid, not a silent UX win.
-    // Throwing makes callers (UI handlers) show "Failed" instead of a fake "+1 ✓".
+    logTxError({ wallet: account, type: label, error: 'onchain_disabled', details: logDetails });
     throw new Error(`onchain disabled (VITE_ONCHAIN_DISABLED set)`);
   }
-  const account = getAGWAddress();
-  if (!account) throw new Error('wallet not connected');
-  // Shop / value-bearing calls always go through the main wallet so the user
-  // explicitly authorizes the payment. Caller signals via `requireUserPrompt`.
+  if (!account) {
+    logTxError({ wallet: '0x0000000000000000000000000000000000000000', type: label, error: 'wallet_not_connected', details: logDetails });
+    throw new Error('wallet not connected');
+  }
   const wantSession = !options.requireUserPrompt;
   const sessionClient = wantSession ? await getSessionClient(functionName).catch(() => null) : null;
-  // Self-heal the wallet client if it isn't there yet (e.g. after a page
-  // reload — the viem client is module-memory while SIWE is localStorage).
-  // ensureWalletClient performs a silent reconnect from Privy's stored
-  // cross-app connection.
-  const client = sessionClient || await ensureWalletClient();
-  if (!client) throw new Error('wallet client missing — reconnect AGW');
-  const hash = await client.writeContract({
-    address: PENGUCRUSH_ADDRESS,
-    abi: penguCrushAbi,
-    functionName,
-    args,
-    account,
-    chain: abstract,
-    value: options.value || 0n,
-  });
+  let client;
+  try {
+    client = sessionClient || await ensureWalletClient();
+  } catch (err) {
+    const msg = err?.shortMessage || err?.message || String(err);
+    logTxError({ wallet: account, type: label, error: `ensureWalletClient: ${msg}`, details: logDetails });
+    throw err;
+  }
+  if (!client) {
+    logTxError({ wallet: account, type: label, error: 'no_client', details: logDetails });
+    throw new Error('wallet client missing — reconnect AGW');
+  }
+
+  let hash;
+  try {
+    hash = await client.writeContract({
+      address: PENGUCRUSH_ADDRESS,
+      abi: penguCrushAbi,
+      functionName,
+      args,
+      account,
+      chain: abstract,
+      value: options.value || 0n,
+    });
+  } catch (err) {
+    const msg = err?.shortMessage || err?.message || String(err);
+    const rejected = /reject|denied|cancel/i.test(msg);
+    logTxError({ wallet: account, type: label, error: rejected ? `user_rejected: ${msg}` : `writeContract: ${msg}`, details: { ...logDetails, used: sessionClient ? 'session' : 'wallet' } });
+    throw err;
+  }
+
+  // Insert "submitted" row so the trail exists even if waitForTransactionReceipt
+  // hangs or the page closes mid-mine.
+  const rowId = await logTxSubmitted({ wallet: account, type: label, txHash: hash, details: { ...logDetails, used: sessionClient ? 'session' : 'wallet' } });
+
   if (options.waitForReceipt !== false) {
     const pc = getPublicClient();
-    const receipt = await pc.waitForTransactionReceipt({ hash, confirmations: 1 });
-    if (receipt.status !== 'success') throw new Error(`reverted (status=${receipt.status})`);
-    return { hash, receipt, used: sessionClient ? 'session' : 'wallet' };
+    try {
+      const receipt = await pc.waitForTransactionReceipt({ hash, confirmations: 1 });
+      const status = receipt.status === 'success' ? 'success' : 'reverted';
+      logTxResult(rowId, { status, txHash: hash, blockNumber: Number(receipt.blockNumber) });
+      if (status !== 'success') throw new Error(`reverted (status=${receipt.status})`);
+      return { hash, receipt, used: sessionClient ? 'session' : 'wallet' };
+    } catch (err) {
+      const msg = err?.shortMessage || err?.message || String(err);
+      logTxResult(rowId, { status: 'reverted', txHash: hash, error: `receipt: ${msg}` });
+      throw err;
+    }
   }
+  // Fire-and-forget — we already logged "submitted"; outcome will be visible on Abscan.
   return { hash, used: sessionClient ? 'session' : 'wallet' };
 }
 
