@@ -262,8 +262,26 @@ export function getSignerAddress() {
   return _signerAddress;
 }
 
-/** Get viem WalletClient (for sending txs) */
+/** Get viem WalletClient (for sending txs). Returns null if not yet connected. */
 export function getWalletClient() {
+  return _walletClient;
+}
+
+/**
+ * Returns a usable walletClient. If we have an `_address` cached from
+ * localStorage but the in-memory walletClient is null (page reload after a
+ * SIWE-cached session), this performs a SILENT reconnect via Privy's stored
+ * cross-app connection — no popup, no SIWE re-prompt — and rebuilds the
+ * viem clients. Throws if no cached identity exists.
+ *
+ * Every chain write should funnel through this instead of `getWalletClient`
+ * directly so reloads stop tripping on "wallet client missing".
+ */
+export async function ensureWalletClient() {
+  if (_walletClient) return _walletClient;
+  if (!_address) throw new Error('not signed in');
+  await connectAGW();
+  if (!_walletClient) throw new Error('wallet reconnect failed');
   return _walletClient;
 }
 

@@ -8,7 +8,7 @@
 //  payment prompt.
 // ═══════════════════════════════════════════════════════════════
 
-import { getWalletClient, getAGWAddress, getPublicClient } from './agw.js';
+import { getWalletClient, ensureWalletClient, getAGWAddress, getPublicClient } from './agw.js';
 import { getSessionClient } from './session-key.js';
 import { abstract } from 'viem/chains';
 import { keccak256, toBytes, encodeAbiParameters, parseAbiParameters } from 'viem';
@@ -65,7 +65,11 @@ async function chainWrite(label, functionName, args, options = {}) {
   // explicitly authorizes the payment. Caller signals via `requireUserPrompt`.
   const wantSession = !options.requireUserPrompt;
   const sessionClient = wantSession ? await getSessionClient(functionName).catch(() => null) : null;
-  const client = sessionClient || getWalletClient();
+  // Self-heal the wallet client if it isn't there yet (e.g. after a page
+  // reload — the viem client is module-memory while SIWE is localStorage).
+  // ensureWalletClient performs a silent reconnect from Privy's stored
+  // cross-app connection.
+  const client = sessionClient || await ensureWalletClient();
   if (!client) throw new Error('wallet client missing — reconnect AGW');
   const hash = await client.writeContract({
     address: PENGUCRUSH_ADDRESS,
