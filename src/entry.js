@@ -3,7 +3,7 @@ import './map.css';
 import { getAGWAddress, isSignedIn, connectAGW, signInWithAGW, getAgwClient } from './agw.js';
 import * as Inventory from './inventory.js';
 import { isLevelUnlocked } from './progress.js';
-import { buyBoosterETH, buyLivesETH, claimStarterPack, readStarterPackClaimed } from './onchain.js';
+import { buyBoosterETH, buyLivesETH, claimStarterPack, ensureStarterPack } from './onchain.js';
 import { hasActiveSession, grantSession } from './session-key.js';
 import { Events, setAnalyticsUser } from './analytics.js';
 import './dev-stars.js'; // adds window.__pengu.starDev() — no UI unless enabled
@@ -76,6 +76,14 @@ Object.assign(window.__pengu ||= {}, {
     setCurrentLevel(lvl);
     window.location.href = '/?page=play';
   },
+  /// Manual starter-pack claim — useful from the browser console if the
+  /// auto-claim hasn't fired (e.g. you're inspecting state and want to
+  /// trigger the chain tx right now). Returns { claimed, reason, tx? }.
+  async claimStarterPack() {
+    const r = await ensureStarterPack();
+    if (r.claimed) await Inventory.hydrateFromChain().catch(() => {});
+    return r;
+  },
   /// Wipes all PenguCrush localStorage + sessionStorage and reloads. Useful
   /// when the local cache diverges from chain truth (e.g. stale "1 star" on
   /// level 1 while the on-chain submitLevel never landed). Run from the
@@ -115,6 +123,19 @@ async function boot() {
     showHomeGateHint();
     history.replaceState(null, '', '/');
     return;
+  }
+
+  // V2.3 — starter-pack auto-claim runs on EVERY app load with an active
+  // session, regardless of which page (home/map/play) the user landed on.
+  // Idempotent on chain. Fires in the background so it doesn't block
+  // rendering, but hydrate runs on success so the next inventory read is
+  // accurate. Falls back silently on RPC errors.
+  if (hasSession()) {
+    ensureStarterPack().then(r => {
+      if (r?.claimed && r.reason === 'newly_claimed') {
+        Inventory.hydrateFromChain().catch(() => {});
+      }
+    }).catch(() => {});
   }
 
   if (isPlay) {
@@ -454,15 +475,10 @@ homePlayBtn?.addEventListener('click', async () => {
       }
     }
     // V2.3 — claim the one-time starter pack (1 of each booster on chain).
-    // Idempotent: chain reverts StarterPackAlreadyClaimed if it ran before,
-    // and the read-check below skips even attempting. Session-key safe.
-    try {
-      const already = await readStarterPackClaimed(getAGWAddress()).catch(() => true);
-      if (!already) {
-        await claimStarterPack().catch(() => {});
-        await Inventory.hydrateFromChain().catch(() => {});
-      }
-    } catch (_) { /* non-fatal */ }
+    // Wait for it before navigating so the map / game HUD sees the chain
+    // grant on first load (no flicker of "0 boosters" → starter pack).
+    const r = await ensureStarterPack();
+    if (r.claimed) await Inventory.hydrateFromChain().catch(() => {});
     window.location.href = '/?page=map';
   } catch (err) {
     console.error('AGW connect/sign-in error:', err);

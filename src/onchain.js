@@ -180,6 +180,29 @@ export async function readStarterPackClaimed(player) {
   return chainRead('claimedStarterPack', [p]);
 }
 
+/// One-stop helper — checks chain, claims if needed. Idempotent; safe to call
+/// repeatedly. Throws are caught and logged so callers can fire-and-forget.
+let _starterPackPromise = null;
+export function ensureStarterPack() {
+  if (_starterPackPromise) return _starterPackPromise;
+  const player = getAGWAddress();
+  if (!player) return Promise.resolve({ claimed: false, reason: 'no_wallet' });
+  _starterPackPromise = (async () => {
+    try {
+      const already = await readStarterPackClaimed(player);
+      if (already) return { claimed: true, reason: 'already' };
+      const r = await claimStarterPack();
+      return { claimed: true, reason: 'newly_claimed', tx: r?.hash };
+    } catch (err) {
+      _starterPackPromise = null; // allow retry on next call
+      const msg = err?.shortMessage || err?.message || String(err);
+      console.warn('ensureStarterPack failed (will retry on next load):', msg);
+      return { claimed: false, reason: msg };
+    }
+  })();
+  return _starterPackPromise;
+}
+
 export function cancelCrushPass() {
   return chainWrite('cancelCrushPass', 'cancelCrushPass', []);
 }
