@@ -458,7 +458,13 @@ export function initMap() {
     document.getElementById('popupTarget').textContent = cfg.targetScore.toLocaleString();
     document.getElementById('popupMoves').textContent = cfg.moves;
     document.getElementById('popupBest').textContent = lv.best > 0 ? lv.best.toLocaleString() : '\u2014';
-    renderShardSlots(document.getElementById('popupShards'), { counts: Inventory.getShards(), variant: 'card' });
+    // Show shards earned FROM THIS LEVEL specifically (cumulative across
+    // past runs of this level). Lifetime totals across every level live in
+    // the dedicated inventory popup.
+    renderShardSlots(document.getElementById('popupShards'), {
+      counts: Inventory.getLevelShards(lv.id),
+      variant: 'card',
+    });
     overlay.classList.add('active');
     renderLivesHud();
   }

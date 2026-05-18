@@ -1695,6 +1695,10 @@ function showLevelPopup(won) {
       bigCombos: journal.bigCombos,
       fallerPenalties: fallerDropsPenalized,
     }).then(r => ({ ok: true, r }), e => ({ ok: false, err: e }));
+    // Accumulate this run's shards into the per-level lifetime tally so
+    // the pre-game popup for this level shows "from this level" totals.
+    Inventory.recordLevelShards(levelNum, levelShards);
+
     // Clear any mid-game snapshot now that the level is over
     clearMidGameSnapshot(levelNum).catch(() => {});
   }

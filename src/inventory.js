@@ -200,6 +200,43 @@ export function addShard(id, qty = 1) {
   return s.shards[id];
 }
 
+/// Per-level cumulative shard tally. Keyed by `{wallet}:{level}` so that
+/// the level popup can show "you've earned X necklaces FROM LEVEL 5",
+/// instead of the lifetime total across every level.
+const LEVEL_SHARDS_KEY = 'pengucrush_level_shards_v1';
+function _readLevelShardsAll() {
+  try { return JSON.parse(localStorage.getItem(LEVEL_SHARDS_KEY) || '{}') || {}; }
+  catch (_) { return {}; }
+}
+function _writeLevelShardsAll(all) {
+  try { localStorage.setItem(LEVEL_SHARDS_KEY, JSON.stringify(all)); } catch (_) {}
+}
+function _levelShardsKey(levelN) {
+  const w = walletKey();
+  return `${w}:${Number(levelN) || 0}`;
+}
+
+/** Get shards collected from a specific level (cumulative across runs). */
+export function getLevelShards(levelN) {
+  const all = _readLevelShardsAll();
+  const key = _levelShardsKey(levelN);
+  return { ...DEFAULT_SHARDS, ...(all[key] || {}) };
+}
+
+/** Accumulate the shards earned in this run into the level's lifetime tally. */
+export function recordLevelShards(levelN, runShards) {
+  if (!runShards) return;
+  const all = _readLevelShardsAll();
+  const key = _levelShardsKey(levelN);
+  const prev = { ...DEFAULT_SHARDS, ...(all[key] || {}) };
+  for (const [id, n] of Object.entries(runShards)) {
+    if (!Number.isFinite(n) || n <= 0) continue;
+    prev[id] = (prev[id] || 0) + Number(n);
+  }
+  all[key] = prev;
+  _writeLevelShardsAll(all);
+}
+
 // ── Currencies ────────────────────────────────────────────────
 
 export function addCurrency(name, amount) {
