@@ -46,7 +46,13 @@ const SESSION_FEE_LIMIT_ETH = '0.05';
 // requires re-granting the session key (rotate the local key + revoke old).
 const GAMEPLAY_METHODS = [
   'startLevel(uint16)',
+  // Unvalidated submitLevel — kept in the policy so the client's
+  // validator-down fallback path stays silent.
   'submitLevel((uint16,uint32,uint8,uint16,bool,uint32,bytes32[],bytes32[],uint16,uint16))',
+  // V2.2 validated submission — server-signed bounds-checked path. This is
+  // the normal flow once pengu-validate-level returns; MUST be in the policy
+  // or every level-end will pop the AGW prompt.
+  'submitLevelValidated((uint16,uint32,uint8,uint16,bool,uint32,bytes32[],bytes32[],uint16,uint16),bytes)',
   'levelCheckpoint(uint16,uint16,bytes32)',
   'claimRegen()',
   'cancelCrushPass()',

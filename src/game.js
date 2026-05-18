@@ -2376,8 +2376,6 @@ window.addEventListener('keydown', (e) => {
     updateBoosterUI();
     return;
   }
-  // Shift+B → refill all boosters to 10 (dev/test shortcut)
-  if (e.key === 'B' && e.shiftKey) { fillBoosters(10); return; }
   const keyMap = {
     '2': { type: 'popsicle', axis: 'rx' },
     '3': { type: 'popsicle', axis: 'ry' },
@@ -2509,17 +2507,6 @@ function drawHUDPanel(cvs) {
   ctx.shadowBlur = 0;
 }
 
-// ─── Dev helper — fill booster charges ───────────────────────
-// Call window.__pengu.fillBoosters() from the browser console, or press
-// Shift+B in-game, to top up every booster to `qty` charges.
-function fillBoosters(qty = 10) {
-  const ALL = ['row', 'col', 'colorBomb', 'hammer', 'shuffle'];
-  for (const b of ALL) Inventory.addBooster(b, Math.max(0, qty - (boosterCharges[b] || 0)));
-  rehydrateBoosterCharges();
-  updateBoosterUI();
-  showMsg(`🧪 Boosters ×${qty}`, 900);
-}
-
 async function init() {
   // Fire-and-forget on-chain startLevel: consumes 1 life + emits LevelStarted.
   // Via AGW session key so no wallet prompt. If the session isn't granted yet,
@@ -2576,7 +2563,3 @@ function awardShard(id) {
 init().catch((err) => {
   console.error(err);
 });
-
-// Expose dev helpers on the global pengu namespace (set up by entry.js)
-window.__pengu = window.__pengu || {};
-window.__pengu.fillBoosters = fillBoosters;

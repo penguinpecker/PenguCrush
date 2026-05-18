@@ -316,9 +316,16 @@ document.querySelectorAll('.shop-tag[data-item]').forEach(tagEl => {
       Events.shopBuySuccess(itemType, qty, 'ETH', r.hash);
       if (labelEl) labelEl.textContent = '✓ Confirmed';
     } catch (err) {
-      const msg = String(err?.shortMessage || err?.message || err).slice(0, 100);
+      const msg = String(err?.shortMessage || err?.message || err).slice(0, 200);
       Events.shopBuyFail(itemType, qty, 'ETH', msg);
+      console.warn('Shop purchase failed:', msg);
       if (labelEl) labelEl.textContent = 'Failed';
+      // Surface the reason to the user so they can fix (e.g. fund their
+      // wallet, switch to Abstract, retry). Avoid alerting on plain user-
+      // reject errors since those are noise.
+      if (!/reject|denied|cancel/i.test(msg)) {
+        alert(`Shop purchase failed:\n\n${msg}`);
+      }
     } finally {
       setTimeout(() => {
         if (labelEl && origLabel) labelEl.textContent = origLabel;

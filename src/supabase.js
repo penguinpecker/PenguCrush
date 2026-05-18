@@ -39,12 +39,14 @@ export async function fetchPlayerProgress(wallet) {
   if (!wallet) return null;
   const w = wallet.toLowerCase();
 
-  // Get player
+  // `.maybeSingle()` — anon writes to pengu_players are now revoked (audit
+  // fix H2), so a brand-new wallet has zero rows. `.single()` would throw
+  // 406 PostgREST "Not Acceptable" in that case. maybeSingle returns null.
   const { data: player } = await supabase
     .from('pengu_players')
     .select('id, total_stars, highest_level, total_score, games_played')
     .eq('wallet_address', w)
-    .single();
+    .maybeSingle();
 
   if (!player) return null;
 
