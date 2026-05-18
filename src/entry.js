@@ -1,6 +1,6 @@
 import './style.css';
 import './map.css';
-import { getAGWAddress, isSignedIn, connectAGW, signInWithAGW, getAgwClient } from './agw.js';
+import { getAGWAddress, isSignedIn, connectAGW, signInWithAGW, getAgwClient, getWalletClient } from './agw.js';
 import * as Inventory from './inventory.js';
 import { isLevelUnlocked } from './progress.js';
 import { buyBoosterETH, buyLivesETH, claimStarterPack, ensureStarterPack } from './onchain.js';
@@ -125,12 +125,26 @@ async function boot() {
     return;
   }
 
+  // Silent AGW reconnect on reload. The SIWE signature is cached in
+  // localStorage (so `hasSession()` is true) but the viem walletClient
+  // lives in module memory and resets to null on every page load. Without
+  // this, the next chain tx throws "wallet client missing — reconnect AGW"
+  // even though the user looks signed in. Privy's stored cross-app
+  // connection lets us silently re-request eth_accounts (no popup).
+  if (hasSession() && !getWalletClient()) {
+    try {
+      await connectAGW();
+    } catch (err) {
+      console.warn('AGW silent reconnect failed:', err?.shortMessage || err?.message || err);
+    }
+  }
+
   // V2.3 — starter-pack auto-claim runs on EVERY app load with an active
   // session, regardless of which page (home/map/play) the user landed on.
   // Idempotent on chain. Fires in the background so it doesn't block
   // rendering, but hydrate runs on success so the next inventory read is
   // accurate. Falls back silently on RPC errors.
-  if (hasSession()) {
+  if (hasSession() && getWalletClient()) {
     ensureStarterPack().then(r => {
       if (r?.claimed && r.reason === 'newly_claimed') {
         Inventory.hydrateFromChain().catch(() => {});
