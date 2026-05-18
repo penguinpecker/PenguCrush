@@ -34,19 +34,37 @@ New deployer / treasury (v2):
   Life-regen relayer           TBD (separate EOA, funded ~0.01 ETH)
 
 Backend:
-  Supabase project ref         dqvwpbggjlcumcmlliuj
-  Supabase edge functions      pengu-save-progress (existing)
-                               pengu-quote-price (planned)
-                               pengu-wheel-roll (planned)
-                               pengu-regen-sweep (planned, hourly cron)
+  Supabase project ref         saftqlwxmdqxzfuwdgtu (V2, ap-south-1, created 2026-05-18)
+  Supabase legacy project      dqvwpbggjlcumcmlliuj (NOT under this account;
+                               5 player rows + 10 progress rows abandoned —
+                               on-chain V2 is fresh anyway, so no data lost)
+  Supabase edge functions      pengu-quote-price (DEPLOYED, ACTIVE)
+                               pengu-wheel-roll  (DEPLOYED, ACTIVE)
+                               pengu-regen-sweep (DEPLOYED, ACTIVE,
+                                                  scheduled hourly via pg_cron
+                                                  at minute :07 UTC)
+  Required Supabase secrets    RELAYER_PRIVATE_KEY   ← USER MUST ADD via
+  (set in dashboard, not       LIFE_REGEN_RELAYER_PK   dashboard before shop
+   in any file)                                       and wheel work
+                               (dashboard URL: settings/functions on V2 project)
 
 Frontend:
   Vercel project               penguinpeckers-projects/pengu-crush
   Production domain            https://www.pengucrush.com
-  Vercel env vars              NONE in any environment (production/preview/dev)
+  Vercel env vars (ALL marked sensitive in Vercel):
+    VITE_PENGUCRUSH_ADDRESS        proxy
+    VITE_TREASURY_ADDRESS          treasury EOA
+    VITE_USDC_ADDRESS              bridged USDC on Abstract
+    VITE_AGW_SESSION_VALIDATOR     AGW's built-in validator
+    VITE_SUPABASE_URL              new V2 supabase project
+    VITE_SUPABASE_ANON_KEY         V2 anon JWT
+    VITE_QUOTE_API_BASE            V2 edge function base url
   Local file                   .env.local (gitignored) — DEPLOYER_PRIVATE_KEY,
                                TREASURY_ADDRESS, ETHERSCAN_API_KEY,
-                               PRICE_RELAYER_ADDRESS
+                               PRICE_RELAYER_ADDRESS, USDC_ADDRESS_ABSTRACT,
+                               PYTH_CONTRACT_ABSTRACT, PYTH_ETH_USD_PRICEID,
+                               VITE_PENGUCRUSH_ADDRESS, VITE_TREASURY_ADDRESS,
+                               VITE_USDC_ADDRESS, VITE_AGW_SESSION_VALIDATOR.
 
 ═══════════════════════════════════════════════════════════════════════════════
 1. SESSION LOG
@@ -132,6 +150,52 @@ Frontend:
     - Solidity 0.8.24: require(cond, CustomError()) NOT supported, must
       use if(!cond) revert CustomError(); pattern
     - Never call renounceOwnership on UUPS — locks impl forever
+
+2026-05-18 — V2 supabase project + edge functions deployed
+  ▸ Authorized Supabase MCP. The originally hardcoded project at
+    `dqvwpbggjlcumcmlliuj` is on a different account this session can't
+    reach. Only project accessible was "Metio" (`nnzzvtlifdshpfwemeei`),
+    which is dead — paused >90 days, restore disallowed by Supabase.
+  ▸ User decision: abandon the legacy supabase, create a fresh project
+    under the current "Free" org. On-chain V2 has zero state so no
+    history is lost from the chain side; the 5 legacy supabase players
+    are orphaned (acceptable per ADR-001).
+  ▸ Created NEW project `pengucrush` ref `saftqlwxmdqxzfuwdgtu` in
+    ap-south-1 (Free tier, $0/mo).
+  ▸ Schema migration applied:
+    - pengu_players, pengu_progress, pengu_boosters (legacy app tables)
+    - pengu_game_snapshots (V2 mid-game)
+    - pengu_leaderboard view
+    - app_secrets (private, service_role only — held for future)
+    - rpc_upsert_player_progress (security definer) — RPC the frontend
+      uses instead of the old edge function for leaderboard mirror
+    - RLS enabled on every table; anon read for public tables, anon
+      write only on snapshots (defense via on-chain checkpoint hash)
+  ▸ Edge functions deployed (verify_jwt: false on all three; functions
+    themselves enforce request auth via player address / EIP-712 sig):
+    - pengu-quote-price: EIP-712 signs ShopQuote, ETH/USD via CoinGecko
+    - pengu-wheel-roll : reads on-chain wheel config, weighted RNG,
+                         signs WheelRoll
+    - pengu-regen-sweep: sweeps eligible players, calls claimRegenBatch
+  ▸ pg_cron + pg_net enabled. Scheduled `pengu-regen-sweep-hourly` at
+    minute :07 every hour. Off-peak vs every-:00 jobs.
+  ▸ Frontend rewired:
+    - src/supabase.js → new URL + new anon key (also env-overridable)
+    - src/onchain.js QUOTE_API_BASE → new edge URL
+    - saveLevelResult now calls rpc_upsert_player_progress instead of
+      the legacy pengu-save-progress edge function
+  ▸ Vercel production env updated, ALL VARS MARKED SENSITIVE:
+    VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, VITE_QUOTE_API_BASE
+    (previous VITE_PENGUCRUSH_ADDRESS / VITE_TREASURY_ADDRESS /
+     VITE_USDC_ADDRESS / VITE_AGW_SESSION_VALIDATOR also encrypted)
+  ▸ End-to-end check: curl POST to /pengu-quote-price returns
+    {"error":"RELAYER_PRIVATE_KEY missing or malformed"} — edge function
+    code is wired correctly; just needs the secret set via dashboard.
+  ▸ Manual steps remaining (USER must do):
+    - Add RELAYER_PRIVATE_KEY secret in Supabase dashboard:
+      https://supabase.com/dashboard/project/saftqlwxmdqxzfuwdgtu/settings/functions
+    - Same key as DEPLOYER_PRIVATE_KEY in local .env.local
+    - Optionally also add LIFE_REGEN_RELAYER_PK (or same value)
 
 2026-05-18 — Initial v2 design session
   ▸ Pulled latest code from GitHub (bf947ff). Walked entire codebase line-by-
@@ -297,12 +361,22 @@ When something gets deployed, append:
 5. OUTSTANDING QUESTIONS / TODO
 ═══════════════════════════════════════════════════════════════════════════════
 
-[ ] Confirm Abstract mainnet USDC contract address via doc + Abscan probe
-[ ] Confirm AGW session-key API surface (research in flight)
-[ ] Decide: mid-game state snapshot — localStorage only, or also Supabase
-    or also on-chain checkpoint event?
-[ ] Decide: when to split the deployer/treasury/relayer roles into separate
-    wallets (operator-first → multisig later)
-[ ] Wheel "Ice Boost" semantics — keep random-from-pool, or make it
-    deterministic via the same signed-roll relayer?
-[ ] Supabase MCP auth — needed to deploy edge functions from this session
+[x] Confirm Abstract mainnet USDC contract address  → 0x84A71ccD…87e1
+[x] Confirm AGW session-key API surface             → AGW validator
+                                                       0x34ca1501…d7d081
+[x] Mid-game state snapshot                         → localStorage + Supabase
+                                                       + on-chain LevelCheckpoint
+                                                       every 5 moves
+[ ] Mid-game RESUME UI on level open (snapshot save works, restore deferred)
+[ ] Split deployer/treasury/relayer EOAs            → all same wallet for now
+                                                       (0xDdbbc73A…BC9A)
+[x] Wheel "Ice Boost" semantics                     → random pool resolved on
+                                                       chain via setRandomPool;
+                                                       wheel relayer rolls slot
+                                                       index, contract picks
+                                                       random member from pool
+[x] Supabase MCP auth                               → fresh V2 project under
+                                                       Free org (legacy abandoned)
+[ ] Set RELAYER_PRIVATE_KEY + LIFE_REGEN_RELAYER_PK Supabase secrets via dashboard
+[ ] Test full flow on production after push
+[ ] Verify Abscan source verification (needs ABSCAN_API_KEY)

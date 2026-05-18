@@ -25,7 +25,7 @@ export const USDC_ADDRESS =
 
 const QUOTE_API_BASE =
   ENV.VITE_QUOTE_API_BASE ||
-  'https://dqvwpbggjlcumcmlliuj.supabase.co/functions/v1';
+  'https://saftqlwxmdqxzfuwdgtu.supabase.co/functions/v1';
 
 const penguCrushAbi = Array.isArray(penguCrushAbiJson) ? penguCrushAbiJson : penguCrushAbiJson.abi || [];
 

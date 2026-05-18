@@ -1,7 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = 'https://dqvwpbggjlcumcmlliuj.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRxdndwYmdnamxjdW1jbWxsaXVqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA2MzA2NjIsImV4cCI6MjA4NjIwNjY2Mn0.yrkg3mv62F-DiGA8-cajSSkwnhKBXRbVlr4ye6bdfTc';
+// V2 Supabase project (ap-south-1). URL + anon key are bundled into the client
+// at build time — they're public by design. Override via VITE_ env if you spin
+// up a separate environment.
+const ENV = import.meta.env || {};
+const SUPABASE_URL = ENV.VITE_SUPABASE_URL || 'https://saftqlwxmdqxzfuwdgtu.supabase.co';
+const SUPABASE_ANON_KEY = ENV.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNhZnRxbHd4bWRxeHpmdXdkZ3R1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwODI5ODYsImV4cCI6MjA5NDY1ODk4Nn0.4K4TfBVRFcURiEkWJBL3wsl4Bx1c8If3Lag5n_dux_0';
 const EDGE_URL = `${SUPABASE_URL}/functions/v1/pengu-save-progress`;
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -77,24 +81,26 @@ export async function fetchLeaderboard(limit = 20) {
 // ═══════════════════════════════════════════════════
 //  WRITE — save level result via edge function
 // ═══════════════════════════════════════════════════
-export async function saveLevelResult({ wallet, level, score, stars, movesUsed, boostersUsed, completed, durationMs }) {
+export async function saveLevelResult({ wallet, level, score, stars, movesUsed, completed }) {
+  // V2 supabase uses the `rpc_upsert_player_progress` Postgres function
+  // (security definer, bypasses RLS) instead of the legacy edge function.
+  // The on-chain `submitLevel` tx is the source of truth; this mirror is for
+  // fast leaderboard reads via the Supabase view.
   if (!wallet) return null;
   try {
-    const res = await fetch(EDGE_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        wallet: wallet.toLowerCase(),
-        level,
-        score,
-        stars,
-        movesUsed,
-        boostersUsed,
-        completed,
-        durationMs,
-      }),
+    const { data, error } = await supabase.rpc('rpc_upsert_player_progress', {
+      p_wallet: wallet.toLowerCase(),
+      p_level: level,
+      p_score: score,
+      p_stars: stars,
+      p_moves_used: movesUsed,
+      p_completed: !!completed,
     });
-    return await res.json();
+    if (error) {
+      console.error('Save progress failed:', error.message);
+      return null;
+    }
+    return { success: true, playerId: data };
   } catch (err) {
     console.error('Save progress failed:', err);
     return null;
