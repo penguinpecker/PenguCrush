@@ -415,7 +415,7 @@ export function initMap() {
     }
 
     if (popupPlayBtn) {
-      const inactive = total <= 0;
+      const inactive = visibleTotal <= 0;
       popupPlayBtn.disabled = inactive;
       popupPlayBtn.classList.toggle('pop-play--disabled', inactive);
     }
