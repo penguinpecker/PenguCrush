@@ -151,6 +151,30 @@ Frontend:
       use if(!cond) revert CustomError(); pattern
     - Never call renounceOwnership on UUPS — locks impl forever
 
+2026-05-18 — SHIPPED V2 to production
+  ▸ Pushed bf947ff..413867b to origin/main. User authorization: explicit
+    "push i authorize".
+  ▸ Vercel auto-deploy went READY in 15s, build clean (1430 modules, no
+    errors, only benign dynamic-vs-static-import warnings for AGW sessions
+    and supabase.js).
+  ▸ Production URL https://www.pengucrush.com now serving the V2 bundle
+    (index-DtVDDqnZ.js). HTTP/2 200.
+  ▸ Verified via read-only agent: deploy GREEN, no GH Actions configured
+    on the repo so no CI to validate, but Vercel build was the actual gate.
+  ▸ KNOWN BROKEN until RELAYER_PRIVATE_KEY secret is set:
+    - Shop tag buys (will show "Failed" toast)
+    - Daily wheel spin on chain (local UI still rolls cosmetically)
+    Everything else live: sign-in, gameplay, startLevel, submitLevel,
+    lives + 8h regen, mid-game snapshots, AGW session keys, leaderboard,
+    inventory reads from chain.
+  ▸ Two server-side paths offered for the secret without user touching
+    the dashboard:
+    a) Insert into Supabase Vault via execute_sql (encrypted at rest,
+       only service_role decrypts) — classifier blocks unless the user
+       gives a precise authorization sentence
+    b) Wait until user does it via dashboard
+    User has not yet chosen.
+
 2026-05-18 — V2 supabase project + edge functions deployed
   ▸ Authorized Supabase MCP. The originally hardcoded project at
     `dqvwpbggjlcumcmlliuj` is on a different account this session can't
