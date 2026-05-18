@@ -345,7 +345,10 @@ export function initMap() {
   function renderLivesHud() {
     const { lives, frozenLives, total } = Inventory.getLives();
     const livesMax = Inventory.getMaxLives();
-    const hudSlots = Inventory.getLivesHudSlotCount();
+    // Regular slots grow when player holds more than the regen cap (from
+    // purchased overflow). Ice slots remain at FROZEN_LIVES_MAX on the right.
+    const regularSlots = Math.max(livesMax, lives);
+    const hudSlots = Inventory.getLivesHudSlotCount(lives);
 
     const countEl = document.getElementById('livesCount');
     const rowEl = document.getElementById('livesHearts');
@@ -358,7 +361,7 @@ export function initMap() {
       const hasPass = Inventory.hasCrushPass();
       for (let slot = 1; slot <= hudSlots; slot++) {
         const filled = slot <= lives + frozenLives;
-        const isIceSlot = slot > livesMax; // slots 4 & 5 are the frozen-heart zone
+        const isIceSlot = slot > regularSlots; // ice slots sit to the right of all regular slots
         const isLocked = !filled && isIceSlot && !hasPass;
 
         if (isLocked) {

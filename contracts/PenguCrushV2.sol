@@ -67,7 +67,14 @@ contract PenguCrushV2 is
     //  CONSTANTS
     // ═══════════════════════════════════════════════════════════════
 
-    uint8  public constant MAX_REGULAR_LIVES = 3;
+    /// Hard storage ceiling. Purchases stop adding once this is hit, so a
+    /// 5-pack at regular=8 fills to 10 (drops 3). 99 would fit in uint8 but
+    /// per product decision we keep this modest.
+    uint8  public constant MAX_REGULAR_LIVES = 10;
+    /// 8h regen fills up to this threshold and stops. Purchases can push
+    /// `regular` above it; regen never will.
+    /// Invariant after V2.4: lastConsumedAt == 0 iff regular >= REGEN_CAP_REGULAR.
+    uint8  public constant REGEN_CAP_REGULAR = 3;
     uint8  public constant MAX_FROZEN_LIVES  = 2;
     uint64 public constant REGEN_PERIOD      = 8 hours;
     uint8  public constant USDC_DECIMALS     = 6;
@@ -128,7 +135,7 @@ contract PenguCrushV2 is
     struct LifeAccount {
         uint8  regular;
         uint8  frozen;
-        uint64 lastConsumedAt;   // 0 iff regular == MAX_REGULAR_LIVES
+        uint64 lastConsumedAt;   // 0 iff regular >= REGEN_CAP_REGULAR
     }
 
     struct CrushPass {
@@ -733,14 +740,17 @@ contract PenguCrushV2 is
         internal view
         returns (uint8 effective, uint8 ticks, uint64 newAnchor)
     {
-        if (la.regular >= MAX_REGULAR_LIVES) return (la.regular, 0, 0);
-        if (la.lastConsumedAt == 0) return (MAX_REGULAR_LIVES, 0, 0);
+        // Regen ceiling is REGEN_CAP_REGULAR (3), not the storage cap (10).
+        // Purchases can stack `regular` above REGEN_CAP_REGULAR; regen never
+        // will. lastConsumedAt is cleared once at/above the regen cap.
+        if (la.regular >= REGEN_CAP_REGULAR) return (la.regular, 0, 0);
+        if (la.lastConsumedAt == 0) return (REGEN_CAP_REGULAR, 0, 0);
         uint256 elapsed = block.timestamp - la.lastConsumedAt;
         uint256 t = elapsed / REGEN_PERIOD;
         if (t == 0) return (la.regular, 0, la.lastConsumedAt);
         uint256 e = uint256(la.regular) + t;
-        if (e >= MAX_REGULAR_LIVES) {
-            return (MAX_REGULAR_LIVES, uint8(MAX_REGULAR_LIVES - la.regular), 0);
+        if (e >= REGEN_CAP_REGULAR) {
+            return (REGEN_CAP_REGULAR, uint8(REGEN_CAP_REGULAR - la.regular), 0);
         }
         return (uint8(e), uint8(t), la.lastConsumedAt + uint64(t * REGEN_PERIOD));
     }
@@ -799,7 +809,7 @@ contract PenguCrushV2 is
 
     function _pendingTicks(address p) internal view returns (uint8) {
         LifeAccount memory la = lifeAccount[p];
-        if (la.regular >= MAX_REGULAR_LIVES || la.lastConsumedAt == 0) return 0;
+        if (la.regular >= REGEN_CAP_REGULAR || la.lastConsumedAt == 0) return 0;
         uint256 elapsed = block.timestamp - la.lastConsumedAt;
         return uint8(elapsed / REGEN_PERIOD);
     }
@@ -816,7 +826,7 @@ contract PenguCrushV2 is
         regular = eff;
         frozen = effFrozen;
         total = uint8(uint16(eff) + effFrozen);
-        if (eff >= MAX_REGULAR_LIVES || anchor == 0) {
+        if (eff >= REGEN_CAP_REGULAR || anchor == 0) {
             secondsToNext = 0;
         } else {
             uint256 elapsed = block.timestamp - anchor;
@@ -833,8 +843,11 @@ contract PenguCrushV2 is
             emit LifeRegenerated(p, ticks, eff, uint64(block.timestamp));
         }
         uint16 next = uint16(la.regular) + qty;
+        // Purchases use the HARD cap (10). Regen anchor is cleared as soon
+        // as we cross the REGEN cap (3), since there's nothing left for the
+        // regen loop to refill.
         la.regular = next > MAX_REGULAR_LIVES ? MAX_REGULAR_LIVES : uint8(next);
-        if (la.regular >= MAX_REGULAR_LIVES) la.lastConsumedAt = 0;
+        if (la.regular >= REGEN_CAP_REGULAR) la.lastConsumedAt = 0;
         emit LivesPurchased(p, qty, la.regular);
     }
 

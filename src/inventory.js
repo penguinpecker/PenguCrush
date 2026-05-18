@@ -30,8 +30,12 @@ const DEFAULT_BOOSTERS = { row: 0, col: 0, colorBomb: 0, hammer: 0, shuffle: 0 }
 const DEFAULT_CURRENCIES = { coins: 0, gems: 0, xp: 0 };
 const DEFAULT_SHARDS = { necklace: 0, crown: 0, plooshie: 0 };
 
-/** Regular (pink) life cap. Ice hearts add on top (see `FROZEN_LIVES_MAX`). */
+/// Regen ceiling: the 8h regen tops up to this and stops.
+/// Hard cap: a purchased 5-pack at full hearts stacks up to this. The
+/// HUD grows horizontally beyond LIVES_MAX to show all lives held.
+/// Must match the on-chain V2.4 constants (REGEN_CAP_REGULAR + MAX_REGULAR_LIVES).
 const LIVES_MAX = 3;
+const LIVES_HARD_MAX = 10;
 const FROZEN_LIVES_MAX = 2;
 const LIFE_REGEN_MS = 8 * 60 * 60 * 1000;
 
@@ -53,8 +57,8 @@ function syncCrushPassExpiryIfNeeded(s) {
     s.frozenLives = 0;
     changed = true;
   }
-  if (s.lives > LIVES_MAX) {
-    s.lives = LIVES_MAX;
+  if (s.lives > LIVES_HARD_MAX) {
+    s.lives = LIVES_HARD_MAX;
     changed = true;
   }
   return changed;
@@ -121,7 +125,7 @@ export function getInventory() {
     schemaDirty = true;
   }
   if (s.lives === undefined || s.lives === null) s.lives = LIVES_MAX;
-  else s.lives = Math.min(Number(s.lives) || 0, LIVES_MAX);
+  else s.lives = Math.min(Number(s.lives) || 0, LIVES_HARD_MAX);
   if (s.frozenLives === undefined || s.frozenLives === null) s.frozenLives = 0;
   if (s.lastLifeRegenAt === undefined) s.lastLifeRegenAt = null;
   const passDirty = syncCrushPassExpiryIfNeeded(s);
@@ -292,7 +296,7 @@ export function applyDailyReward(rewardText) {
  * @param {ReturnType<typeof emptyState>} s
  */
 function applyLifeRegenToState(s) {
-  s.lives = Math.max(0, Math.min(LIVES_MAX, Number(s.lives) || 0));
+  s.lives = Math.max(0, Math.min(LIVES_HARD_MAX, Number(s.lives) || 0));
   s.frozenLives = Math.max(0, Math.min(FROZEN_LIVES_MAX, Number(s.frozenLives) || 0));
   let changed = false;
 
@@ -331,13 +335,22 @@ function applyLifeRegenToState(s) {
   return changed;
 }
 
+/** Regen ceiling — the threshold that defines "Full!" for the regen timer. */
 export function getMaxLives() {
   return LIVES_MAX;
 }
 
-/** Heart slots rendered in the map HUD (regular cap + max ice). */
-export function getLivesHudSlotCount() {
-  return LIVES_MAX + FROZEN_LIVES_MAX;
+/** Hard storage cap on regular lives. Purchases stack up to this. */
+export function getMaxLivesHard() {
+  return LIVES_HARD_MAX;
+}
+
+/// Heart slots rendered in the map HUD: at least `LIVES_MAX` regular slots,
+/// grows to fit any extra lives the player has bought past the regen cap,
+/// plus the fixed FROZEN_LIVES_MAX ice slots.
+export function getLivesHudSlotCount(currentRegular = LIVES_MAX) {
+  const reg = Math.max(LIVES_MAX, Number(currentRegular) || LIVES_MAX);
+  return reg + FROZEN_LIVES_MAX;
 }
 
 /** Snapshot after applying regen. Persists if regen added lives. */
@@ -392,7 +405,7 @@ export function addLives(n = 1) {
   if (n <= 0) return getLives();
   getLives();
   const s = getInventory();
-  s.lives = Math.min(LIVES_MAX, s.lives + n);
+  s.lives = Math.min(LIVES_HARD_MAX, s.lives + n);
   if (s.lives >= LIVES_MAX) s.lastLifeRegenAt = null;
   saveInventory(s);
   dispatchInventoryChange();
@@ -482,7 +495,7 @@ export function cancelCrushPass() {
   s.crushPassActive = false;
   s.crushPassExpiresAt = null;
   s.frozenLives = 0;
-  if (s.lives > LIVES_MAX) s.lives = LIVES_MAX;
+  if (s.lives > LIVES_HARD_MAX) s.lives = LIVES_HARD_MAX;
   saveInventory(s);
   dispatchInventoryChange();
 }
