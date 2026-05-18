@@ -2,7 +2,9 @@ import { getLevel, getLevelCount } from './levels.js';
 import { getWallet, fetchPlayerProgress, buildMapProgress, connectAGW, disconnectAGW, shortAddress, hasInjectedWallet, signInWithAGW, isSignedIn } from './supabase.js';
 import * as Inventory from './inventory.js';
 import { renderShardSlots, SHARDS } from './shards.js';
-import { buyCrushPassETH, spinDailyWheel as chainSpinWheel, claimStarterPack, readStarterPackClaimed } from './onchain.js';
+import { buyCrushPassETH, spinDailyWheel as chainSpinWheel, claimStarterPack, readStarterPackClaimed, PENGUCRUSH_ADDRESS } from './onchain.js';
+import { getPublicClient } from './agw.js';
+import penguCrushAbiJson from '../contracts/PenguCrushABI.json';
 import { Events, setAnalyticsUser } from './analytics.js';
 
 /** Map inventory grid: 5 boosters + 3 shards = 4×2 */
@@ -72,6 +74,53 @@ function findCurrentLevel(nodes) {
       n.status = 'current';
       return;
     }
+  }
+}
+
+/// Pull per-level best results straight from chain (PenguCrushV2.bestResults)
+/// and merge into the localStorage progress cache, then re-render the map.
+/// This is the authoritative path — runs on every map load alongside the
+/// Supabase mirror sync so a fresh device / cleared cache / new session
+/// still shows the player's actual progress.
+async function hydrateProgressFromChain(nodes, nodesContainer, openPopup) {
+  const wallet = getWallet();
+  if (!wallet) return;
+  const abi = Array.isArray(penguCrushAbiJson) ? penguCrushAbiJson : (penguCrushAbiJson.abi || []);
+  try {
+    const client = getPublicClient();
+    const results = await Promise.all(NODE_POSITIONS.map(pos =>
+      client.readContract({
+        address: PENGUCRUSH_ADDRESS,
+        abi,
+        functionName: 'getBestResult',
+        args: [wallet, pos.id],
+      }).catch(() => null)
+    ));
+    const local = JSON.parse(localStorage.getItem('pengucrush_progress') || '{}');
+    let changed = false;
+    for (let i = 0; i < NODE_POSITIONS.length; i++) {
+      const r = results[i];
+      if (!r) continue;
+      // Treat any non-zero level field as "this row has been written".
+      const lvl = Number(r.level ?? r[0] ?? 0);
+      if (lvl === 0) continue;
+      const stars = Number(r.stars ?? r[2] ?? 0);
+      const best = Number(r.score ?? r[1] ?? 0);
+      const cur = local[lvl] || { stars: 0, best: 0 };
+      if (stars > cur.stars || best > cur.best) {
+        local[lvl] = { stars: Math.max(cur.stars, stars), best: Math.max(cur.best, best) };
+        changed = true;
+      }
+    }
+    if (changed) {
+      localStorage.setItem('pengucrush_progress', JSON.stringify(local));
+      nodesContainer.innerHTML = '';
+      const fresh = loadProgress();
+      findCurrentLevel(fresh);
+      renderNodes(fresh, nodesContainer, openPopup);
+    }
+  } catch (err) {
+    console.warn('Chain progress hydrate failed:', err?.shortMessage || err?.message || err);
   }
 }
 
@@ -1193,12 +1242,16 @@ export function initMap() {
     if (overlay.classList.contains('active')) closePopup();
   });
 
-  // Load progress and render
+  // Load progress from localStorage and render immediately so the user
+  // sees something. Chain is the authoritative source — hydrate from
+  // bestResults right after so a fresh device / cleared cache / new
+  // session still shows completed levels. Supabase mirror runs after
+  // (best-effort, table is empty without a service-role writer).
   const nodes = loadProgress();
   findCurrentLevel(nodes);
   renderNodes(nodes, nodesContainer, openPopup);
 
-  // Async sync from Supabase (merges cloud data if better)
+  hydrateProgressFromChain(nodes, nodesContainer, openPopup);
   syncFromSupabase(nodes, nodesContainer, openPopup);
 
   // DEV TOOLS
