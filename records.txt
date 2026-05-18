@@ -66,11 +66,16 @@ Backend:
   Supabase legacy project      dqvwpbggjlcumcmlliuj (NOT under this account;
                                5 player rows + 10 progress rows abandoned —
                                on-chain V2 is fresh anyway, so no data lost)
-  Supabase edge functions      pengu-quote-price (DEPLOYED, ACTIVE)
-                               pengu-wheel-roll  (DEPLOYED, ACTIVE)
-                               pengu-regen-sweep (DEPLOYED, ACTIVE,
-                                                  scheduled hourly via pg_cron
-                                                  at minute :07 UTC)
+  Supabase edge functions      pengu-quote-price    (DEPLOYED, ACTIVE — v5)
+                               pengu-wheel-roll     (DEPLOYED, ACTIVE — v3)
+                               pengu-regen-sweep    (DEPLOYED, ACTIVE — v4,
+                                                     scheduled hourly via pg_cron
+                                                     at minute :07 UTC)
+                               pengu-validate-level (DEPLOYED, ACTIVE — v1,
+                                                     EIP-712 journal bounds +
+                                                     signature for
+                                                     submitLevelValidated /
+                                                     submitAndStartNext)
   Required Supabase secrets    RELAYER_PRIVATE_KEY — stored in Supabase Vault
   (encrypted at rest)          (vault.secrets), accessed via the
                                public.get_vault_secret(text) security-definer
@@ -88,12 +93,22 @@ Frontend:
     VITE_SUPABASE_URL              new V2 supabase project
     VITE_SUPABASE_ANON_KEY         V2 anon JWT
     VITE_QUOTE_API_BASE            V2 edge function base url
+    VITE_ABSTRACT_RPC_URL          dedicated Alchemy RPC endpoint
+                                   (added 2026-05-18 to escape public-RPC
+                                    rate limits during hydrate bursts;
+                                    swapped once same day to a fresh key.
+                                    Note: VITE_ vars are baked into the
+                                    client bundle and visible in the JS —
+                                    protection model is per-key quota +
+                                    origin allow-list at the provider,
+                                    not key secrecy. Never committed.)
   Local file                   .env.local (gitignored) — DEPLOYER_PRIVATE_KEY,
                                TREASURY_ADDRESS, ETHERSCAN_API_KEY,
                                PRICE_RELAYER_ADDRESS, USDC_ADDRESS_ABSTRACT,
                                PYTH_CONTRACT_ABSTRACT, PYTH_ETH_USD_PRICEID,
                                VITE_PENGUCRUSH_ADDRESS, VITE_TREASURY_ADDRESS,
-                               VITE_USDC_ADDRESS, VITE_AGW_SESSION_VALIDATOR.
+                               VITE_USDC_ADDRESS, VITE_AGW_SESSION_VALIDATOR,
+                               VITE_ABSTRACT_RPC_URL.
 
 ═══════════════════════════════════════════════════════════════════════════════
 1. SESSION LOG
@@ -414,6 +429,72 @@ ADR-005 (2026-05-18) — AGW session keys for in-game txs
 4. DEPLOYMENT HISTORY
 ═══════════════════════════════════════════════════════════════════════════════
 
+2026-05-18  PenguCrushV2.7 (regen target = 5, kills "4/5 + Full!" bug)
+  proxy            0x06aCb91c46aD1359825560B19A9556118Aeb1896 (unchanged)
+  new impl         0x4F82066ae2924B1EAd467A22C79FD1606718193E
+  upgrade tx       0xa7e65fdf5a52e25497aff7c91b68b4816f9e3d2d75f3f9ac223b8047b531d07e
+  block            62748278
+  changes — single constant flip:
+    REGEN_CAP_REGULAR  3 → 5
+  Pre-V2.7 the HUD could show 4 pink + 1 ice with "Full!" underneath
+  because regen stopped at 3 even when the row had unfilled slots.
+  Now regen fills every regular slot to 5 and "Full!" only paints
+  when total visible hearts (regular + ice) reach 5. Pure-constant
+  change, no storage-layout impact.
+
+2026-05-18  PenguCrushV2.6 (single-tx Next button)
+  proxy            0x06aCb91c46aD1359825560B19A9556118Aeb1896 (unchanged)
+  new impl         0x13586C19fb0c441EBC6CA38514ef4c4297Ae0274
+  upgrade tx       0x0b18335a925a3063f290980b08151ac56182f78b5552d6d49ddc48a86f361b35
+  block            62745044
+  changes:
+    + submitAndStartNext(LevelJournal, bytes sig, uint16 nextLevel)
+      Fuses submitLevelValidated + startLevel into a single atomic tx.
+      Same body as the two separate calls but in one external entry.
+      Reverts atomically — if the next-level start fails (e.g. NoLives),
+      the submit reverts too. Backs the level popup's Next + Replay
+      buttons. No storage-layout change.
+  selector: 0xcc50edd2 (verified live on impl bytecode).
+  GAMEPLAY_METHODS session-key allowlist updated to include the new
+  selector — existing session keys from before this commit must be
+  re-issued (sign out → sign in) or they fall back to wallet prompt.
+
+2026-05-18  PenguCrushV2.5 (hard cap on regular lives = 5)
+  proxy            0x06aCb91c46aD1359825560B19A9556118Aeb1896 (unchanged)
+  new impl         0x6C321B967fbd6aB80bFa0B8106062141d9396a88
+  upgrade tx       0xcc0f73cb2e361bd2f59d8500f5e2b5d7fe268269e1ebfaffddf0de855b63b3db
+  block            62742670
+  changes — single constant flip:
+    MAX_REGULAR_LIVES  10 → 5
+  Reverted the V2.4 "stack up to 10" decision after product call:
+  total HUD slots are 5, anything past 5 wastes. Existing wallets
+  that ran past 5 during the V2.4 window keep their extra count on
+  chain (not auto-rebased) and burn down as the player consumes lives.
+
+2026-05-18  PenguCrushV2.4 (lives stack to 10, regen still 3)
+  proxy            0x06aCb91c46aD1359825560B19A9556118Aeb1896 (unchanged)
+  new impl         0x857d1DA040c501133782f68ca071296F1c47d522
+  upgrade tx       0x1151cc6c7590e2954b35ca4b39ea8ef87ed007bc8b6c1a31a450ad199a595ac0
+  block            62732696
+  changes:
+    MAX_REGULAR_LIVES  3 → 10  (purchases stack)
+    REGEN_CAP_REGULAR  new = 3 (regen ceiling, unchanged behavior)
+    Invariant: lastConsumedAt == 0 iff regular >= REGEN_CAP_REGULAR
+  Buying a 5-pack of lives at full hearts no longer wasted the
+  overflow. Superseded by V2.5 (UX call swung back to hard 5 cap).
+
+2026-05-18  PenguCrushV2.3 (one-time starter pack)
+  proxy            0x06aCb91c46aD1359825560B19A9556118Aeb1896 (unchanged)
+  new impl         0x857d1DA040c501133782f68ca071296F1c47d522  ← also used by V2.4
+  changes:
+    + claimedStarterPack mapping(address => bool)
+    + claimStarterPack() external — idempotent, grants 1 of each
+      enabled Booster SKU. Permissionless + session-key safe.
+    + StarterPackClaimed(address) event
+  Frontend ensureStarterPack() promise-cached + auto-fires after
+  first sign-in. Replaced the lying "starter pack via localStorage"
+  pattern that had no chain backing.
+
 2026-05-18  PenguCrushV2.2 (validation + score saturation)
   proxy            0x06aCb91c46aD1359825560B19A9556118Aeb1896 (unchanged)
   new impl         0x0dB9cB1Aa682f50EaF1b6820f39210336c834f01
@@ -536,6 +617,131 @@ When something gets deployed, append:
     per-relayer nonce separation, owner→multisig transfer (declined
     by user this session).
 
+2026-05-18 — Session 2 (V2.3 → V2.7 + frontend hardening)
+  Theme: chain is truth (no more client-side lies), single-tx UX, HUD
+  caps at 5 hearts, RPC routes through a dedicated endpoint.
+
+  Bugs found and fixed:
+    ▸ Shop "+5 ✓" optimistic label even when chain tx silently failed.
+      → chainWrite() now throws (no more silent null); button shows
+      "Sign tx…" → "✓ Confirmed" only after a real receipt.
+    ▸ Wallet client null after every page reload ("wallet client missing —
+      reconnect AGW" on shop / claim).
+      → src/agw.js ensureWalletClient(): silent reconnect on every page
+      load using Privy's stored cross-app connection, no popup.
+    ▸ Wheel animated to a client-picked slot BEFORE the chain tx fired.
+      Player saw a "winning" spin followed by a revert if gas was low.
+      → src/map.js spinDailyWheel: fire chain first, decode landing slot
+      from DailySpin event in receipt, animate to that slot. Surfaces
+      actionable "fund your AGW wallet" message on insufficient balance.
+    ▸ submitLevel was fire-and-forget on popup-show race. Page navigated
+      with the tx still pending; chain never recorded the run; next level
+      stayed locked; leaderboard missed the score; boosters used in-game
+      never debited on chain.
+      → V2.6 submitAndStartNext fused contract function. Map button is
+      pure exit; Next/Replay each fire ONE atomic tx that settles the
+      current run + starts the destination level.
+    ▸ Boosters used in-game still showed on the next level (because
+      submit never landed — same root cause as above; fix is the same).
+    ▸ Pricing bug: edge function treated $2.98 booster + $2.99 lives as
+      PER-UNIT prices and multiplied by qty. Clicking the "$2.98" 4-pack
+      actually charged $11.92 in ETH; the 5-pack of lives charged $14.95.
+      → pengu-quote-price v5: replaced SKU_UNIT_USD_MICROS with
+      SKU_BUNDLES {size, priceMicros}. Server clamps qty to canonical
+      bundle size so a tampered request can't drain bundles for one
+      bundle's price.
+    ▸ Lives HUD "Full!" with 4/5 hearts visible. Regen capped at 3 even
+      though row had unfilled slots.
+      → V2.7 REGEN_CAP_REGULAR 3 → 5. Frontend LIVES_MAX → 5. HUD
+      always paints exactly 5 slots; regulars displace ice positions
+      when stacked above the regen cap.
+    ▸ Lives count silently truncated back to 3 on every HUD render tick
+      (applyLifeRegenToState clamping s.lives at LIVES_MAX every second).
+      → Removed clamp inside the "at regen cap" branch — s.lives just
+      doesn't regen further, doesn't get rewritten.
+    ▸ "Next" took user to homepage / map instead of level 2.
+      Root cause: chain submit never landed, gate blocked level 2.
+      → submitAndStartNext + chain-progress hydrate fixed both layers.
+    ▸ Leaderboard always empty after wins.
+      Root cause: pengu_leaderboard mirror table has no signed writer
+      (anon revoked in audit) so it never populated.
+      → fetchLeaderboard now reads on chain via getPlayerCount +
+      getPlayers + getLeaderboardBatch. Chain is the source.
+    ▸ Treasury revenue going to deployer EOA, not the multisig.
+      → setTreasury rotated to the 2/2 Safe multisig
+      0xBCaFE23d6D072d65d87E138AfFefc61342D73d0b in this session's
+      earlier work; verified each shop fn forwards to treasury via
+      _forwardEth on every buy. Treasury balance at end of session:
+      0.013495 ETH (~$28.41).
+    ▸ "+5 ✓" / "x4 necklace" lies in the pre-game popup were showing
+      lifetime shard totals, not per-level. User reading "Level 5 has
+      dropped 4 necklaces" when really they came from other levels.
+      → New per-level shard ledger in localStorage
+      (pengucrush_level_shards_v1) keyed by {wallet}:{level}. Pre-game
+      popup renders getLevelShards(level).
+    ▸ V2.6 push shipped without regenerating contracts/PenguCrushABI.json.
+      submitAndStartNext was on chain but the frontend ABI didn't know
+      the selector — viem threw AbiFunctionNotFoundError on Next click.
+      → Regenerated ABI from artifacts-zk/...json in the V2.7 commit.
+      Added "regen ABI in the SAME commit as contract bumps" to the
+      pre-push checklist permanently.
+    ▸ Variable rename leftover: renderLivesHud's destructure went
+      `total → visibleTotal` but a stray `total` ref in the popupPlay
+      enable/disable block threw ReferenceError every HUD tick (1Hz
+      setInterval). Uncaught exception inside the first renderLivesHud
+      call aborted initMap, which silently killed renderNodes — the
+      map drew without level markers.
+      → Replaced with visibleTotal. Added "grep for stale refs after
+      every refactor" to the pre-push checklist permanently.
+
+  Other changes:
+    + Alchemy RPC endpoint wired via VITE_ABSTRACT_RPC_URL env var.
+      Reads route off the shared public RPC to a dedicated endpoint
+      so hydrate bursts + receipt waits + leaderboard fetches stop
+      hitting rate-limit walls. Key swapped once mid-session.
+      Stored locally in .env.local (gitignored) and Vercel prod env
+      only. Never written into records / commits / source.
+    + Inventory popup now hides items with count 0 — "No items yet"
+      empty-state instead of a wall of ×0 slots.
+    + Pre-game popup hydrates progress from chain on every map load
+      (getBestResult for each of the 20 nodes in parallel) so a fresh
+      device / cleared cache / new session shows real on-chain stars
+      instead of all-locked.
+    + cancelCrushPass button now actually calls the chain (was local-
+      only; next hydrate silently undid it).
+    + hydrateFromChain gets a 400ms one-shot retry when all three
+      reads return null (transient RPC blips no longer leave HUD stale).
+    + Inventory cloud-sync (pengu_players / pengu_boosters anon upserts)
+      removed — anon writes were revoked in the audit so the upserts
+      were 401-spamming the network tab for zero benefit. Chain is the
+      only authoritative store now.
+    + pengu_tx_log mirror table: every chain write now logs to
+      pengu_tx_log {wallet, tx_type, status, tx_hash, block_number,
+      details, error}. Per-wallet cap = 10000 rows. Lets admin query
+      "what did wallet X do today" without crawling RPC.
+
+  Live verification (opera-browser-cli on prod):
+    - All ABI strings present in deployed bundle (submitAndStartNext,
+      getBestResult, etc. — 21 functions confirmed)
+    - 0 broken `total <=` regex matches in deployed map bundle
+    - Alchemy endpoint returns eth_chainId 0xab5 (2741) in 235ms
+    - All 4 edge functions OPTIONS 200; pengu-quote-price returns
+      valid signed quote for ETH purchase
+    - Chain reads: MAX_REGULAR_LIVES=5, REGEN_CAP_REGULAR=5,
+      MAX_FROZEN_LIVES=2, maxLevel=20, getPlayerCount=1
+    - getLeaderboardBatch returns valid PlayerStats; one player with
+      totalStars=5, totalScore=18313, highestLevel=4, played=6, won=6
+
+  Pre-push checklist established (saved to ~/.claude memory):
+    1. npm run build (necessary but not sufficient)
+    2. grep for stale refs across whole file after any rename
+    3. Regenerate PenguCrushABI.json in the SAME commit as any
+       contract change
+    4. opera-browser-cli open prod URL → console scan → bundle
+       grep for the expected symbol strings
+    5. Surface auth-gated paths the agent can't reach so the user
+       knows what to verify post-deploy
+
 ═══════════════════════════════════════════════════════════════════════════════
 5. OUTSTANDING QUESTIONS / TODO
 ═══════════════════════════════════════════════════════════════════════════════
@@ -575,6 +781,44 @@ When something gets deployed, append:
                                                        random member from pool
 [x] Supabase MCP auth                               → fresh V2 project under
                                                        Free org (legacy abandoned)
-[ ] Set RELAYER_PRIVATE_KEY + LIFE_REGEN_RELAYER_PK Supabase secrets via dashboard
-[ ] Test full flow on production after push
+[x] Set RELAYER_PRIVATE_KEY Supabase secret         → stored in vault.secrets,
+                                                       read via get_vault_secret
+[ ] Set LIFE_REGEN_RELAYER_PK secret (if/when life-regen sweeper needs its own key)
+[x] Test full flow on production after push         → opera-browser-cli verified
+                                                       bundle hashes, ABI strings,
+                                                       chain reads, edge fns, RPC
+                                                       (auth-gated paths verified
+                                                       end-to-end by user with
+                                                       wallet)
 [ ] Verify Abscan source verification (needs ABSCAN_API_KEY)
+[x] Pivot leaderboard reads to on-chain getPlayers + getLeaderboardBatch
+                                                    → fetchLeaderboard rewritten
+                                                       in src/supabase.js
+[x] Treasury rotation to multisig                   → setTreasury to
+                                                       0xBCaFE23d…d73d0b (2/2 Safe)
+[x] Hydrate progress from chain on map load         → hydrateProgressFromChain()
+                                                       reads getBestResult for
+                                                       every node in parallel
+[x] Single-tx Next button                           → V2.6 submitAndStartNext
+[x] Dedicated RPC endpoint                          → VITE_ABSTRACT_RPC_URL
+                                                       (Alchemy) in Vercel +
+                                                       .env.local
+[x] Hide 0-count inventory items                    → renderInventoryGrid skips
+                                                       zero rows, shows "No items
+                                                       yet" if all empty
+[x] Per-level shard tally                           → pengucrush_level_shards_v1
+                                                       in localStorage, keyed by
+                                                       {wallet}:{level}
+[ ] Add shard display element to end-of-level popup HTML
+    (#levelPopup currently has no shard slot; per-run shards are tracked
+     in the levelShards JS module but not rendered)
+[ ] Signed-write edge function for pengu_leaderboard mirror table
+    (currently empty because anon writes were revoked; leaderboard reads
+     are on-chain instead, which works but pays a per-load RPC cost)
+[ ] Resume UI for mid-game snapshots (save flow works, restore deferred)
+[ ] Rotate relayer key (still pending — transcript exposure during V2 bring-up)
+[ ] Sweep stuck "submitted" tx_log rows older than 1h to either success
+    (if receipt now exists on chain) or "abandoned"
+[ ] Decide on owner→multisig contract-ownership transfer
+    (user explicitly declined this session; treasury-only is enough for now,
+     leaving owner = deployer EOA for admin actions)
