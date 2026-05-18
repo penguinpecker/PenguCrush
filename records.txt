@@ -434,9 +434,22 @@ When something gets deployed, append:
                                                        lower-privilege EOA).
                                                        Deployer + treasury still
                                                        collapsed for now.
-[ ] Fund relayer (currently 0.0 ETH) so regen-sweep cron can send
-    claimRegenBatch txs each hour. User stated they're funding it.
+[x] Fund relayer                                    → bridge tx mis-routed to
+                                                       deployer; forwarded
+                                                       0.003 ETH deployer→relayer
+                                                       tx 0xc96d7b7b…137c1
 [ ] Rotate relayer key (transcript exposure during bring-up)
+[x] Abscan source verification                       → both proxy + impl
+                                                       verified (IDs 12781,
+                                                       12780). Open
+                                                       abscan.org/address/
+                                                       0x06aCb91c…1896 to see
+                                                       readable Read/Write tabs.
+[x] Google Analytics (gtag.js)                       → installed with
+                                                       G-R5T4Y4B629 + custom
+                                                       events for every
+                                                       in-app action via
+                                                       src/analytics.js
 [x] Wheel "Ice Boost" semantics                     → random pool resolved on
                                                        chain via setRandomPool;
                                                        wheel relayer rolls slot
