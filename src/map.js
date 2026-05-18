@@ -461,18 +461,44 @@ export function initMap() {
   document.getElementById('popupClose').addEventListener('click', closePopup);
   document.getElementById('popupBack').addEventListener('click', closePopup);
   overlay.addEventListener('click', e => { if (e.target === overlay) closePopup(); });
-  popupPlayBtn?.addEventListener('click', () => {
+  popupPlayBtn?.addEventListener('click', async () => {
     if (!currentPopupLevel) return;
+    if (popupPlayBtn.disabled) return;
     const { total } = Inventory.getLives();
     if (total <= 0) {
       alert('No lives left! Wait for the next free life or get more from the shop.');
       return;
     }
-    if (!Inventory.consumeLife()) {
-      alert('No lives left!');
-      return;
+    // Fire chainStartLevel BEFORE navigating. The chain consumes the life
+    // + emits LevelStarted. Only after the receipt lands do we navigate to
+    // the play page. If it reverts (no lives / no gas / cancelled) we
+    // STAY on the map and surface the reason — no client-side state goes
+    // out of sync because we never optimistically decremented.
+    const origLabel = popupPlayBtn.textContent;
+    popupPlayBtn.disabled = true;
+    popupPlayBtn.classList.add('pop-play--disabled');
+    if (origLabel) popupPlayBtn.textContent = 'Confirming…';
+    try {
+      const { startLevel: chainStartLevel } = await import('./onchain.js');
+      await chainStartLevel(currentPopupLevel.id);
+      await Inventory.hydrateFromChain().catch(() => {});
+      window.__pengu.goToLevel(currentPopupLevel.id);
+    } catch (err) {
+      const msg = String(err?.shortMessage || err?.message || err).slice(0, 240);
+      console.warn('startLevel failed:', msg);
+      const lowBalance = /insufficient balance|insufficient funds|out of gas/i.test(msg);
+      const noLives = /NoLives|no lives|0x[0-9a-f]{0,8}.*[Ll]ives/.test(msg);
+      if (!/reject|denied|cancel/i.test(msg)) {
+        alert(lowBalance
+          ? 'Your AGW wallet is out of ETH for gas on Abstract.\n\nFund your AGW address with a small amount of ETH on Abstract mainnet, then retry.'
+          : noLives
+          ? 'No lives left. Wait for regen or buy more from the shop.'
+          : `Could not start the level on chain:\n\n${msg}\n\nNo life was consumed — try again.`);
+      }
+      popupPlayBtn.disabled = false;
+      popupPlayBtn.classList.remove('pop-play--disabled');
+      if (origLabel) popupPlayBtn.textContent = origLabel;
     }
-    window.__pengu.goToLevel(currentPopupLevel.id);
   });
 
   // Daily wheel (map screen)

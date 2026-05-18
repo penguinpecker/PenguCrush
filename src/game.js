@@ -1703,21 +1703,12 @@ function showLevelPopup(won) {
 }
 
 function setupLevelPopupButtons() {
-  /// Await the in-flight chainSubmitLevel before navigating. If the chain
-  /// rejected the run (or the tx hasn't landed yet), block navigation and
-  /// surface the reason — Level N+1 won't unlock otherwise.
-  async function awaitSubmitOrAlert(buttonEl) {
-    if (!submitLevelPromise) return true; // no pending submit
+  async function awaitSubmitOrAlert(buttonEl, pendingLabel = 'Saving…') {
+    if (!submitLevelPromise) return true;
     const origText = buttonEl ? buttonEl.textContent : null;
-    if (buttonEl) {
-      buttonEl.disabled = true;
-      buttonEl.textContent = 'Saving…';
-    }
+    if (buttonEl) { buttonEl.disabled = true; buttonEl.textContent = pendingLabel; }
     const r = await submitLevelPromise;
-    if (buttonEl) {
-      buttonEl.disabled = false;
-      if (origText) buttonEl.textContent = origText;
-    }
+    if (buttonEl) { buttonEl.disabled = false; if (origText) buttonEl.textContent = origText; }
     if (r && r.ok) return true;
     const err = r?.err;
     const msg = String(err?.shortMessage || err?.message || err || 'unknown').slice(0, 240);
@@ -1730,17 +1721,50 @@ function setupLevelPopupButtons() {
     return false;
   }
 
+  /// Fire chainStartLevel for the destination level BEFORE navigating. The
+  /// chain debits the life + emits LevelStarted; without this gate the user
+  /// would land on /?page=play with no levelStartedAt set, so any later
+  /// submitLevel would revert and the level wouldn't count.
+  async function startNextLevelOrAlert(buttonEl, destLevel) {
+    const origText = buttonEl ? buttonEl.textContent : null;
+    if (buttonEl) { buttonEl.disabled = true; buttonEl.textContent = 'Confirming…'; }
+    try {
+      const { startLevel: chainStartLevel } = await import('./onchain.js');
+      await chainStartLevel(destLevel);
+      await Inventory.hydrateFromChain().catch(() => {});
+      return true;
+    } catch (err) {
+      const msg = String(err?.shortMessage || err?.message || err).slice(0, 240);
+      console.warn('startLevel failed:', msg);
+      const lowBalance = /insufficient balance|insufficient funds|out of gas/i.test(msg);
+      const noLives = /NoLives|no lives|0x[0-9a-f]{0,8}.*[Ll]ives/.test(msg);
+      if (!/reject|denied|cancel/i.test(msg)) {
+        alert(lowBalance
+          ? 'Your AGW wallet is out of ETH for gas on Abstract.\n\nFund your AGW address with a small amount of ETH on Abstract mainnet.'
+          : noLives
+          ? 'No lives left. Wait for regen or buy more from the shop.'
+          : `Could not start the next level on chain:\n\n${msg}`);
+      }
+      return false;
+    } finally {
+      if (buttonEl) { buttonEl.disabled = false; if (origText) buttonEl.textContent = origText; }
+    }
+  }
+
   document.getElementById('levelPopupMap').addEventListener('click', async (e) => {
     if (!(await awaitSubmitOrAlert(e.currentTarget))) return;
     window.__pengu.goToMap();
   });
   document.getElementById('levelPopupReplay').addEventListener('click', async (e) => {
     if (!(await awaitSubmitOrAlert(e.currentTarget))) return;
+    if (!(await startNextLevelOrAlert(e.currentTarget, levelNum))) return;
     window.__pengu.goToLevel(levelNum);
   });
   document.getElementById('levelPopupNext').addEventListener('click', async (e) => {
     if (!(await awaitSubmitOrAlert(e.currentTarget))) return;
-    if (hasLevel(levelNum + 1)) window.__pengu.goToLevel(levelNum + 1);
+    if (!hasLevel(levelNum + 1)) return;
+    if (!(await startNextLevelOrAlert(e.currentTarget, levelNum + 1))) return;
+    window.__pengu.goToLevel(levelNum + 1);
   });
 }
 
@@ -2546,36 +2570,11 @@ function drawHUDPanel(cvs) {
 }
 
 async function init() {
-  // Block the board from loading until the chain confirms startLevel.
-  // Pre-V2.4 this was fire-and-forget — the game would render even when
-  // the chain rejected the call (no lives, no gas), and submitLevel would
-  // silently fail later, locking the next level. Now we wait + surface
-  // the actual reason on failure and bounce back to the map.
+  // chainStartLevel was MOVED to the map's Play button (src/map.js) so the
+  // chain prompt happens BEFORE the user is teleported into the play page.
+  // By the time we get here the chain has already accepted startLevel and
+  // the life is debited, so this init() trusts the gate and just renders.
   Events.levelStart(levelNum);
-  const loadingMsgEl = document.querySelector('#loadingScreen .loading-screen__caption')
-    || document.getElementById('loadingScreenContent');
-  if (loadingMsgEl && loadingMsgEl.tagName !== 'IMG') {
-    loadingMsgEl.setAttribute('data-pengu-original', loadingMsgEl.textContent || '');
-    loadingMsgEl.textContent = 'Confirming on chain…';
-  }
-  try {
-    await chainStartLevel(levelNum);
-  } catch (err) {
-    const msg = String(err?.shortMessage || err?.message || err).slice(0, 240);
-    console.warn('startLevel failed:', msg);
-    const lowBalance = /insufficient balance|insufficient funds|out of gas/i.test(msg);
-    const noLives = /NoLives|no lives|0x[0-9a-f]{0,8}.*[Ll]ives/.test(msg);
-    if (!/reject|denied|cancel/i.test(msg)) {
-      alert(lowBalance
-        ? 'Your AGW wallet is out of ETH for gas on Abstract.\n\nFund your AGW address with a small amount of ETH on Abstract mainnet, then retry.'
-        : noLives
-        ? 'No lives left. Wait for regen or buy more from the shop.'
-        : `Could not start the level on chain: ${msg}\n\nNo life was consumed — try again.`);
-    }
-    sessionStorage.removeItem('pengu_current_level');
-    window.location.href = '/?page=map';
-    return;
-  }
 
   await preloadAssets(() => {});
   await ensureHammerSwingModel();

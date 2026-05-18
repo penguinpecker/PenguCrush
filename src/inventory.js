@@ -587,73 +587,15 @@ export function purchaseCrushPass() {
   };
 }
 
-// ── Cloud sync (best-effort) ──────────────────────────────────
-
-let syncTimer = null;
-function queueCloudSync(state) {
-  const addr = getAGWAddress();
-  if (!addr) return;
-  clearTimeout(syncTimer);
-  syncTimer = setTimeout(() => syncToCloud(addr, state), 500);
-}
-
-async function syncToCloud(wallet, state) {
-  try {
-    const w = wallet.toLowerCase();
-    // Resolve player row (upsert so a new wallet gets a record)
-    const { data: player } = await supabase
-      .from('pengu_players')
-      .upsert({ wallet_address: w }, { onConflict: 'wallet_address' })
-      .select('id')
-      .single();
-    if (!player?.id) return;
-    // Upsert each booster charge
-    const rows = Object.entries(state.boosters).map(([booster_type, charges]) => ({
-      player_id: player.id,
-      booster_type,
-      charges,
-    }));
-    await supabase
-      .from('pengu_boosters')
-      .upsert(rows, { onConflict: 'player_id,booster_type' });
-  } catch (err) {
-    console.warn('inventory cloud sync failed (non-fatal):', err?.message || err);
-  }
-}
-
-/** Pull latest inventory from Supabase and merge (cloud wins when greater). */
-export async function hydrateFromCloud() {
-  const addr = getAGWAddress();
-  if (!addr) return;
-  const w = addr.toLowerCase();
-  try {
-    const { data: player } = await supabase
-      .from('pengu_players')
-      .select('id')
-      .eq('wallet_address', w)
-      .maybeSingle();
-    if (!player?.id) return;
-    const { data: cloudBoosters } = await supabase
-      .from('pengu_boosters')
-      .select('booster_type, charges')
-      .eq('player_id', player.id);
-    if (!cloudBoosters?.length) return;
-    const s = getInventory();
-    let changed = false;
-    for (const { booster_type, charges } of cloudBoosters) {
-      if ((charges || 0) > (s.boosters[booster_type] || 0)) {
-        s.boosters[booster_type] = charges;
-        changed = true;
-      }
-    }
-    if (changed) {
-      saveInventory(s);
-      dispatchInventoryChange();
-    }
-  } catch (err) {
-    console.warn('inventory cloud hydrate failed (non-fatal):', err?.message || err);
-  }
-}
+// ── Cloud sync ─────────────────────────────────────────────────
+// REMOVED in the V2 audit. Anon writes to pengu_players + pengu_boosters
+// were revoked (audit finding H2 — any anon could inflate the
+// leaderboard / booster counts). Chain is now the authoritative source
+// for boosters, lives, and player stats — hydrateFromChain() reads
+// straight off PenguCrushV2.getInventory + getLives. The old syncToCloud
+// path was firing 401 spam in the network tab and added zero value.
+function queueCloudSync(_state) { /* no-op — chain is truth */ }
+export async function hydrateFromCloud() { /* no-op — chain is truth */ }
 
 // ── Chain sync — chain is the authoritative source of truth ───
 // On every wallet-connect / app-resume, pull the player's on-chain
