@@ -1,0 +1,308 @@
+PenguCrush — Project Records
+=============================
+
+Living log of architecture decisions, on-chain state, bugs (failed + fixed),
+deployments, and per-session findings. Updated every session.
+
+Rules for editing:
+- No secret VALUES — addresses, tx hashes, account names OK; private keys,
+  API keys, anon keys (anything you couldn't paste in Slack) → never.
+- Append-only inside sections; never rewrite history. Cross out (~~strike~~)
+  if something turns out wrong, write the correction below.
+- Date stamps in YYYY-MM-DD. UTC unless noted.
+
+═══════════════════════════════════════════════════════════════════════════════
+0. ADDRESSES & ENDPOINTS (current)
+═══════════════════════════════════════════════════════════════════════════════
+
+Abstract Mainnet · chainId 2741 · RPC https://api.mainnet.abs.xyz
+Explorer: https://abscan.org
+
+Contracts (LEGACY — will be deprecated by v2):
+  PenguCrush UUPS proxy v1     0xAF2ED337AAF8c3FF4AF5600C15F1C8C7042ec517
+  PenguCrush implementation v1 0x976321C3724D01004a37f6E3Ce885cC28ea7f068
+  PenguCrushScores (legacy)    0x2ef63Ee603a6944396AA97DA35835807F96BA089
+  v1 proxy owner               0x5fc1542618222BC6ECD0912e9B1F8D9a929Ed331
+  Authorized relayer (v1)      0x6cB7318BCb62bec46F4A48E0E8d4E4E9EB0Ce6d3
+
+New deployer / treasury (v2):
+  Deployer EOA                 0xDdbbc73A42814c42943095cc7F51762fb038BC9A
+    Funded on Abstract:        0.01945 ETH (2026-05-18)
+    Nonce at fund time:        0
+  Treasury                     same as deployer (rotates via setTreasury later)
+  Price quote relayer          same as deployer (will be split later)
+  Life-regen relayer           TBD (separate EOA, funded ~0.01 ETH)
+
+Backend:
+  Supabase project ref         dqvwpbggjlcumcmlliuj
+  Supabase edge functions      pengu-save-progress (existing)
+                               pengu-quote-price (planned)
+                               pengu-wheel-roll (planned)
+                               pengu-regen-sweep (planned, hourly cron)
+
+Frontend:
+  Vercel project               penguinpeckers-projects/pengu-crush
+  Production domain            https://www.pengucrush.com
+  Vercel env vars              NONE in any environment (production/preview/dev)
+  Local file                   .env.local (gitignored) — DEPLOYER_PRIVATE_KEY,
+                               TREASURY_ADDRESS, ETHERSCAN_API_KEY,
+                               PRICE_RELAYER_ADDRESS
+
+═══════════════════════════════════════════════════════════════════════════════
+1. SESSION LOG
+═══════════════════════════════════════════════════════════════════════════════
+
+2026-05-18 — Hardhat env wired
+  ▸ Loaded .env.local via Node's built-in process.loadEnvFile (no dotenv
+    dependency added). All 5 deploy scripts now read process.env first,
+    fall back to vars.get for backward compat.
+  ▸ Verified: derived address from .env.local DEPLOYER_PRIVATE_KEY matches
+    funded deployer 0xDdbbc73A…BC9A. Env loads ETHERSCAN_API_KEY,
+    TREASURY_ADDRESS, PRICE_RELAYER_ADDRESS.
+
+2026-05-18 — Abstract chain spec confirmed
+  ▸ USDC on Abstract mainnet: 0x84A71ccD554Cc1b02749b35d22F684CC8ec987e1
+    - decimals=6 (Circle convention), but this is BRIDGED USDC, not native
+      Circle deployment. EIP-2612 permit() NOT GUARANTEED — design contract
+      to use standard approve+transferFrom path; permit is optional fast
+      path only after on-chain probe of DOMAIN_SEPARATOR()/nonces().
+    - EIP-3009 transferWithAuthorization likewise not guaranteed.
+  ▸ Other useful addrs:
+      WETH9            0x3439153EB7AF838Ad19d56E1571FBD09333C2809
+      USDT             0x0709F39376dEEe2A2dfC94A58EdEb2Eb9DF012bD
+      Uniswap v3 SwapRouter02 0x7712FA47387542819d4E35A23f8116C90C18767C
+  ▸ Oracle: NO Chainlink ETH/USD on Abstract mainnet. PYTH IS LIVE:
+      Pyth contract    0x8739d5024B5143278E2b15Bd9e7C26f6CEc658F1
+      ETH/USD priceId  0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace
+    Pyth is pull-oracle: caller fetches Hermes update + pays wormhole fee.
+    Recommended pattern: backend EIP-712 signed quotes (primary), Pyth as
+    optional contract-side sanity guard (revert if quote drifts >2% from
+    Pyth). Pyth guard off by default; admin can enable later.
+  ▸ zkSync deployment quirks (none blocking):
+    - bytecode limit ~2 MB / 2^16 instructions per contract — 900-line UUPS
+      well within.
+    - bytecodeLength % 64 == 32 required (zksolc handles).
+    - msg.sender behaves normally for L2-internal calls.
+    - block.timestamp = L2 block (~1s ticks). Fine for quote expiry.
+    - Must use zksolc compiler via @matterlabs/hardhat-zksync or
+      foundry-zksync. Standard solc output won't deploy.
+    - OZ upgradeable fully supported via @matterlabs/hardhat-zksync-upgradable.
+  ▸ Verifier: ABSCAN HAS OWN API KEY, **NOT** Etherscan V2 compatible.
+    - Etherscan V2 multichain does NOT cover Abstract as of May 2026.
+    - The ETHERSCAN_API_KEY saved earlier (WVTM…GED4B) will be rejected by
+      Abscan. Need separate Abscan API key from https://abscan.org → My
+      Account → API Keys. Saved as ABSCAN_API_KEY (blank) in .env.local.
+    - Legacy zksync verifier still works (api-explorer-verify.mainnet.abs.xyz)
+      but Abscan is the documented path now.
+
+2026-05-18 — Research agents returned
+  ▸ AGW session keys (CRITICAL): NO custom validator needed. Abstract
+    provides one at 0x34ca1501FAE231cC2ebc995CE013Dbe882d7d081
+    (same address on mainnet 2741 + testnet). Policy registry at
+    0xfD20b9d7A406e2C4f5D6Df71ABE3Ee48B2EccC9F.
+    API: agwClient.createSession({ session: SessionConfig }) for grant
+    (one AGW prompt). createSessionClient or agwClient.toSessionClient
+    for usage — drop-in replacement for regular client, no per-tx prompt.
+    Policy fields: signer, expiresAt, feeLimit{Limit{type,limit,period}},
+    callPolicies[]{target, selector, maxValuePerUse, valueLimit,
+    constraints[]{index, condition, refValue, limit}}, transferPolicies[].
+    Revocation: agwClient.revokeSessions({session}) — requires owner sig.
+    Key gotchas: session key compromise drains full scope; one CallPolicy
+    per (target, selector); period straddling possible — use Lifetime
+    feeLimit for hard caps.
+    → ADR-005 confirmed: 24h session, scoped to PenguCrushV2 non-payable
+      selectors, feeLimit Lifetime 0.05 ETH, shop functions excluded so
+      they trigger normal AGW prompt automatically.
+    → Task #3 simplified: no PenguSessionKeyValidator contract needed.
+
+  ▸ OpenZeppelin v5.6.1 production patterns:
+    - Ownable2StepUpgradeable (not OwnableUpgradeable) for safer transfer
+    - _disableInitializers() in constructor (mandatory)
+    - __Ownable2Step_init() + __UUPSUpgradeable_init() + __EIP712_init()
+      + __ReentrancyGuard_init() + __Pausable_init() chain in initialize
+    - upgradeToAndCall(newImpl, "") — no upgradeTo() in v5
+    - ERC-7201 namespaced storage preferred for new code OR flat storage
+      + __gap[N] (pick one, don't mix)
+    - PausableUpgradeable still standard; for partial pause use explicit
+      bool shopPaused, gameplayPaused with custom modifiers
+    - EIP-712: __EIP712_init("PenguCrush","1"), ECDSA.recover(digest,sig)
+      single-arg form (rejects malleable high-s sigs)
+    - SafeERC20.safeTransferFrom for USDC + hardcode decimals=6 with
+      one-time assertion in initialize
+    - Solidity 0.8.24: require(cond, CustomError()) NOT supported, must
+      use if(!cond) revert CustomError(); pattern
+    - Never call renounceOwnership on UUPS — locks impl forever
+
+2026-05-18 — Initial v2 design session
+  ▸ Pulled latest code from GitHub (bf947ff). Walked entire codebase line-by-
+    line — Solidity contracts, JS modules, HTML, configs. No dead code found.
+  ▸ Verified on-chain state of existing v1 proxy via RPC:
+      owner()           = 0x5fc1542618222BC6ECD0912e9B1F8D9a929Ed331
+      paused()          = false
+      maxLevel()        = 20
+      getPlayerCount()  = 0   ← key finding (see Issues #1)
+      Impl slot         = 0x976321C3724D01004a37f6E3Ce885cC28ea7f068 ✓
+      proxiableUUID()   = 0x360894…382bbc (zkSync-flavored UUPS slot)
+      proxiableUUID()
+        via proxy       = reverts UUPSUnauthorizedCallContext (expected guard)
+  ▸ Hardhat vars.json on this machine is empty — no DEPLOYER_PRIVATE_KEY
+    stored. Pasted key derives to 0xDdbbc73A…BC9A, NOT the v1 proxy owner.
+    Decided: fresh deploy with the new wallet as deployer + treasury.
+  ▸ Funded 0xDdbbc73A…BC9A with 0.01945 ETH on Abstract.
+  ▸ Confirmed Supabase has real data: 5 players, 10 progress rows. Players
+    completed real levels. Cross-check with on-chain playerCount=0 confirms
+    every on-chain write has been silently failing (see Issues #1).
+  ▸ Vercel project linked; confirmed VITE_ONCHAIN_DISABLED is NOT set, so the
+    kill switch isn't the cause of silent failures.
+  ▸ Linked GitHub repo → Vercel deploy → Supabase backend → Abstract chain.
+    Architecture intact; only the chain link is broken.
+  ▸ Plan: deploy fresh PenguCrushV2.sol with items registry + wheel config +
+    on-chain lives + regen events + signed-quote oracle + USDC path. AGW
+    session keys remove the per-tx prompt UX issue.
+
+═══════════════════════════════════════════════════════════════════════════════
+2. ARCHITECTURE DECISIONS
+═══════════════════════════════════════════════════════════════════════════════
+
+ADR-001 (2026-05-18) — Fresh deploy, not upgrade
+  Decision: deploy PenguCrushV2 as a NEW proxy. Don't upgrade the existing
+  v1 proxy at 0xAF2E…c517.
+  Why: deployer for v1 is unrecoverable on this machine. v1 proxy has zero
+  players anyway (silent-failure bug), so no data is lost.
+  Trade-off: anyone with the v1 address hardcoded somewhere will break.
+  Mitigation: legacy v1 proxy left on chain, frontend points only at v2.
+
+ADR-002 (2026-05-18) — Items registry on chain, admin-mutable
+  Decision: boosters, shards, currencies, lives all live in a single items
+  registry (`mapping(bytes32 sku => ItemConfig)`), admin can add/disable
+  without redeploying. Wheel config likewise stored on chain.
+  Why: catalogue changes (new shard, new wheel reward) shouldn't need a
+  contract upgrade. Upgrade reserved for actual code-shape changes.
+
+ADR-003 (2026-05-18) — Lives + 8h regen authoritative on chain
+  Decision: LifeAccount{regular, frozen, lastConsumedAt} in contract state.
+  Regen computed virtually on read, materialized on write. Each tick fires
+  LifeRegenerated event (via auto-claim from frontend on tick, plus hourly
+  cron sweeper for offline users).
+  Why: client-side regen is trivially editable in localStorage. Need on-
+  chain truth for leaderboards, analytics, and any future monetization.
+
+ADR-004 (2026-05-18) — Signed-quote oracle for prices
+  Decision: shop SKUs are USD-denominated on chain. A backend price relayer
+  (Supabase edge function) signs EIP-712 `Quote(sku, qty, ethWei,
+  usdcMicros, validUntil, nonce)` payloads. Contract verifies signature +
+  expiry before accepting payment.
+  Why: no Chainlink/Pyth ETH/USD live on Abstract yet (to confirm). This
+  pattern is chain-agnostic, oracle-free, and prevents stale-price griefing
+  with a ~60s quote window.
+
+ADR-005 (2026-05-18) — AGW session keys for in-game txs
+  Decision: 24h session key, scoped to PenguCrushV2 address only, function
+  selectors limited to non-payable game actions (submitLevel,
+  consumeBooster, awardShards, claimRegen, etc.). Shop functions are
+  excluded — they always require explicit AGW prompt because real $.
+  Why: eliminates per-tx prompt UX, AGW-native primitive, owner can revoke.
+
+═══════════════════════════════════════════════════════════════════════════════
+3. ISSUES & FIXES (failed + successful)
+═══════════════════════════════════════════════════════════════════════════════
+
+#1 (open, 2026-05-18) — ALL chain writes silently failing
+  Symptom: v1 proxy getPlayerCount() = 0 despite 5 real players in Supabase
+    and 10 completed levels.
+  Root cause hypothesis: src/onchain.js safeWrite() catches every error
+    and returns null without surfacing to UI. Combined with possible AGW
+    network/signing issues, the failure mode is invisible.
+  Status: fixing via v2 deploy. New frontend will surface chain failures
+    to a debug overlay (dev-mode) and a Supabase error_log table (prod).
+  Notes: this is the failure mode flagged in user's memory feedback
+    "Verify env vars + critical paths before shipping fail-closed."
+
+2026-05-18 — PenguCrushV2.sol drafted + compiled
+  ▸ ~960 lines. Compiles clean with zksolc 1.5.15 + zkvm-solc 0.8.26-1.0.2.
+  ▸ Bytecode size: 127,840 bytes (well under zkSync ~2 MB ceiling).
+  ▸ ABI surface: 96 functions, 47 events (35 custom + 12 OZ-inherited),
+    49 custom errors.
+  ▸ Build/compile issues found + fixed during session:
+    ✗ Imported @openzeppelin/contracts-upgradeable/utils/ReentrancyGuard
+      Upgradeable.sol — does NOT exist in OZ v5.6.1 contracts-upgradeable.
+      ✓ FIX: use non-upgradeable @openzeppelin/contracts/utils/ReentrancyGuard
+        — safe for UUPS proxies in v5 (constructor only sets impl._status=1
+        which is irrelevant under delegatecall; proxy storage starts at 0,
+        modifier check `_status == ENTERED(2)` still works).
+    ✗ Called __UUPSUpgradeable_init() — function does not exist in v5.
+      ✓ FIX: removed; v5's UUPSUpgradeable uses ERC-7201 namespaced storage,
+        no _init() needed.
+    ✗ Solidity 0.8.24 chokes on `mcopy` opcode used in OZ v5.6.1
+      Bytes.sol (EIP-5656, requires Cancun-aware solc 0.8.25+).
+      ✓ FIX: bump pragma + hardhat to 0.8.26 with evmVersion: "cancun".
+    ✗ zksolc warning that default codegen will become hard error.
+      ✓ FIX: explicit `codegen: "yul"` in hardhat.config.cjs zksolc.settings.
+    ✗ Used `bytes8` for "YYYY-MM-DD" day key — needs 10 chars, won't fit.
+      ✓ FIX: replaced day/week keys with uint64 julian days throughout,
+        deleted ~80 lines of date-formatting helpers + assembly bytes-cast.
+    ✗ `if (msg.value != 0)` in non-payable USDC functions — solc rejects.
+      ✓ FIX: removed; non-payable already auto-reverts on nonzero value.
+    ✗ Legacy PenguCrush.sol + PenguCrushScores.sol had pre-existing
+      duplicate-var-decl issues with 0.8.26.
+      ✓ FIX: renamed both to .sol.bak (out of compile path); v1 proxies
+        remain live on chain unaffected.
+  ▸ Copied fresh ABI to contracts/PenguCrushABI.json (overwrote v1 ABI).
+  ▸ V2 design summary on chain:
+    - Items registry (admin-mutable): boosters, shards, currencies, lives
+    - Per-player balances by sku (boosterBalance, shardBalance, currencyBalance)
+    - LifeAccount{regular,frozen,lastConsumedAt} with 8h regen, virtual on
+      read + materialized on write, claimRegen/claimRegenFor/claimRegenBatch
+      permissionless entry points for auto-fire LifeRegenerated events
+    - CrushPass{expiresAt,streakWeeks,lastPurchaseWeekMonday} with
+      pass-expiry materialization on any next action
+    - submitLevel(LevelJournal) batched per-level state update
+    - Shop in ETH + USDC, EIP-712 signed quotes from priceRelayer with
+      nonce + deadline replay protection
+    - Daily wheel with EIP-712 signed RNG from wheelRelayer
+    - levelCheckpoint(level, moveNum, snapshotHash) for mid-game tamper trail
+    - Wheel config + random pools admin-mutable
+    - Pyth ETH/USD guardrail wired but off by default
+    - Ownable2Step, UUPS upgradeable, Pausable (shop+gameplay independent),
+      ReentrancyGuard on every payable shop function
+    - receive()/fallback() revert — no accidental ETH deposits
+
+═══════════════════════════════════════════════════════════════════════════════
+4. DEPLOYMENT HISTORY
+═══════════════════════════════════════════════════════════════════════════════
+
+2026-05-18  PenguCrushV2
+  proxy            0x06aCb91c46aD1359825560B19A9556118Aeb1896
+  implementation   0xa742dd48E82B970770A557f89f062769B5A764B9
+  owner            0xDdbbc73A42814c42943095cc7F51762fb038BC9A
+  treasury         0xDdbbc73A42814c42943095cc7F51762fb038BC9A
+  priceRelayer     0xDdbbc73A42814c42943095cc7F51762fb038BC9A
+  wheelRelayer     0xDdbbc73A42814c42943095cc7F51762fb038BC9A
+  usdc             0x84A71ccD554Cc1b02749b35d22F684CC8ec987e1
+  pyth             0x8739d5024B5143278E2b15Bd9e7C26f6CEc658F1 (guard disabled)
+  network          abstractMainnet (chainId 2741)
+  post-deploy verified via RPC:
+    paused=false  shopPaused=false  gameplayPaused=false  maxLevel=20
+    items seeded = 13  wheel slots seeded = 6
+  Deploy issues fixed mid-flight:
+    ✗ OZ ReentrancyGuard trips upgrades-plugin safety validator
+      (constructor not allowed).
+      ✓ FIX: inlined a minimal nonReentrant modifier using uint256 status flag
+        + custom Reentrant() error. Removed import + inheritance.
+
+When something gets deployed, append:
+  YYYY-MM-DD  contract  proxy_address  impl_address  tx_hash  network
+
+═══════════════════════════════════════════════════════════════════════════════
+5. OUTSTANDING QUESTIONS / TODO
+═══════════════════════════════════════════════════════════════════════════════
+
+[ ] Confirm Abstract mainnet USDC contract address via doc + Abscan probe
+[ ] Confirm AGW session-key API surface (research in flight)
+[ ] Decide: mid-game state snapshot — localStorage only, or also Supabase
+    or also on-chain checkpoint event?
+[ ] Decide: when to split the deployer/treasury/relayer roles into separate
+    wallets (operator-first → multisig later)
+[ ] Wheel "Ice Boost" semantics — keep random-from-pool, or make it
+    deterministic via the same signed-roll relayer?
+[ ] Supabase MCP auth — needed to deploy edge functions from this session

@@ -1,37 +1,74 @@
 // ═══════════════════════════════════════════════════════════════
-//  ON-CHAIN ACTIVITY — writes to Abstract from the user's AGW
+//  ON-CHAIN API — PenguCrushV2 on Abstract mainnet (chainId 2741)
 //
-//  Target contract: PenguCrush (UUPS upgradeable proxy). One address
-//  handles level submissions AND activity events (booster used,
-//  booster purchased, daily spin, session ping). New actions are
-//  added by upgrading the implementation — the proxy address and
-//  all player history stay the same.
+//  Single entry point for every chain interaction. Uses AGW session
+//  keys (when granted) so in-game txs auto-execute without per-tx
+//  wallet prompts. Shop purchases bypass the session key — those
+//  always go through the normal walletClient so the user sees the
+//  payment prompt.
 // ═══════════════════════════════════════════════════════════════
 
-import { getWalletClient, getAGWAddress } from './agw.js';
+import { getWalletClient, getAGWAddress, getPublicClient } from './agw.js';
+import { getSessionClient } from './session-key.js';
 import { abstract } from 'viem/chains';
+import { keccak256, toBytes, encodeAbiParameters, parseAbiParameters } from 'viem';
 import penguCrushAbiJson from '../contracts/PenguCrushABI.json';
 
-/** Unified UUPS proxy on Abstract Mainnet (chain 2741). */
-export const PENGUCRUSH_ADDRESS = '0xAF2ED337AAF8c3FF4AF5600C15F1C8C7042ec517';
+const ENV = (import.meta.env || {});
+
+/** PenguCrushV2 UUPS proxy — set via VITE_PENGUCRUSH_ADDRESS, hard-coded fallback. */
+export const PENGUCRUSH_ADDRESS =
+  ENV.VITE_PENGUCRUSH_ADDRESS || '0x06aCb91c46aD1359825560B19A9556118Aeb1896';
+
+export const USDC_ADDRESS =
+  ENV.VITE_USDC_ADDRESS || '0x84A71ccD554Cc1b02749b35d22F684CC8ec987e1';
+
+const QUOTE_API_BASE =
+  ENV.VITE_QUOTE_API_BASE ||
+  'https://dqvwpbggjlcumcmlliuj.supabase.co/functions/v1';
 
 const penguCrushAbi = Array.isArray(penguCrushAbiJson) ? penguCrushAbiJson : penguCrushAbiJson.abi || [];
+
+// Currency enum codes — must match Solidity order
+export const CURRENCY = { ETH: 0, USDC: 1 };
+
+// SKU helpers — keccak256 of the on-chain name, e.g. "booster.row"
+const skuCache = new Map();
+export function sku(name) {
+  if (skuCache.has(name)) return skuCache.get(name);
+  const h = keccak256(toBytes(name));
+  skuCache.set(name, h);
+  return h;
+}
 
 // ── Kill switch ───────────────────────────────────────────────
 
 function isDisabled() {
-  try { return import.meta.env?.VITE_ONCHAIN_DISABLED === 'true'; } catch (_) { return false; }
+  return ENV.VITE_ONCHAIN_DISABLED === 'true';
 }
 
-function log(label, hash) {
-  if (hash) console.log(`🔗 onchain ${label}:`, hash);
-}
+// ── Internal write helper ─────────────────────────────────────
 
-async function safeWrite(label, functionName, args) {
+/**
+ * Send a write. If a session key is granted for this method, use it (silent
+ * tx, no prompt). Otherwise route through the user's AGW (prompts).
+ */
+async function chainWrite(label, functionName, args, options = {}) {
   if (isDisabled()) return null;
-  const client = getWalletClient();
   const account = getAGWAddress();
-  if (!client || !account) return null;
+  if (!account) {
+    console.warn(`onchain ${label}: wallet not connected — skipping`);
+    return null;
+  }
+  // Shop / value-bearing calls always go through the main wallet so the user
+  // explicitly authorizes the payment. Caller signals via `requireUserPrompt`.
+  const wantSession = !options.requireUserPrompt;
+  const sessionClient = wantSession ? await getSessionClient(functionName).catch(() => null) : null;
+  const client = sessionClient || getWalletClient();
+  if (!client) {
+    console.warn(`onchain ${label}: no client — skipping`);
+    return null;
+  }
   try {
     const hash = await client.writeContract({
       address: PENGUCRUSH_ADDRESS,
@@ -40,46 +77,233 @@ async function safeWrite(label, functionName, args) {
       args,
       account,
       chain: abstract,
+      value: options.value || 0n,
     });
-    log(label, hash);
-    return hash;
+    if (options.waitForReceipt !== false) {
+      const pc = getPublicClient();
+      const receipt = await pc.waitForTransactionReceipt({ hash, confirmations: 1 });
+      if (receipt.status !== 'success') {
+        throw new Error(`reverted (status=${receipt.status})`);
+      }
+      console.log(`✓ onchain ${label} mined:`, hash);
+      return { hash, receipt, used: sessionClient ? 'session' : 'wallet' };
+    }
+    console.log(`✓ onchain ${label} sent:`, hash);
+    return { hash, used: sessionClient ? 'session' : 'wallet' };
   } catch (err) {
-    console.warn(`onchain ${label} failed (non-fatal):`, err?.shortMessage || err?.message || err);
-    return null;
+    const msg = err?.shortMessage || err?.message || String(err);
+    console.warn(`✗ onchain ${label} failed:`, msg);
+    throw err;
   }
 }
 
-// ── Public API ────────────────────────────────────────────────
-
-export function logLevelOnchain({ level, score, stars, movesUsed }) {
-  return safeWrite('level', 'submitScore',
-    [Number(level), Number(score), Number(stars), Number(movesUsed)]);
+async function chainRead(functionName, args = []) {
+  const pc = getPublicClient();
+  return pc.readContract({
+    address: PENGUCRUSH_ADDRESS,
+    abi: penguCrushAbi,
+    functionName,
+    args,
+  });
 }
 
-export function logBoosterUseOnchain(boosterType) {
-  return safeWrite('booster-use', 'logBoosterUsed',
-    [stringToBytes32(boosterType)]);
+// ═══════════════════════════════════════════════════════════════
+//  GAMEPLAY WRITES — session-key safe
+// ═══════════════════════════════════════════════════════════════
+
+export function startLevel(level) {
+  return chainWrite('startLevel', 'startLevel', [Number(level)]);
 }
 
-export function logBoosterPurchaseOnchain(boosterType, qty) {
-  return safeWrite('booster-buy', 'logBoosterPurchased',
-    [stringToBytes32(boosterType), Number(qty)]);
+export function submitLevel(journal) {
+  // journal: { level, score, stars, movesUsed, completed, durationMs,
+  //            boostersUsed[], shardsEarned[], bigCombos, fallerPenalties }
+  return chainWrite('submitLevel', 'submitLevel', [{
+    level: Number(journal.level),
+    score: Number(journal.score),
+    stars: Number(journal.stars),
+    movesUsed: Number(journal.movesUsed),
+    completed: !!journal.completed,
+    durationMs: Number(journal.durationMs),
+    boostersUsed: journal.boostersUsed || [],
+    shardsEarned: journal.shardsEarned || [],
+    bigCombos: Number(journal.bigCombos || 0),
+    fallerPenalties: Number(journal.fallerPenalties || 0),
+  }]);
 }
 
-export function logDailySpinOnchain(rewardText) {
-  return safeWrite('daily-spin', 'logDailySpin',
-    [stringToBytes32(rewardText)]);
+export function levelCheckpoint(level, moveNum, snapshotHash) {
+  return chainWrite('levelCheckpoint', 'levelCheckpoint',
+    [Number(level), Number(moveNum), snapshotHash],
+    { waitForReceipt: false }); // fire-and-forget, low priority
 }
 
-export function logSessionPingOnchain(tag) {
-  return safeWrite('session-ping', 'logSessionPing',
-    [stringToBytes32(tag)]);
+export function claimRegen() {
+  return chainWrite('claimRegen', 'claimRegen', []);
 }
 
-// ── Helpers ───────────────────────────────────────────────────
-
-function stringToBytes32(s) {
-  const bytes = new TextEncoder().encode((s || '').slice(0, 31));
-  const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
-  return '0x' + hex.padEnd(64, '0');
+export function cancelCrushPass() {
+  return chainWrite('cancelCrushPass', 'cancelCrushPass', []);
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  SHOP — quote fetch + payable
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Ask the backend signer for a fresh price quote.
+ * skuName: "booster.row" | "booster.col" | ... | "life.regular" | "pass.weekly"
+ * currency: 'ETH' | 'USDC'
+ */
+export async function fetchShopQuote({ skuName, qty = 1, currency = 'ETH' }) {
+  const buyer = getAGWAddress();
+  if (!buyer) throw new Error('No wallet connected');
+  const url = `${QUOTE_API_BASE}/pengu-quote-price`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ buyer, skuName, qty, currency }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`quote failed: ${res.status} ${text}`);
+  }
+  return await res.json();
+  // returns: { quote: { buyer, sku, qty, currency, amount, nonce, deadline }, signature }
+}
+
+export async function buyBoosterETH(skuName, qty = 1) {
+  const { quote, signature } = await fetchShopQuote({ skuName, qty, currency: 'ETH' });
+  return chainWrite('buyBoosterETH', 'buyBoosterETH', [quote.sku, quote, signature], {
+    value: BigInt(quote.amount),
+    requireUserPrompt: true,
+  });
+}
+
+export async function buyBoosterUSDC(skuName, qty = 1) {
+  const { quote, signature } = await fetchShopQuote({ skuName, qty, currency: 'USDC' });
+  // Caller is responsible for ensuring USDC approval to PENGUCRUSH_ADDRESS first
+  return chainWrite('buyBoosterUSDC', 'buyBoosterUSDC', [quote.sku, quote, signature], {
+    requireUserPrompt: true,
+  });
+}
+
+export async function buyLivesETH(qty = 1) {
+  const { quote, signature } = await fetchShopQuote({ skuName: 'life.regular', qty, currency: 'ETH' });
+  return chainWrite('buyLivesETH', 'buyLivesETH', [quote, signature], {
+    value: BigInt(quote.amount),
+    requireUserPrompt: true,
+  });
+}
+
+export async function buyLivesUSDC(qty = 1) {
+  const { quote, signature } = await fetchShopQuote({ skuName: 'life.regular', qty, currency: 'USDC' });
+  return chainWrite('buyLivesUSDC', 'buyLivesUSDC', [quote, signature], {
+    requireUserPrompt: true,
+  });
+}
+
+export async function buyCrushPassETH() {
+  const { quote, signature } = await fetchShopQuote({ skuName: 'pass.weekly', qty: 1, currency: 'ETH' });
+  return chainWrite('buyCrushPassETH', 'buyCrushPassETH', [quote, signature], {
+    value: BigInt(quote.amount),
+    requireUserPrompt: true,
+  });
+}
+
+export async function buyCrushPassUSDC() {
+  const { quote, signature } = await fetchShopQuote({ skuName: 'pass.weekly', qty: 1, currency: 'USDC' });
+  return chainWrite('buyCrushPassUSDC', 'buyCrushPassUSDC', [quote, signature], {
+    requireUserPrompt: true,
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  DAILY WHEEL — server-signed roll
+// ═══════════════════════════════════════════════════════════════
+
+export async function spinDailyWheel() {
+  const player = getAGWAddress();
+  if (!player) throw new Error('No wallet connected');
+  const url = `${QUOTE_API_BASE}/pengu-wheel-roll`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ player }),
+  });
+  if (!res.ok) throw new Error(`wheel roll failed: ${res.status}`);
+  const { roll, signature } = await res.json();
+  return chainWrite('spinDailyWheel', 'spinDailyWheel', [roll, signature]);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  READS — single source of truth for the UI
+// ═══════════════════════════════════════════════════════════════
+
+export async function readLives(player) {
+  const p = player || getAGWAddress();
+  if (!p) return null;
+  const [regular, frozen, total, secondsToNext] = await chainRead('getLives', [p]);
+  return { regular: Number(regular), frozen: Number(frozen), total: Number(total), secondsToNext: Number(secondsToNext) };
+}
+
+export async function readPlayerStats(player) {
+  const p = player || getAGWAddress();
+  if (!p) return null;
+  return chainRead('getPlayerStats', [p]);
+}
+
+export async function readBestResult(player, level) {
+  const p = player || getAGWAddress();
+  if (!p) return null;
+  return chainRead('getBestResult', [p, Number(level)]);
+}
+
+export async function readInventory(player) {
+  const p = player || getAGWAddress();
+  if (!p) return null;
+  const [skus, kinds, balances] = await chainRead('getInventory', [p]);
+  // kinds: 1=Booster, 2=Shard, 3=Currency, 4=Lives
+  const KIND = { 1: 'booster', 2: 'shard', 3: 'currency', 4: 'lives' };
+  const out = { boosters: {}, shards: {}, currencies: {}, lives: {} };
+  for (let i = 0; i < skus.length; i++) {
+    const k = KIND[Number(kinds[i])];
+    if (!k) continue;
+    out[k + 's'] ??= {}; // safety
+    out[k === 'currency' ? 'currencies' : k + 's'][skus[i]] = Number(balances[i]);
+  }
+  return out;
+}
+
+export async function readCrushPass(player) {
+  const p = player || getAGWAddress();
+  if (!p) return null;
+  const cp = await chainRead('crushPass', [p]);
+  return {
+    expiresAt: Number(cp[0]) * 1000, // ms
+    streakWeeks: Number(cp[1]),
+    lastPurchaseWeekMonday: Number(cp[2]),
+    active: Number(cp[0]) > Math.floor(Date.now() / 1000),
+  };
+}
+
+export async function readLastWheelDay(player) {
+  const p = player || getAGWAddress();
+  if (!p) return null;
+  return Number(await chainRead('lastWheelDay', [p]));
+}
+
+export async function readSkuPriceUsdMicros(skuName) {
+  return Number(await chainRead('skuPriceUsdMicros', [sku(skuName)]));
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  LEGACY shims — kept so inventory.js can still import names
+// ═══════════════════════════════════════════════════════════════
+
+/** @deprecated — moved to startLevel + submitLevel. Kept for transition. */
+export function logLevelOnchain(_args) { return null; }
+export function logBoosterUseOnchain(_t) { return null; }
+export function logBoosterPurchaseOnchain(_t, _q) { return null; }
+export function logDailySpinOnchain(_r) { return null; }
+export function logSessionPingOnchain(_t) { return null; }

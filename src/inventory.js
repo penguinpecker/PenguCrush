@@ -14,7 +14,11 @@
 
 import { getAGWAddress } from './agw.js';
 import { supabase } from './supabase.js';
-import { logBoosterUseOnchain, logBoosterPurchaseOnchain, logDailySpinOnchain } from './onchain.js';
+import {
+  logBoosterUseOnchain, logBoosterPurchaseOnchain, logDailySpinOnchain,
+  readInventory, readLives, readCrushPass, sku as nameToSku,
+  buyCrushPassETH,
+} from './onchain.js';
 
 const LS_KEY = 'pengucrush_inventory_v1';
 
@@ -632,6 +636,102 @@ export async function hydrateFromCloud() {
     }
   } catch (err) {
     console.warn('inventory cloud hydrate failed (non-fatal):', err?.message || err);
+  }
+}
+
+// ── Chain sync — chain is the authoritative source of truth ───
+// On every wallet-connect / app-resume, pull the player's on-chain
+// state and overwrite the localStorage cache. localStorage stays in
+// place as an instant-render cache; on conflict the chain wins.
+
+const BOOSTER_NAME_BY_SKU = {
+  [nameToSku('booster.row')]:       'row',
+  [nameToSku('booster.col')]:       'col',
+  [nameToSku('booster.colorBomb')]: 'colorBomb',
+  [nameToSku('booster.hammer')]:    'hammer',
+  [nameToSku('booster.shuffle')]:   'shuffle',
+};
+const SHARD_NAME_BY_SKU = {
+  [nameToSku('shard.necklace')]: 'necklace',
+  [nameToSku('shard.crown')]:    'crown',
+  [nameToSku('shard.plooshie')]: 'plooshie',
+};
+const CURRENCY_NAME_BY_SKU = {
+  [nameToSku('currency.coins')]: 'coins',
+  [nameToSku('currency.gems')]:  'gems',
+  [nameToSku('currency.xp')]:    'xp',
+};
+
+export async function hydrateFromChain() {
+  const addr = getAGWAddress();
+  if (!addr) return;
+  try {
+    const [inv, lives, pass] = await Promise.all([
+      readInventory(addr).catch(() => null),
+      readLives(addr).catch(() => null),
+      readCrushPass(addr).catch(() => null),
+    ]);
+    if (!inv && !lives && !pass) return;
+    const s = getInventory();
+    let changed = false;
+    if (inv) {
+      const newB = { ...DEFAULT_BOOSTERS };
+      for (const [sku, qty] of Object.entries(inv.boosters || {})) {
+        const name = BOOSTER_NAME_BY_SKU[sku];
+        if (name) newB[name] = qty;
+      }
+      // Replace, not merge — chain is truth
+      if (JSON.stringify(newB) !== JSON.stringify(s.boosters)) {
+        s.boosters = newB; changed = true;
+      }
+      const newSh = { ...DEFAULT_SHARDS };
+      for (const [sku, qty] of Object.entries(inv.shards || {})) {
+        const name = SHARD_NAME_BY_SKU[sku];
+        if (name) newSh[name] = qty;
+      }
+      if (JSON.stringify(newSh) !== JSON.stringify(s.shards)) {
+        s.shards = newSh; changed = true;
+      }
+      const newCur = { ...DEFAULT_CURRENCIES };
+      for (const [sku, qty] of Object.entries(inv.currencies || {})) {
+        const name = CURRENCY_NAME_BY_SKU[sku];
+        if (name) newCur[name] = qty;
+      }
+      if (JSON.stringify(newCur) !== JSON.stringify(s.currencies)) {
+        s.currencies = newCur; changed = true;
+      }
+    }
+    if (lives) {
+      if (s.lives !== lives.regular || s.frozenLives !== lives.frozen) {
+        s.lives = lives.regular;
+        s.frozenLives = lives.frozen;
+        // Reset regen anchor — chain is truth
+        if (lives.regular >= LIVES_MAX) s.lastLifeRegenAt = null;
+        else if (lives.secondsToNext > 0) {
+          s.lastLifeRegenAt = new Date(Date.now() - (LIFE_REGEN_MS - lives.secondsToNext * 1000)).toISOString();
+        }
+        changed = true;
+      }
+    }
+    if (pass) {
+      const newActive = !!pass.active;
+      const newExpStr = pass.active ? new Date(pass.expiresAt).toISOString() : null;
+      if (s.crushPassActive !== newActive || s.crushPassExpiresAt !== newExpStr) {
+        s.crushPassActive = newActive;
+        s.crushPassExpiresAt = newExpStr;
+        changed = true;
+      }
+      if ((s.crushPassStreakWeeks || 0) !== pass.streakWeeks) {
+        s.crushPassStreakWeeks = pass.streakWeeks;
+        changed = true;
+      }
+    }
+    if (changed) {
+      saveInventory(s);
+      dispatchInventoryChange();
+    }
+  } catch (err) {
+    console.warn('inventory chain hydrate failed (non-fatal):', err?.message || err);
   }
 }
 

@@ -1,8 +1,10 @@
 import './style.css';
 import './map.css';
-import { getAGWAddress, isSignedIn, connectAGW, signInWithAGW } from './agw.js';
+import { getAGWAddress, isSignedIn, connectAGW, signInWithAGW, getAgwClient } from './agw.js';
 import * as Inventory from './inventory.js';
 import { isLevelUnlocked } from './progress.js';
+import { buyBoosterETH, buyLivesETH } from './onchain.js';
+import { hasActiveSession, grantSession } from './session-key.js';
 import './dev-stars.js'; // adds window.__pengu.starDev() — no UI unless enabled
 import './dev-shop.js';  // adds window.__pengu.shopDev() — align booster grid
 import './dev-booster-export.js'; // adds window.__pengu.exportBoosterPNGs()
@@ -253,32 +255,44 @@ document.querySelectorAll('.lb-tab').forEach(tab => {
 // ═══════════════════════════════════════════════════
 // SHOP POPUP
 // ═══════════════════════════════════════════════════
-// Shop BUY handlers — increment booster inventory by data-qty, flash confirm.
-// Real payment rails are out of scope here; purchase is granted client-side
-// and persisted so boosters show up in-game immediately.
+// Shop BUY handlers — fetch signed quote from backend, send ETH payment via
+// AGW (always prompts — value-bearing tx). On success the chain credits the
+// inventory and the next chain-sync refreshes the localStorage cache.
 document.querySelectorAll('.shop-tag[data-item]').forEach(tagEl => {
   const itemType = tagEl.dataset.item;
   const slotEl = document.querySelector(`.shop-slot[data-item="${itemType}"]`);
   const qty = parseInt(slotEl?.dataset.qty || '1', 10);
   const labelEl = tagEl.querySelector('.shop-tag__label');
   if (!itemType) return;
-  tagEl.addEventListener('click', () => {
+  tagEl.addEventListener('click', async () => {
     if (tagEl.disabled) return;
+    if (!hasSession()) {
+      showHomeGateHint();
+      return;
+    }
     tagEl.disabled = true;
     const origLabel = labelEl ? labelEl.textContent : null;
-    let flashText = '';
-    if (itemType === 'lives') {
-      const snap = Inventory.addLives(qty);
-      flashText = `+${qty} (${snap.total})`;
-    } else {
-      const newCount = Inventory.addBooster(itemType, qty);
-      flashText = `+${qty} (${newCount})`;
+    if (labelEl) labelEl.textContent = 'Pending…';
+    try {
+      if (itemType === 'lives') {
+        await buyLivesETH(qty);
+      } else {
+        // Map UI itemType ('row', 'col', 'colorBomb', 'hammer', 'shuffle')
+        // to chain SKU name 'booster.<type>'
+        await buyBoosterETH(`booster.${itemType}`, qty);
+      }
+      // Pull fresh on-chain balances into the localStorage cache so UI updates.
+      Inventory.hydrateFromChain().catch(() => {});
+      if (labelEl) labelEl.textContent = `+${qty} ✓`;
+    } catch (err) {
+      console.warn('Shop purchase failed:', err?.shortMessage || err?.message || err);
+      if (labelEl) labelEl.textContent = 'Failed';
+    } finally {
+      setTimeout(() => {
+        if (labelEl && origLabel) labelEl.textContent = origLabel;
+        tagEl.disabled = false;
+      }, 1400);
     }
-    if (labelEl) labelEl.textContent = flashText;
-    setTimeout(() => {
-      if (labelEl && origLabel) labelEl.textContent = origLabel;
-      tagEl.disabled = false;
-    }, 1400);
   });
 });
 
@@ -335,6 +349,8 @@ homePlayBtn?.addEventListener('click', async () => {
   homePlayBtn.disabled = true;
   try {
     if (hasSession()) {
+      // Already signed in — refresh chain state in background, then navigate.
+      Inventory.hydrateFromChain().catch(() => {});
       window.location.href = '/?page=map';
       return;
     }
@@ -343,6 +359,20 @@ homePlayBtn?.addEventListener('click', async () => {
     }
     if (!isSignedIn()) {
       await signInWithAGW();
+    }
+    // Pull chain state right after sign-in so the map HUD shows the truth.
+    Inventory.hydrateFromChain().catch(() => {});
+    // One-time AGW session-key grant so in-game txs auto-execute. Failures
+    // here are non-fatal — txs will just fall back to AGW prompts.
+    if (!hasActiveSession()) {
+      const client = getAgwClient();
+      if (client) {
+        grantSession(client).then(r => {
+          console.log('🐧 session-key granted:', r?.sessionAddress);
+        }).catch(err => {
+          console.warn('🐧 session-key grant skipped:', err?.message || err);
+        });
+      }
     }
     window.location.href = '/?page=map';
   } catch (err) {

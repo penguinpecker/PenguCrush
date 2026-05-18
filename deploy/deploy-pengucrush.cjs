@@ -2,6 +2,10 @@ const { Wallet } = require("zksync-ethers");
 const { Deployer } = require("@matterlabs/hardhat-zksync");
 const { vars } = require("hardhat/config");
 
+// .env.local (loaded by hardhat.config.cjs) is the primary source; fall back to
+// `npx hardhat vars set DEPLOYER_PRIVATE_KEY` if env not set.
+const DEPLOYER_PK = process.env.DEPLOYER_PRIVATE_KEY || vars.get("DEPLOYER_PRIVATE_KEY");
+
 // Deploys the unified PenguCrush contract as a UUPS proxy.
 // Run with:
 //   npx hardhat deploy-zksync --script deploy-pengucrush.cjs --network abstractMainnet
@@ -12,7 +16,7 @@ const { vars } = require("hardhat/config");
 //      into contracts/PenguCrushABI.json.
 //   3. Authorize any relayer / session-key address via setAuthorizedSubmitter.
 module.exports = async function (hre) {
-  const wallet = new Wallet(vars.get("DEPLOYER_PRIVATE_KEY"));
+  const wallet = new Wallet(DEPLOYER_PK);
   const deployer = new Deployer(hre, wallet);
 
   const artifact = await deployer.loadArtifact("PenguCrush");

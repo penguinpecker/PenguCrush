@@ -3,8 +3,28 @@ import { createGLTFLoader } from './gltf-loader.js';
 import { getLevel, hasLevel } from './levels.js';
 import { getWallet, ensureWallet, saveLevelResult } from './supabase.js';
 import * as Inventory from './inventory.js';
-import { logLevelOnchain } from './onchain.js';
+import { startLevel as chainStartLevel, submitLevel as chainSubmitLevel, levelCheckpoint as chainLevelCheckpoint, sku as nameToSku } from './onchain.js';
 import { rollShardsForMatch, renderShardSlots, computeTraits } from './shards.js';
+import { saveSnapshot as saveMidGameSnapshot, loadSnapshot as loadMidGameSnapshot, clearSnapshot as clearMidGameSnapshot, hashSnapshot } from './mid-game.js';
+
+// ─── Per-level journal accumulated during play, submitted on-chain at end ────
+const journal = {
+  boostersUsed: [],   // bytes32 SKUs, one per consumption
+  shardsEarned: [],   // bytes32 SKUs, one per award
+  bigCombos: 0,       // count of combos ≥ 5
+};
+const BOOSTER_NAME_TO_SKU = {
+  row:       nameToSku('booster.row'),
+  col:       nameToSku('booster.col'),
+  colorBomb: nameToSku('booster.colorBomb'),
+  hammer:    nameToSku('booster.hammer'),
+  shuffle:   nameToSku('booster.shuffle'),
+};
+const SHARD_NAME_TO_SKU = {
+  necklace: nameToSku('shard.necklace'),
+  crown:    nameToSku('shard.crown'),
+  plooshie: nameToSku('shard.plooshie'),
+};
 
 // ═══════════════════════════════════════════════════════════════
 //  LEVEL CONFIG — driven by ?level=N URL param
@@ -1389,6 +1409,7 @@ async function processMatches() {
   let m = findMatches();
   while (m.size > 0) {
     combo++; score += Math.round(m.size * 10 * combo * TRAITS.scoreMultiplier * Inventory.getScoreMultiplier());
+    if (combo >= 5) journal.bigCombos++;
     // Mid-level shard drops: any 4+ run rolls each shard independently
     // (necklace 20% · crown 10% · plooshie 5%). A match can award 0..3.
     for (const run of (m.runs || [])) {
@@ -1646,11 +1667,25 @@ function showLevelPopup(won) {
       else console.warn('🐧 Supabase save failed:', res);
     });
 
-    // On-chain: submitScore to the PenguCrush proxy on Abstract (best-effort).
-    // Only write for completed runs so failed attempts don't clutter history.
-    if (won) {
-      logLevelOnchain({ level: levelNum, score, stars, movesUsed });
-    }
+    // On-chain: submitLevel batches the full per-level journal in one tx via
+    // the AGW session key (no prompt). Win AND fail both submitted so the
+    // gamesPlayed / gamesWon / gamesFailed stats track accurately.
+    chainSubmitLevel({
+      level: levelNum,
+      score,
+      stars,
+      movesUsed,
+      completed: won,
+      durationMs,
+      boostersUsed: journal.boostersUsed,
+      shardsEarned: journal.shardsEarned,
+      bigCombos: journal.bigCombos,
+      fallerPenalties: fallerDropsPenalized,
+    }).then(r => {
+      if (r?.hash) console.log('🐧 submitLevel mined:', r.hash);
+    }).catch(err => console.warn('🐧 submitLevel failed (non-fatal):', err?.message || err));
+    // Clear any mid-game snapshot now that the level is over
+    clearMidGameSnapshot(levelNum).catch(() => {});
   }
 
   popup.classList.add('active');
@@ -1677,6 +1712,29 @@ async function handleSwap(r1, c1, r2, c2) {
     showMsg('No match!', 500);
   } else {
     moves--; updateHUD(); await processMatches();
+    // Mid-game tamper trail every 5 moves — hash board snapshot, push on
+    // chain, and save to localStorage + Supabase for cross-device resume.
+    const movesUsed = CONFIG.moves - moves;
+    if (movesUsed > 0 && movesUsed % 5 === 0) {
+      try {
+        const snapshotObj = {
+          level: levelNum, movesUsed, score,
+          tilesCleared: { ...tilesCleared },
+          blockersDestroyed: { ...blockersDestroyed },
+          totalTilesCleared,
+          turnCount,
+          fallerDropsPenalized,
+          journal: { ...journal, boostersUsed: [...journal.boostersUsed], shardsEarned: [...journal.shardsEarned] },
+          board: board.map(row => row.map(t => t ? { type: t.type, frozen: t.frozen, iceLayer: t.iceLayer, isWall: t.isWall, isFaller: t.isFaller } : null)),
+        };
+        saveMidGameSnapshot(levelNum, snapshotObj).then(hash => {
+          chainLevelCheckpoint(levelNum, movesUsed, hash).catch(() => {});
+        }).catch(() => {
+          // Fallback: still emit on-chain checkpoint even if cloud save fails
+          chainLevelCheckpoint(levelNum, movesUsed, hashSnapshot(snapshotObj)).catch(() => {});
+        });
+      } catch (_) { /* cosmetic */ }
+    }
     await resolveLevelStateAfterBoardSettled();
   }
   animating = false;
@@ -1998,11 +2056,15 @@ async function useBoosterShuffle() {
 }
 
 function consumeBooster(type) {
-  // Persist consumption to the wallet inventory (localStorage + cloud best-effort).
+  // Local-only consumption — actual chain decrement happens at submitLevel
+  // via the journal. Inventory.consumeBooster updates localStorage cache.
   const remaining = Inventory.consumeBooster(type);
   boosterCharges[type] = remaining;
   updateBoosterUI();
   if (remaining <= 0) activeBooster = null;
+  // Record in journal for end-of-level submitLevel
+  const skuHash = BOOSTER_NAME_TO_SKU[type];
+  if (skuHash) journal.boostersUsed.push(skuHash);
 }
 
 function updateBoosterUI() {
@@ -2460,6 +2522,13 @@ function fillBoosters(qty = 10) {
 async function init() {
   console.log('🐧 PenguCrush loading...');
 
+  // Fire-and-forget on-chain startLevel: consumes 1 life + emits LevelStarted.
+  // Via AGW session key so no wallet prompt. If the session isn't granted yet,
+  // the call falls back to a prompt (which the user just answered to play).
+  chainStartLevel(levelNum).then(r => {
+    if (r?.hash) console.log('🐧 startLevel mined:', r.hash);
+  }).catch(err => console.warn('🐧 startLevel failed (non-fatal):', err?.message || err));
+
   await preloadAssets(() => {});
   await ensureHammerSwingModel();
   await loadGridFrame();
@@ -2499,7 +2568,9 @@ function awardShard(id) {
   if (!id) return;
   shardPulseId = id;
   shardPulseUntil = performance.now() + 1200;
-  Inventory.addShard(id, 1); // triggers HUD refresh, which will read the pulse
+  Inventory.addShard(id, 1); // local cache update; chain settles at submitLevel
+  const skuHash = SHARD_NAME_TO_SKU[id];
+  if (skuHash) journal.shardsEarned.push(skuHash);
   clearTimeout(shardPulseTimer);
   shardPulseTimer = setTimeout(() => {
     const el = document.getElementById('shardHud');

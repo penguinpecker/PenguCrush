@@ -1,5 +1,10 @@
 [
   {
+    "inputs": [],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  {
     "inputs": [
       {
         "internalType": "address",
@@ -8,6 +13,43 @@
       }
     ],
     "name": "AddressEmptyCode",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ArrayLengthMismatch",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "BadToken",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ECDSAInvalidSignature",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "length",
+        "type": "uint256"
+      }
+    ],
+    "name": "ECDSAInvalidSignatureLength",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "s",
+        "type": "bytes32"
+      }
+    ],
+    "name": "ECDSAInvalidSignatureS",
     "type": "error"
   },
   {
@@ -28,12 +70,87 @@
   },
   {
     "inputs": [],
+    "name": "EnforcedPause",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "EthForUsdcCall",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ExpectedPause",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "FailedCall",
     "type": "error"
   },
   {
     "inputs": [],
+    "name": "ForwardFailed",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "GameplayPausedError",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InsufficientBalance",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InsufficientPayment",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "InvalidInitialization",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidItemKind",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidLevel",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidStars",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ItemDisabled_",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ItemMaxExceeded",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ItemNotFound",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NoLives",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NotAuthorized",
     "type": "error"
   },
   {
@@ -65,6 +182,67 @@
   },
   {
     "inputs": [],
+    "name": "PythGuardFailed",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "QuoteAmountMismatch",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "QuoteBadSigner",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "QuoteBuyerMismatch",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "QuoteExpired",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "QuoteNonceUsed",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "QuoteSkuMismatch",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ReentrancyGuardReentrantCall",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "token",
+        "type": "address"
+      }
+    ],
+    "name": "SafeERC20FailedOperation",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ShopPausedError",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "TooManySlots",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "UUPSUnauthorizedCallContext",
     "type": "error"
   },
@@ -80,6 +258,46 @@
     "type": "error"
   },
   {
+    "inputs": [],
+    "name": "WheelAlreadySpun",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "WheelBadSigner",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "WheelDayMismatch",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "WheelPlayerMismatch",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "WheelRollExpired",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "WheelSlotInvalid",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ZeroAddress",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ZeroQty",
+    "type": "error"
+  },
+  {
     "anonymous": false,
     "inputs": [
       {
@@ -91,7 +309,7 @@
       {
         "indexed": true,
         "internalType": "bytes32",
-        "name": "booster",
+        "name": "sku",
         "type": "bytes32"
       },
       {
@@ -102,12 +320,12 @@
       },
       {
         "indexed": false,
-        "internalType": "uint64",
-        "name": "at",
-        "type": "uint64"
+        "internalType": "uint32",
+        "name": "balanceAfter",
+        "type": "uint32"
       }
     ],
-    "name": "BoosterPurchased",
+    "name": "BoosterGranted",
     "type": "event"
   },
   {
@@ -122,14 +340,20 @@
       {
         "indexed": true,
         "internalType": "bytes32",
-        "name": "booster",
+        "name": "sku",
         "type": "bytes32"
       },
       {
         "indexed": false,
-        "internalType": "uint64",
-        "name": "at",
-        "type": "uint64"
+        "internalType": "uint16",
+        "name": "atLevel",
+        "type": "uint16"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "balanceAfter",
+        "type": "uint32"
       }
     ],
     "name": "BoosterUsed",
@@ -143,21 +367,259 @@
         "internalType": "address",
         "name": "player",
         "type": "address"
-      },
+      }
+    ],
+    "name": "CrushPassCancelled",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
       {
         "indexed": true,
-        "internalType": "bytes32",
-        "name": "reward",
-        "type": "bytes32"
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      }
+    ],
+    "name": "CrushPassExpired",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "priceUsdMicros",
+        "type": "uint64"
+      }
+    ],
+    "name": "CrushPassPriceUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
       },
       {
         "indexed": false,
         "internalType": "uint64",
-        "name": "at",
+        "name": "weekMonday",
+        "type": "uint64"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "expiresAt",
+        "type": "uint64"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "streakWeeks",
+        "type": "uint16"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum PenguCrushV2.Currency",
+        "name": "currency",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "paid",
+        "type": "uint256"
+      }
+    ],
+    "name": "CrushPassPurchased",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "sku",
+        "type": "bytes32"
+      }
+    ],
+    "name": "CrushPassShardBonus",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "sku",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "int128",
+        "name": "delta",
+        "type": "int128"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "balanceAfter",
         "type": "uint64"
       }
     ],
+    "name": "CurrencyChanged",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "day",
+        "type": "uint64"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "slotIndex",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum PenguCrushV2.WheelPrizeKind",
+        "name": "kind",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "sku",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "amount",
+        "type": "uint32"
+      }
+    ],
     "name": "DailySpin",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [],
+    "name": "EIP712DomainChanged",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "qty",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "frozenAfter",
+        "type": "uint8"
+      }
+    ],
+    "name": "FrozenLifeGranted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "lost",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "expiredAt",
+        "type": "uint64"
+      }
+    ],
+    "name": "FrozenLivesExpired",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "paused",
+        "type": "bool"
+      }
+    ],
+    "name": "GameplayPausedSet",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "newHighest",
+        "type": "uint16"
+      }
+    ],
+    "name": "HighestLevelAdvanced",
     "type": "event"
   },
   {
@@ -177,13 +639,50 @@
     "anonymous": false,
     "inputs": [
       {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "sku",
+        "type": "bytes32"
+      }
+    ],
+    "name": "ItemDisabled",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "sku",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum PenguCrushV2.ItemKind",
+        "name": "kind",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "maxBalance",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "rarity",
+        "type": "uint8"
+      },
+      {
         "indexed": false,
         "internalType": "uint16",
-        "name": "newMaxLevel",
+        "name": "mintRateBps",
         "type": "uint16"
       }
     ],
-    "name": "MaxLevelUpdated",
+    "name": "ItemRegistered",
     "type": "event"
   },
   {
@@ -191,31 +690,42 @@
     "inputs": [
       {
         "indexed": true,
-        "internalType": "address",
-        "name": "previousOwner",
-        "type": "address"
+        "internalType": "bytes32",
+        "name": "sku",
+        "type": "bytes32"
       },
       {
-        "indexed": true,
-        "internalType": "address",
-        "name": "newOwner",
-        "type": "address"
-      }
-    ],
-    "name": "OwnershipTransferred",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
+        "indexed": false,
+        "internalType": "enum PenguCrushV2.ItemKind",
+        "name": "kind",
+        "type": "uint8"
+      },
       {
         "indexed": false,
         "internalType": "bool",
-        "name": "isPaused",
+        "name": "enabled",
         "type": "bool"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "maxBalance",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "rarity",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "mintRateBps",
+        "type": "uint16"
       }
     ],
-    "name": "PausedSet",
+    "name": "ItemUpdated",
     "type": "event"
   },
   {
@@ -226,9 +736,52 @@
         "internalType": "address",
         "name": "player",
         "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint16",
+        "name": "level",
+        "type": "uint16"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "moveNum",
+        "type": "uint16"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "snapshotHash",
+        "type": "bytes32"
       }
     ],
-    "name": "PlayerRegistered",
+    "name": "LevelCheckpoint",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint16",
+        "name": "level",
+        "type": "uint16"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "at",
+        "type": "uint64"
+      }
+    ],
+    "name": "LevelStarted",
     "type": "event"
   },
   {
@@ -267,11 +820,300 @@
       {
         "indexed": false,
         "internalType": "bool",
+        "name": "completed",
+        "type": "bool"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
         "name": "newBest",
         "type": "bool"
       }
     ],
-    "name": "ScoreSubmitted",
+    "name": "LevelSubmitted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "ticks",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "regularAfter",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "at",
+        "type": "uint64"
+      }
+    ],
+    "name": "LifeRegenerated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "atLevel",
+        "type": "uint16"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "regularAfter",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "frozenAfter",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "at",
+        "type": "uint64"
+      }
+    ],
+    "name": "LifeSpent",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "qty",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "regularAfter",
+        "type": "uint8"
+      }
+    ],
+    "name": "LivesPurchased",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "newMaxLevel",
+        "type": "uint16"
+      }
+    ],
+    "name": "MaxLevelUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "previousOwner",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address"
+      }
+    ],
+    "name": "OwnershipTransferStarted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "previousOwner",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address"
+      }
+    ],
+    "name": "OwnershipTransferred",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "boostersEach",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "frozenLivesGrant",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "shardBonusBps",
+        "type": "uint16"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "durationSeconds",
+        "type": "uint32"
+      }
+    ],
+    "name": "PassPerksUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "name": "Paused",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "paused",
+        "type": "bool"
+      }
+    ],
+    "name": "PausedSet",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "at",
+        "type": "uint64"
+      }
+    ],
+    "name": "PlayerRegistered",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "oldRelayer",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "newRelayer",
+        "type": "address"
+      }
+    ],
+    "name": "PriceRelayerUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "pyth",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "ethUsdId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "enabled",
+        "type": "bool"
+      }
+    ],
+    "name": "PythConfigUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "alias_",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32[]",
+        "name": "members",
+        "type": "bytes32[]"
+      }
+    ],
+    "name": "RandomPoolSet",
     "type": "event"
   },
   {
@@ -286,17 +1128,129 @@
       {
         "indexed": true,
         "internalType": "bytes32",
-        "name": "tag",
+        "name": "sku",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "atLevel",
+        "type": "uint16"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "balanceAfter",
+        "type": "uint32"
+      }
+    ],
+    "name": "ShardEarned",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "sku",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "qty",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "balanceAfter",
+        "type": "uint32"
+      }
+    ],
+    "name": "ShardGranted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "paused",
+        "type": "bool"
+      }
+    ],
+    "name": "ShopPausedSet",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "buyer",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "sku",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "qty",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum PenguCrushV2.Currency",
+        "name": "currency",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "paid",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "nonce",
+        "type": "uint256"
+      }
+    ],
+    "name": "ShopPurchase",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "sku",
         "type": "bytes32"
       },
       {
         "indexed": false,
         "internalType": "uint64",
-        "name": "at",
+        "name": "priceUsdMicros",
         "type": "uint64"
       }
     ],
-    "name": "SessionPing",
+    "name": "SkuPriceUpdated",
     "type": "event"
   },
   {
@@ -322,6 +1276,38 @@
     "anonymous": false,
     "inputs": [
       {
+        "indexed": false,
+        "internalType": "address",
+        "name": "oldTreasury",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "newTreasury",
+        "type": "address"
+      }
+    ],
+    "name": "TreasuryUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "name": "Unpaused",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
         "indexed": true,
         "internalType": "address",
         "name": "implementation",
@@ -330,6 +1316,163 @@
     ],
     "name": "Upgraded",
     "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "token",
+        "type": "address"
+      }
+    ],
+    "name": "UsdcTokenSet",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "oldRelayer",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "newRelayer",
+        "type": "address"
+      }
+    ],
+    "name": "WheelRelayerUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "newCount",
+        "type": "uint8"
+      }
+    ],
+    "name": "WheelSlotCountUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint8",
+        "name": "idx",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum PenguCrushV2.WheelPrizeKind",
+        "name": "kind",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "sku",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "amount",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "weight",
+        "type": "uint16"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "enabled",
+        "type": "bool"
+      }
+    ],
+    "name": "WheelSlotUpdated",
+    "type": "event"
+  },
+  {
+    "stateMutability": "payable",
+    "type": "fallback"
+  },
+  {
+    "inputs": [],
+    "name": "MAX_FROZEN_LIVES",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "MAX_REGULAR_LIVES",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "MAX_STARS",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "PYTH_GUARD_TOLERANCE_BPS",
+    "outputs": [
+      {
+        "internalType": "uint16",
+        "name": "",
+        "type": "uint16"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "REGEN_PERIOD",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
   },
   {
     "inputs": [],
@@ -342,6 +1485,39 @@
       }
     ],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "USDC_DECIMALS",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "WHEEL_SLOT_HARD_CAP",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "acceptOwnership",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
@@ -390,27 +1566,39 @@
   {
     "inputs": [
       {
-        "internalType": "uint16[]",
-        "name": "levels",
-        "type": "uint16[]"
-      },
-      {
-        "internalType": "uint32[]",
-        "name": "scores",
-        "type": "uint32[]"
-      },
-      {
-        "internalType": "uint8[]",
-        "name": "starsList",
-        "type": "uint8[]"
-      },
-      {
-        "internalType": "uint16[]",
-        "name": "movesUsedList",
-        "type": "uint16[]"
+        "components": [
+          {
+            "internalType": "enum PenguCrushV2.WheelPrizeKind",
+            "name": "kind",
+            "type": "uint8"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "sku",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "amount",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint16",
+            "name": "weight",
+            "type": "uint16"
+          },
+          {
+            "internalType": "bool",
+            "name": "enabled",
+            "type": "bool"
+          }
+        ],
+        "internalType": "struct PenguCrushV2.WheelSlot[]",
+        "name": "slots",
+        "type": "tuple[]"
       }
     ],
-    "name": "batchSubmitScores",
+    "name": "batchSetWheel",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -463,7 +1651,533 @@
     "inputs": [
       {
         "internalType": "address",
+        "name": "",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "name": "boosterBalance",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "sku",
+        "type": "bytes32"
+      },
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "buyer",
+            "type": "address"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "sku",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "qty",
+            "type": "uint32"
+          },
+          {
+            "internalType": "enum PenguCrushV2.Currency",
+            "name": "currency",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint256",
+            "name": "amount",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "nonce",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "deadline",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct PenguCrushV2.ShopQuote",
+        "name": "q",
+        "type": "tuple"
+      },
+      {
+        "internalType": "bytes",
+        "name": "sig",
+        "type": "bytes"
+      }
+    ],
+    "name": "buyBoosterETH",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "sku",
+        "type": "bytes32"
+      },
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "buyer",
+            "type": "address"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "sku",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "qty",
+            "type": "uint32"
+          },
+          {
+            "internalType": "enum PenguCrushV2.Currency",
+            "name": "currency",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint256",
+            "name": "amount",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "nonce",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "deadline",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct PenguCrushV2.ShopQuote",
+        "name": "q",
+        "type": "tuple"
+      },
+      {
+        "internalType": "bytes",
+        "name": "sig",
+        "type": "bytes"
+      }
+    ],
+    "name": "buyBoosterUSDC",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "buyer",
+            "type": "address"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "sku",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "qty",
+            "type": "uint32"
+          },
+          {
+            "internalType": "enum PenguCrushV2.Currency",
+            "name": "currency",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint256",
+            "name": "amount",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "nonce",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "deadline",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct PenguCrushV2.ShopQuote",
+        "name": "q",
+        "type": "tuple"
+      },
+      {
+        "internalType": "bytes",
+        "name": "sig",
+        "type": "bytes"
+      }
+    ],
+    "name": "buyCrushPassETH",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "buyer",
+            "type": "address"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "sku",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "qty",
+            "type": "uint32"
+          },
+          {
+            "internalType": "enum PenguCrushV2.Currency",
+            "name": "currency",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint256",
+            "name": "amount",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "nonce",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "deadline",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct PenguCrushV2.ShopQuote",
+        "name": "q",
+        "type": "tuple"
+      },
+      {
+        "internalType": "bytes",
+        "name": "sig",
+        "type": "bytes"
+      }
+    ],
+    "name": "buyCrushPassUSDC",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "buyer",
+            "type": "address"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "sku",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "qty",
+            "type": "uint32"
+          },
+          {
+            "internalType": "enum PenguCrushV2.Currency",
+            "name": "currency",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint256",
+            "name": "amount",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "nonce",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "deadline",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct PenguCrushV2.ShopQuote",
+        "name": "q",
+        "type": "tuple"
+      },
+      {
+        "internalType": "bytes",
+        "name": "sig",
+        "type": "bytes"
+      }
+    ],
+    "name": "buyLivesETH",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "buyer",
+            "type": "address"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "sku",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "qty",
+            "type": "uint32"
+          },
+          {
+            "internalType": "enum PenguCrushV2.Currency",
+            "name": "currency",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint256",
+            "name": "amount",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "nonce",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "deadline",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct PenguCrushV2.ShopQuote",
+        "name": "q",
+        "type": "tuple"
+      },
+      {
+        "internalType": "bytes",
+        "name": "sig",
+        "type": "bytes"
+      }
+    ],
+    "name": "buyLivesUSDC",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "cancelCrushPass",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "claimRegen",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address[]",
+        "name": "playersBatch",
+        "type": "address[]"
+      }
+    ],
+    "name": "claimRegenBatch",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
         "name": "player",
+        "type": "address"
+      }
+    ],
+    "name": "claimRegenFor",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "crushPass",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "expiresAt",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint16",
+        "name": "streakWeeks",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint64",
+        "name": "lastPurchaseWeekMonday",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "crushPassPriceUsdMicros",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "name": "currencyBalance",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "eip712Domain",
+    "outputs": [
+      {
+        "internalType": "bytes1",
+        "name": "fields",
+        "type": "bytes1"
+      },
+      {
+        "internalType": "string",
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "version",
+        "type": "string"
+      },
+      {
+        "internalType": "uint256",
+        "name": "chainId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "verifyingContract",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "salt",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "extensions",
+        "type": "uint256[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "gameplayPaused",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "p",
         "type": "address"
       },
       {
@@ -502,9 +2216,51 @@
             "type": "uint64"
           }
         ],
-        "internalType": "struct PenguCrush.LevelResult",
+        "internalType": "struct PenguCrushV2.LevelResult",
         "name": "",
         "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "p",
+        "type": "address"
+      }
+    ],
+    "name": "getInventory",
+    "outputs": [
+      {
+        "internalType": "bytes32[]",
+        "name": "skus",
+        "type": "bytes32[]"
+      },
+      {
+        "internalType": "enum PenguCrushV2.ItemKind[]",
+        "name": "kinds",
+        "type": "uint8[]"
+      },
+      {
+        "internalType": "uint32[]",
+        "name": "balances",
+        "type": "uint32[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getItemSkus",
+    "outputs": [
+      {
+        "internalType": "bytes32[]",
+        "name": "",
+        "type": "bytes32[]"
       }
     ],
     "stateMutability": "view",
@@ -543,6 +2299,16 @@
             "type": "uint32"
           },
           {
+            "internalType": "uint32",
+            "name": "gamesWon",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "gamesFailed",
+            "type": "uint32"
+          },
+          {
             "internalType": "uint64",
             "name": "firstPlayedAt",
             "type": "uint64"
@@ -553,9 +2319,43 @@
             "type": "uint64"
           }
         ],
-        "internalType": "struct PenguCrush.PlayerStats[]",
+        "internalType": "struct PenguCrushV2.PlayerStats[]",
         "name": "",
         "type": "tuple[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "p",
+        "type": "address"
+      }
+    ],
+    "name": "getLives",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "regular",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "frozen",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "total",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint64",
+        "name": "secondsToNext",
+        "type": "uint64"
       }
     ],
     "stateMutability": "view",
@@ -578,36 +2378,7 @@
     "inputs": [
       {
         "internalType": "address",
-        "name": "player",
-        "type": "address"
-      }
-    ],
-    "name": "getPlayerProgress",
-    "outputs": [
-      {
-        "internalType": "uint16[]",
-        "name": "levelNums",
-        "type": "uint16[]"
-      },
-      {
-        "internalType": "uint32[]",
-        "name": "scores",
-        "type": "uint32[]"
-      },
-      {
-        "internalType": "uint8[]",
-        "name": "starsList",
-        "type": "uint8[]"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "player",
+        "name": "p",
         "type": "address"
       }
     ],
@@ -636,6 +2407,16 @@
             "type": "uint32"
           },
           {
+            "internalType": "uint32",
+            "name": "gamesWon",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "gamesFailed",
+            "type": "uint32"
+          },
+          {
             "internalType": "uint64",
             "name": "firstPlayedAt",
             "type": "uint64"
@@ -646,7 +2427,7 @@
             "type": "uint64"
           }
         ],
-        "internalType": "struct PenguCrush.PlayerStats",
+        "internalType": "struct PenguCrushV2.PlayerStats",
         "name": "",
         "type": "tuple"
       }
@@ -681,8 +2462,92 @@
   {
     "inputs": [
       {
+        "internalType": "bytes32",
+        "name": "alias_",
+        "type": "bytes32"
+      }
+    ],
+    "name": "getRandomPool",
+    "outputs": [
+      {
+        "internalType": "bytes32[]",
+        "name": "",
+        "type": "bytes32[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getWheelConfig",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "enum PenguCrushV2.WheelPrizeKind",
+            "name": "kind",
+            "type": "uint8"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "sku",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "amount",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint16",
+            "name": "weight",
+            "type": "uint16"
+          },
+          {
+            "internalType": "bool",
+            "name": "enabled",
+            "type": "bool"
+          }
+        ],
+        "internalType": "struct PenguCrushV2.WheelSlot[]",
+        "name": "slots",
+        "type": "tuple[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "owner_",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "treasury_",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "priceRelayer_",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "wheelRelayer_",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "usdc_",
+        "type": "address"
+      },
+      {
         "internalType": "uint16",
-        "name": "_maxLevel",
+        "name": "maxLevel_",
         "type": "uint16"
       }
     ],
@@ -713,17 +2578,99 @@
   {
     "inputs": [
       {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "itemSkus",
+    "outputs": [
+      {
         "internalType": "bytes32",
-        "name": "booster",
+        "name": "",
         "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "name": "items",
+    "outputs": [
+      {
+        "internalType": "enum PenguCrushV2.ItemKind",
+        "name": "kind",
+        "type": "uint8"
+      },
+      {
+        "internalType": "bool",
+        "name": "enabled",
+        "type": "bool"
       },
       {
         "internalType": "uint32",
-        "name": "qty",
+        "name": "maxBalance",
         "type": "uint32"
+      },
+      {
+        "internalType": "uint8",
+        "name": "rarity",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint16",
+        "name": "mintRateBps",
+        "type": "uint16"
       }
     ],
-    "name": "logBoosterPurchased",
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "lastWheelDay",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint16",
+        "name": "level",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint16",
+        "name": "moveNum",
+        "type": "uint16"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "snapshotHash",
+        "type": "bytes32"
+      }
+    ],
+    "name": "levelCheckpoint",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -731,40 +2678,30 @@
   {
     "inputs": [
       {
-        "internalType": "bytes32",
-        "name": "booster",
-        "type": "bytes32"
+        "internalType": "address",
+        "name": "",
+        "type": "address"
       }
     ],
-    "name": "logBoosterUsed",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
+    "name": "lifeAccount",
+    "outputs": [
       {
-        "internalType": "bytes32",
-        "name": "reward",
-        "type": "bytes32"
-      }
-    ],
-    "name": "logDailySpin",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
+        "internalType": "uint8",
+        "name": "regular",
+        "type": "uint8"
+      },
       {
-        "internalType": "bytes32",
-        "name": "tag",
-        "type": "bytes32"
+        "internalType": "uint8",
+        "name": "frozen",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint64",
+        "name": "lastConsumedAt",
+        "type": "uint64"
       }
     ],
-    "name": "logSessionPing",
-    "outputs": [],
-    "stateMutability": "nonpayable",
+    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -795,12 +2732,77 @@
   },
   {
     "inputs": [],
+    "name": "passBoostersEach",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "passDurationSeconds",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "passFrozenLivesGrant",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "passShardBonusBps",
+    "outputs": [
+      {
+        "internalType": "uint16",
+        "name": "",
+        "type": "uint16"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "paused",
     "outputs": [
       {
         "internalType": "bool",
         "name": "",
         "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "pendingOwner",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
       }
     ],
     "stateMutability": "view",
@@ -834,6 +2836,16 @@
       {
         "internalType": "uint32",
         "name": "gamesPlayed",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "gamesWon",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "gamesFailed",
         "type": "uint32"
       },
       {
@@ -871,6 +2883,19 @@
   },
   {
     "inputs": [],
+    "name": "priceRelayer",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "proxiableUUID",
     "outputs": [
       {
@@ -884,6 +2909,114 @@
   },
   {
     "inputs": [],
+    "name": "pyth",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "pythEthUsdId",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "pythGuardEnabled",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "randomPools",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "sku",
+        "type": "bytes32"
+      },
+      {
+        "components": [
+          {
+            "internalType": "enum PenguCrushV2.ItemKind",
+            "name": "kind",
+            "type": "uint8"
+          },
+          {
+            "internalType": "bool",
+            "name": "enabled",
+            "type": "bool"
+          },
+          {
+            "internalType": "uint32",
+            "name": "maxBalance",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint8",
+            "name": "rarity",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint16",
+            "name": "mintRateBps",
+            "type": "uint16"
+          }
+        ],
+        "internalType": "struct PenguCrushV2.ItemConfig",
+        "name": "cfg",
+        "type": "tuple"
+      }
+    ],
+    "name": "registerItem",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "renounceOwnership",
     "outputs": [],
     "stateMutability": "nonpayable",
@@ -893,12 +3026,12 @@
     "inputs": [
       {
         "internalType": "address",
-        "name": "submitter",
+        "name": "s",
         "type": "address"
       },
       {
         "internalType": "bool",
-        "name": "authorized",
+        "name": "a",
         "type": "bool"
       }
     ],
@@ -910,8 +3043,52 @@
   {
     "inputs": [
       {
+        "internalType": "uint64",
+        "name": "priceUsdMicros",
+        "type": "uint64"
+      }
+    ],
+    "name": "setCrushPassPrice",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bool",
+        "name": "p",
+        "type": "bool"
+      }
+    ],
+    "name": "setGameplayPaused",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "sku",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bool",
+        "name": "enabled",
+        "type": "bool"
+      }
+    ],
+    "name": "setItemEnabled",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "uint16",
-        "name": "_maxLevel",
+        "name": "m",
         "type": "uint16"
       }
     ],
@@ -923,12 +3100,310 @@
   {
     "inputs": [
       {
+        "internalType": "uint8",
+        "name": "boostersEach",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "frozenLivesGrant",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint16",
+        "name": "shardBonusBps",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint32",
+        "name": "durationSeconds",
+        "type": "uint32"
+      }
+    ],
+    "name": "setPassPerks",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "r",
+        "type": "address"
+      }
+    ],
+    "name": "setPriceRelayer",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "pyth_",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "ethUsdId_",
+        "type": "bytes32"
+      },
+      {
         "internalType": "bool",
-        "name": "_paused",
+        "name": "enabled_",
         "type": "bool"
       }
     ],
-    "name": "setPaused",
+    "name": "setPythConfig",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "alias_",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32[]",
+        "name": "members",
+        "type": "bytes32[]"
+      }
+    ],
+    "name": "setRandomPool",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bool",
+        "name": "p",
+        "type": "bool"
+      }
+    ],
+    "name": "setShopPaused",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "sku",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint64",
+        "name": "priceUsdMicros",
+        "type": "uint64"
+      }
+    ],
+    "name": "setSkuPrice",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "t",
+        "type": "address"
+      }
+    ],
+    "name": "setTreasury",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "t",
+        "type": "address"
+      }
+    ],
+    "name": "setUsdcToken",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "r",
+        "type": "address"
+      }
+    ],
+    "name": "setWheelRelayer",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint8",
+        "name": "idx",
+        "type": "uint8"
+      },
+      {
+        "components": [
+          {
+            "internalType": "enum PenguCrushV2.WheelPrizeKind",
+            "name": "kind",
+            "type": "uint8"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "sku",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "amount",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint16",
+            "name": "weight",
+            "type": "uint16"
+          },
+          {
+            "internalType": "bool",
+            "name": "enabled",
+            "type": "bool"
+          }
+        ],
+        "internalType": "struct PenguCrushV2.WheelSlot",
+        "name": "slot",
+        "type": "tuple"
+      }
+    ],
+    "name": "setWheelSlot",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint8",
+        "name": "count",
+        "type": "uint8"
+      }
+    ],
+    "name": "setWheelSlotCount",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "name": "shardBalance",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "shopPaused",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "name": "skuPriceUsdMicros",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "player",
+            "type": "address"
+          },
+          {
+            "internalType": "uint64",
+            "name": "dayUtc",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint8",
+            "name": "slotIndex",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint256",
+            "name": "nonce",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "deadline",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct PenguCrushV2.WheelRoll",
+        "name": "roll",
+        "type": "tuple"
+      },
+      {
+        "internalType": "bytes",
+        "name": "sig",
+        "type": "bytes"
+      }
+    ],
+    "name": "spinDailyWheel",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -939,24 +3414,74 @@
         "internalType": "uint16",
         "name": "level",
         "type": "uint16"
-      },
-      {
-        "internalType": "uint32",
-        "name": "score",
-        "type": "uint32"
-      },
-      {
-        "internalType": "uint8",
-        "name": "stars",
-        "type": "uint8"
-      },
-      {
-        "internalType": "uint16",
-        "name": "movesUsed",
-        "type": "uint16"
       }
     ],
-    "name": "submitScore",
+    "name": "startLevel",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint16",
+            "name": "level",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint32",
+            "name": "score",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint8",
+            "name": "stars",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint16",
+            "name": "movesUsed",
+            "type": "uint16"
+          },
+          {
+            "internalType": "bool",
+            "name": "completed",
+            "type": "bool"
+          },
+          {
+            "internalType": "uint32",
+            "name": "durationMs",
+            "type": "uint32"
+          },
+          {
+            "internalType": "bytes32[]",
+            "name": "boostersUsed",
+            "type": "bytes32[]"
+          },
+          {
+            "internalType": "bytes32[]",
+            "name": "shardsEarned",
+            "type": "bytes32[]"
+          },
+          {
+            "internalType": "uint16",
+            "name": "bigCombos",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "fallerPenalties",
+            "type": "uint16"
+          }
+        ],
+        "internalType": "struct PenguCrushV2.LevelJournal",
+        "name": "j",
+        "type": "tuple"
+      }
+    ],
+    "name": "submitLevel",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -969,27 +3494,64 @@
         "type": "address"
       },
       {
-        "internalType": "uint16",
-        "name": "level",
-        "type": "uint16"
-      },
-      {
-        "internalType": "uint32",
-        "name": "score",
-        "type": "uint32"
-      },
-      {
-        "internalType": "uint8",
-        "name": "stars",
-        "type": "uint8"
-      },
-      {
-        "internalType": "uint16",
-        "name": "movesUsed",
-        "type": "uint16"
+        "components": [
+          {
+            "internalType": "uint16",
+            "name": "level",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint32",
+            "name": "score",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint8",
+            "name": "stars",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint16",
+            "name": "movesUsed",
+            "type": "uint16"
+          },
+          {
+            "internalType": "bool",
+            "name": "completed",
+            "type": "bool"
+          },
+          {
+            "internalType": "uint32",
+            "name": "durationMs",
+            "type": "uint32"
+          },
+          {
+            "internalType": "bytes32[]",
+            "name": "boostersUsed",
+            "type": "bytes32[]"
+          },
+          {
+            "internalType": "bytes32[]",
+            "name": "shardsEarned",
+            "type": "bytes32[]"
+          },
+          {
+            "internalType": "uint16",
+            "name": "bigCombos",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "fallerPenalties",
+            "type": "uint16"
+          }
+        ],
+        "internalType": "struct PenguCrushV2.LevelJournal",
+        "name": "j",
+        "type": "tuple"
       }
     ],
-    "name": "submitScoreFor",
+    "name": "submitLevelFor",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1003,6 +3565,64 @@
       }
     ],
     "name": "transferOwnership",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "treasury",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "sku",
+        "type": "bytes32"
+      },
+      {
+        "components": [
+          {
+            "internalType": "enum PenguCrushV2.ItemKind",
+            "name": "kind",
+            "type": "uint8"
+          },
+          {
+            "internalType": "bool",
+            "name": "enabled",
+            "type": "bool"
+          },
+          {
+            "internalType": "uint32",
+            "name": "maxBalance",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint8",
+            "name": "rarity",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint16",
+            "name": "mintRateBps",
+            "type": "uint16"
+          }
+        ],
+        "internalType": "struct PenguCrushV2.ItemConfig",
+        "name": "cfg",
+        "type": "tuple"
+      }
+    ],
+    "name": "updateItem",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1024,5 +3644,106 @@
     "outputs": [],
     "stateMutability": "payable",
     "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "usdc",
+    "outputs": [
+      {
+        "internalType": "contract IERC20",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "usedNonces",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "name": "wheelConfig",
+    "outputs": [
+      {
+        "internalType": "enum PenguCrushV2.WheelPrizeKind",
+        "name": "kind",
+        "type": "uint8"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "sku",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "amount",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint16",
+        "name": "weight",
+        "type": "uint16"
+      },
+      {
+        "internalType": "bool",
+        "name": "enabled",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "wheelRelayer",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "wheelSlotCount",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "stateMutability": "payable",
+    "type": "receive"
   }
 ]

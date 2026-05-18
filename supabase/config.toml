@@ -1,0 +1,10 @@
+project_id = "dqvwpbggjlcumcmlliuj"
+
+[functions.pengu-quote-price]
+verify_jwt = false
+
+[functions.pengu-wheel-roll]
+verify_jwt = false
+
+[functions.pengu-regen-sweep]
+verify_jwt = false

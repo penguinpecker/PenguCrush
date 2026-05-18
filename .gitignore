@@ -89,3 +89,13 @@ Desktop.ini
 
 # local backup of uncompressed assets (not shipped)
 assets_ORIGINAL_BACKUP/
+
+# legacy v1 contracts kept locally as .bak for reference
+contracts/*.sol.bak
+
+# vercel link state (created by `vercel link`)
+.vercel/
+
+# local deploy artifact log (deploy script writes this; safe to commit but
+# kept ignored so the same script can stamp new entries without merge churn)
+# Remove this line if you want deployments.json under version control.

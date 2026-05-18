@@ -1,0 +1,106 @@
+// Edge function: pengu-regen-sweep
+// Runs hourly (Supabase pg_cron). Sweeps players whose 8h life-regen tick is
+// due and calls claimRegenBatch on chain so a LifeRegenerated event fires
+// for each — keeps the on-chain story accurate for offline users.
+// POST body: optional { players: 0xAddress[] } to limit to specific addrs.
+
+import { createPublicClient, createWalletClient, http } from 'npm:viem@^2.47.12';
+import { privateKeyToAccount } from 'npm:viem@^2.47.12/accounts';
+import { abstract } from 'npm:viem@^2.47.12/chains';
+
+const CORS = {
+  'access-control-allow-origin': '*',
+  'access-control-allow-methods': 'POST,GET,OPTIONS',
+  'access-control-allow-headers': 'content-type,authorization,apikey',
+};
+
+const ABI = [
+  { type: 'function', name: 'claimRegenBatch', stateMutability: 'nonpayable',
+    inputs: [{ type: 'address[]', name: 'players' }], outputs: [] },
+  { type: 'function', name: 'getLives', stateMutability: 'view',
+    inputs: [{ type: 'address' }],
+    outputs: [
+      { type: 'uint8' }, { type: 'uint8' }, { type: 'uint8' }, { type: 'uint64' },
+    ],
+  },
+  { type: 'function', name: 'getPlayers', stateMutability: 'view',
+    inputs: [{ type: 'uint256' }, { type: 'uint256' }],
+    outputs: [{ type: 'address[]' }],
+  },
+  { type: 'function', name: 'getPlayerCount', stateMutability: 'view',
+    inputs: [], outputs: [{ type: 'uint256' }],
+  },
+] as const;
+
+const BATCH_SIZE = 50;
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
+  try {
+    const addr = Deno.env.get('PENGUCRUSH_ADDRESS') as `0x${string}` | undefined;
+    const pk = (Deno.env.get('LIFE_REGEN_RELAYER_PK') || Deno.env.get('RELAYER_PRIVATE_KEY') || '').trim() as `0x${string}`;
+    if (!addr || !pk) return json({ error: 'env not set' }, 500);
+
+    const publicClient = createPublicClient({ chain: abstract, transport: http() });
+    const account = privateKeyToAccount(pk);
+    const walletClient = createWalletClient({ account, chain: abstract, transport: http() });
+
+    let candidates: `0x${string}`[] = [];
+    if (req.method === 'POST') {
+      try {
+        const body = await req.json();
+        if (Array.isArray(body?.players)) candidates = body.players.map((x: string) => x.toLowerCase());
+      } catch (_) {}
+    }
+    if (candidates.length === 0) {
+      // Pull all registered players (paginated)
+      const totalRaw = await publicClient.readContract({
+        address: addr, abi: ABI, functionName: 'getPlayerCount',
+      });
+      const total = Number(totalRaw);
+      for (let off = 0; off < total; off += 200) {
+        const page = await publicClient.readContract({
+          address: addr, abi: ABI, functionName: 'getPlayers', args: [BigInt(off), 200n],
+        });
+        for (const p of page) candidates.push(p.toLowerCase() as `0x${string}`);
+      }
+    }
+
+    // Filter: only include players with a pending tick (regular < 3 AND
+    // secondsToNext == 0). getLives() returns (regular, frozen, total, secondsToNext).
+    const eligible: `0x${string}`[] = [];
+    for (const p of candidates) {
+      try {
+        const [regular, , , secondsToNext] = await publicClient.readContract({
+          address: addr, abi: ABI, functionName: 'getLives', args: [p],
+        });
+        if (Number(regular) < 3 && Number(secondsToNext) === 0) eligible.push(p);
+      } catch (_) {}
+    }
+
+    if (eligible.length === 0) {
+      return json({ swept: 0, candidates: candidates.length });
+    }
+
+    // Send in batches
+    const txHashes: string[] = [];
+    for (let i = 0; i < eligible.length; i += BATCH_SIZE) {
+      const chunk = eligible.slice(i, i + BATCH_SIZE);
+      const hash = await walletClient.writeContract({
+        address: addr, abi: ABI, functionName: 'claimRegenBatch', args: [chunk],
+      });
+      txHashes.push(hash);
+    }
+    return json({ swept: eligible.length, batches: txHashes.length, txHashes });
+  } catch (err) {
+    console.error('pengu-regen-sweep error:', err);
+    return json({ error: (err as Error).message || String(err) }, 500);
+  }
+});
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...CORS, 'content-type': 'application/json' },
+  });
+}

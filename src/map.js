@@ -2,6 +2,7 @@ import { getLevel, getLevelCount } from './levels.js';
 import { getWallet, fetchPlayerProgress, buildMapProgress, connectAGW, disconnectAGW, shortAddress, hasInjectedWallet, signInWithAGW, isSignedIn } from './supabase.js';
 import * as Inventory from './inventory.js';
 import { renderShardSlots, SHARDS } from './shards.js';
+import { buyCrushPassETH, spinDailyWheel as chainSpinWheel } from './onchain.js';
 
 /** Map inventory grid: 5 boosters + 3 shards = 4×2 */
 const INVENTORY_MAP_SLOTS = [
@@ -584,6 +585,12 @@ export function initMap() {
       dailySpinning = false;
       const won = sliceIndexUnderPointer(dailyWheelRotation);
       const rewardText = DAILY_REWARDS[won];
+      // Fire chain spin in background — server-signed roll, no client tampering.
+      // Local Inventory.applyDailyReward mirrors the effect for instant UI.
+      chainSpinWheel().then(r => {
+        if (r?.hash) console.log('🐧 daily wheel mined:', r.hash);
+        Inventory.hydrateFromChain().catch(() => {});
+      }).catch(err => console.warn('🐧 daily wheel failed (non-fatal):', err?.message || err));
       const effect = Inventory.applyDailyReward(rewardText);
       if (dailyResult) {
         dailyResult.textContent = formatDailyWheelResult(rewardText, effect);
@@ -891,20 +898,36 @@ export function initMap() {
   crushPassPurchaseOverlay?.querySelector('.crush-pass-purchase-overlay__backdrop')?.addEventListener('click', () => {
     closeCrushPassPurchaseOverlay();
   });
-  crushPassBuyBtn?.addEventListener('click', e => {
+  crushPassBuyBtn?.addEventListener('click', async e => {
     e.stopPropagation();
-    const reward = Inventory.purchaseCrushPass();
-    if (!reward) return;
-    closeCrushPassPurchaseOverlay();
-    refreshCrushPassChrome();
-    crushPassPendingReward = reward; // set BEFORE openCrushPassOverlay reads it
-    openCrushPassOverlay();
-    // Give the overlay a frame to render, then shake the ticket as a "tap me!" invite
-    requestAnimationFrame(() => {
-      shakeTicket();
-      // Repeat the shake once more after a short pause for emphasis
-      setTimeout(shakeTicket, 900);
-    });
+    if (crushPassBuyBtn.disabled) return;
+    crushPassBuyBtn.disabled = true;
+    const origText = crushPassBuyBtn.textContent;
+    crushPassBuyBtn.textContent = 'Confirm payment…';
+    try {
+      // Real on-chain purchase: AGW prompts the user for ETH payment.
+      // On success the contract grants boosters + frozen lives + maybe shard.
+      await buyCrushPassETH();
+      // Pull fresh on-chain state so the celebration reads the real grant.
+      await Inventory.hydrateFromChain().catch(() => {});
+      // Compose a celebration payload matching the local mock format
+      const reward = Inventory.purchaseCrushPass(); // updates local mirror
+      if (!reward) return;
+      closeCrushPassPurchaseOverlay();
+      refreshCrushPassChrome();
+      crushPassPendingReward = reward;
+      openCrushPassOverlay();
+      requestAnimationFrame(() => {
+        shakeTicket();
+        setTimeout(shakeTicket, 900);
+      });
+    } catch (err) {
+      console.warn('Crush Pass purchase failed:', err?.shortMessage || err?.message || err);
+      alert('Pass purchase failed — see console.');
+    } finally {
+      crushPassBuyBtn.textContent = origText;
+      crushPassBuyBtn.disabled = false;
+    }
   });
   crushPassCancelPurchaseBtn?.addEventListener('click', e => {
     e.stopPropagation();

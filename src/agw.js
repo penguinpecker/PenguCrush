@@ -18,6 +18,7 @@ let _privyProvider = null;  // raw Privy cross-app EIP-1193 provider
 let _agwProvider = null;    // wrapped with AGW transformEIP1193Provider
 let _walletClient = null;   // viem WalletClient
 let _publicClient = null;   // viem PublicClient
+let _agwClient = null;      // @abstract-foundation/agw-client higher-level client (for session keys)
 let _address = null;        // AGW smart contract wallet address
 let _signerAddress = null;  // underlying EOA address
 
@@ -176,9 +177,37 @@ export async function connectAGW() {
     transport: http(),
   });
 
+  // Build the higher-level AGW client for session-key APIs. Falls back to null
+  // if the agw-client package doesn't export the helper.
+  try {
+    const agwMod = await import('@abstract-foundation/agw-client');
+    if (typeof agwMod.createAbstractClient === 'function') {
+      const signerAccount = await import('viem/accounts').then(m =>
+        m.toAccount({ address: _signerAddress, signMessage: async ({ message }) => privy.request({
+          method: 'personal_sign', params: [typeof message === 'string' ? message : message.raw, _signerAddress]
+        }), signTransaction: async () => { throw new Error('not used'); }, signTypedData: async () => { throw new Error('not used'); } })
+      ).catch(() => null);
+      if (signerAccount) {
+        _agwClient = await agwMod.createAbstractClient({
+          chain: abstract,
+          signer: signerAccount,
+          transport: custom(privy),
+        });
+      }
+    }
+  } catch (err) {
+    console.warn('AGW high-level client init failed (session keys disabled):', err?.message || err);
+    _agwClient = null;
+  }
+
   persist(_address);
   console.log(`🐧 AGW connected — wallet: ${_address} (signer: ${_signerAddress})`);
   return _address;
+}
+
+/** Higher-level AGW client (used for session-key createSession / revokeSessions). */
+export function getAgwClient() {
+  return _agwClient;
 }
 
 // Pre-create the Privy provider on module load so the popup opens instantly on click,

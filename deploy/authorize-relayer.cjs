@@ -1,9 +1,11 @@
 const { Wallet, Provider, Contract } = require("zksync-ethers");
 const { vars } = require("hardhat/config");
 
+const DEPLOYER_PK = process.env.DEPLOYER_PRIVATE_KEY || vars.get("DEPLOYER_PRIVATE_KEY");
+
 module.exports = async function (hre) {
   const provider = new Provider("https://api.mainnet.abs.xyz");
-  const wallet = new Wallet(vars.get("DEPLOYER_PRIVATE_KEY"), provider);
+  const wallet = new Wallet(DEPLOYER_PK, provider);
 
   const CONTRACT = "0xAF2ED337AAF8c3FF4AF5600C15F1C8C7042ec517"; // PenguCrush proxy
   const RELAYER = "0x6cB7318BCb62bec46F4A48E0E8d4E4E9EB0Ce6d3";

@@ -2,6 +2,8 @@ const { Wallet } = require("zksync-ethers");
 const { Deployer } = require("@matterlabs/hardhat-zksync");
 const { vars } = require("hardhat/config");
 
+const DEPLOYER_PK = process.env.DEPLOYER_PRIVATE_KEY || vars.get("DEPLOYER_PRIVATE_KEY");
+
 // Upgrade the PenguCrush proxy to a new implementation.
 // Edit PROXY_ADDRESS to match your deployment, then run:
 //   npx hardhat deploy-zksync --script upgrade-pengucrush.cjs --network abstractMainnet
@@ -14,7 +16,7 @@ module.exports = async function (hre) {
   if (PROXY_ADDRESS === "0x0000000000000000000000000000000000000000") {
     throw new Error("Set PROXY_ADDRESS in deploy/upgrade-pengucrush.cjs first.");
   }
-  const wallet = new Wallet(vars.get("DEPLOYER_PRIVATE_KEY"));
+  const wallet = new Wallet(DEPLOYER_PK);
   const deployer = new Deployer(hre, wallet);
 
   const artifact = await deployer.loadArtifact("PenguCrush");

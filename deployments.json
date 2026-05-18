@@ -1,0 +1,16 @@
+{
+  "abstractMainnet": {
+    "PenguCrushV2": {
+      "proxy": "0x06aCb91c46aD1359825560B19A9556118Aeb1896",
+      "owner": "0xDdbbc73A42814c42943095cc7F51762fb038BC9A",
+      "treasury": "0xDdbbc73A42814c42943095cc7F51762fb038BC9A",
+      "priceRelayer": "0xDdbbc73A42814c42943095cc7F51762fb038BC9A",
+      "wheelRelayer": "0xDdbbc73A42814c42943095cc7F51762fb038BC9A",
+      "usdc": "0x84A71ccD554Cc1b02749b35d22F684CC8ec987e1",
+      "pyth": "0x8739d5024B5143278E2b15Bd9e7C26f6CEc658F1",
+      "pythEthUsdId": "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
+      "deployedAt": "2026-05-18T07:09:28.151Z",
+      "deployedBy": "0xDdbbc73A42814c42943095cc7F51762fb038BC9A"
+    }
+  }
+}
