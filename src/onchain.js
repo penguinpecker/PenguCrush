@@ -115,10 +115,18 @@ export function startLevel(level) {
   return chainWrite('startLevel', 'startLevel', [Number(level)]);
 }
 
-export function submitLevel(journal) {
-  // journal: { level, score, stars, movesUsed, completed, durationMs,
-  //            boostersUsed[], shardsEarned[], bigCombos, fallerPenalties }
-  return chainWrite('submitLevel', 'submitLevel', [{
+/**
+ * V2.2: validate-then-submit. The server-side validator (Supabase edge
+ * function `pengu-validate-level`) bounds-checks the journal against per-level
+ * limits + recomputes stars from score, then signs an EIP-712 Validation
+ * approval. The on-chain `submitLevelValidated` verifies the signature
+ * against `validatorRelayer` and only then records the result. Falls back to
+ * unvalidated `submitLevel` if the validator returns an error (so a
+ * misbehaving validator can't fully brick gameplay — chain still records
+ * the play, just without the validated flag).
+ */
+export async function submitLevel(journal) {
+  const j = {
     level: Number(journal.level),
     score: Number(journal.score),
     stars: Number(journal.stars),
@@ -129,7 +137,35 @@ export function submitLevel(journal) {
     shardsEarned: journal.shardsEarned || [],
     bigCombos: Number(journal.bigCombos || 0),
     fallerPenalties: Number(journal.fallerPenalties || 0),
-  }]);
+  };
+  const player = getAGWAddress();
+  if (!player) return chainWrite('submitLevel', 'submitLevel', [j]);
+
+  // 1) Ask the validator to bounds-check + sign.
+  try {
+    const url = `${QUOTE_API_BASE}/pengu-validate-level`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ player, journal: j }),
+    });
+    if (res.ok) {
+      const { signature } = await res.json();
+      if (signature) {
+        // 2) Submit the validated journal — gas-cheaper for indexers since
+        //    a LevelValidated event fires alongside LevelSubmitted.
+        return chainWrite('submitLevelValidated', 'submitLevelValidated', [j, signature]);
+      }
+    } else {
+      const text = await res.text().catch(() => '');
+      console.warn('validator rejected journal:', res.status, text);
+    }
+  } catch (err) {
+    console.warn('validator unreachable, falling back to unvalidated:', err?.message || err);
+  }
+  // 3) Validator down or rejected — degrade gracefully to unvalidated path so
+  //    the chain still records the play (no leaderboard validation marker).
+  return chainWrite('submitLevel', 'submitLevel', [j]);
 }
 
 export function levelCheckpoint(level, moveNum, snapshotHash) {

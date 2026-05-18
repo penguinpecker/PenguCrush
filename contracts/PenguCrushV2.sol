@@ -250,8 +250,15 @@ contract PenguCrushV2 is
     // Shop nonces continue to live in `usedNonces` above for storage compat.
     mapping(uint256 => bool) public usedWheelNonces;
 
+    // ── V2.2 additions (audit fix #10) ──
+    // Server-side validator signs off on a journal before the player calls
+    // submitLevelValidated. The contract verifies the validator signature so
+    // that a modified client can't claim arbitrary score/stars on chain even
+    // though the journal itself is still authored by the player.
+    address public validatorRelayer;
+
     // -- Reserved for upgrades --
-    uint256[38] private __gap; // shrunk from 40; reserves balance maintained
+    uint256[37] private __gap; // shrunk from 38 to make room for validatorRelayer
 
     // ═══════════════════════════════════════════════════════════════
     //  EVENTS
@@ -274,6 +281,11 @@ contract PenguCrushV2 is
     );
     event HighestLevelAdvanced(address indexed player, uint16 newHighest);
     event LevelCheckpoint(address indexed player, uint16 indexed level, uint16 moveNum, bytes32 snapshotHash);
+    /// V2.2: emitted alongside LevelSubmitted whenever a submission passed
+    /// validator-signed approval. Off-chain leaderboards should filter on
+    /// matching journalHash entries (audit fix #10).
+    event LevelValidated(address indexed player, uint16 indexed level, bytes32 indexed journalHash);
+    event ValidatorRelayerUpdated(address oldRelayer, address newRelayer);
 
     // -- Items / inventory --
     event BoosterUsed(address indexed player, bytes32 indexed sku, uint16 atLevel, uint32 balanceAfter);
@@ -380,6 +392,10 @@ contract PenguCrushV2 is
     error LevelNotStarted();      // submitLevel without prior startLevel
     error TooManyShards();        // shardsEarned.length > MAX_SHARDS_PER_SUBMIT
     error ExactPaymentRequired(); // msg.value != quote.amount on ETH shop fns
+    // V2.2 (audit fix #10)
+    error ValidatorNotConfigured(); // validatorRelayer is the zero address
+    error ValidatorBadSigner();     // sig didn't recover to validatorRelayer
+    error ValidatorPlayerMismatch();// signed payload's player != msg.sender
 
     // ═══════════════════════════════════════════════════════════════
     //  INITIALIZER
@@ -557,6 +573,27 @@ contract PenguCrushV2 is
         _submitLevelInternal(player, j);
     }
 
+    /// V2.2 (audit fix #10): player-paid submission gated by a validator
+    /// signature. The validator (off-chain edge function) applies bounds
+    /// checks against the level config before signing. The contract verifies
+    /// the EIP-712 signature recovers to `validatorRelayer` and emits an
+    /// extra LevelValidated event so off-chain leaderboards can filter on
+    /// validated submissions only.
+    ///
+    /// `submitLevel` (unvalidated) remains available for legacy/non-leaderboard
+    /// flows. The on-chain stats record both unconditionally; consumers decide
+    /// whether to trust unvalidated ones.
+    function submitLevelValidated(LevelJournal calldata j, bytes calldata validatorSig) external whenGameplayActive {
+        if (validatorRelayer == address(0)) revert ValidatorNotConfigured();
+        bytes32 jHash = keccak256(abi.encode(j));
+        bytes32 digest = _hashTypedDataV4(keccak256(abi.encode(
+            VALIDATION_TYPEHASH, msg.sender, jHash
+        )));
+        if (ECDSA.recover(digest, validatorSig) != validatorRelayer) revert ValidatorBadSigner();
+        _submitLevelInternal(msg.sender, j);
+        emit LevelValidated(msg.sender, j.level, jHash);
+    }
+
     /// Mid-game tamper-detection trail. Frontend hashes snapshot before persisting
     /// to off-chain storage; if the off-chain row is later edited, hash mismatches.
     function levelCheckpoint(uint16 level, uint16 moveNum, bytes32 snapshotHash) external whenGameplayActive {
@@ -616,7 +653,13 @@ contract PenguCrushV2 is
             newBest = true;
 
             PlayerStats storage st = playerStats[player];
-            st.totalScore = st.totalScore - oldScore + j.score;
+            // Audit fix #14: saturating add. uint32 totalScore caps at max
+            // instead of reverting; preserves elite players' ability to keep
+            // improving best-results without locking out their PlayerStats.
+            unchecked {
+                uint64 next = uint64(st.totalScore) - uint64(oldScore) + uint64(j.score);
+                st.totalScore = next > type(uint32).max ? type(uint32).max : uint32(next);
+            }
             st.totalStars = uint16(uint256(st.totalStars) - oldStars + j.stars);
             if (j.level > st.highestLevel && j.stars > 0) {
                 st.highestLevel = j.level;
@@ -786,6 +829,12 @@ contract PenguCrushV2 is
 
     bytes32 private constant SHOP_QUOTE_TYPEHASH = keccak256(
         "ShopQuote(address buyer,bytes32 sku,uint32 qty,uint8 currency,uint256 amount,uint256 nonce,uint256 deadline)"
+    );
+
+    // V2.2 — validator EIP-712 typehash. Server signs (player, journalHash);
+    // contract verifies before recording a "validated" submission.
+    bytes32 private constant VALIDATION_TYPEHASH = keccak256(
+        "Validation(address player,bytes32 journalHash)"
     );
 
     function _verifyShopQuote(ShopQuote calldata q, bytes calldata sig, bytes32 expectedSku, Currency expectedCurrency) internal {
@@ -1085,6 +1134,14 @@ contract PenguCrushV2 is
         if (r == address(0)) revert ZeroAddress();
         emit WheelRelayerUpdated(wheelRelayer, r);
         wheelRelayer = r;
+    }
+
+    /// V2.2: admin sets the EOA whose EIP-712 signatures `submitLevelValidated`
+    /// will accept. Setting to address(0) disables validated submissions; the
+    /// `submitLevel` path stays available regardless.
+    function setValidatorRelayer(address r) external onlyOwner {
+        emit ValidatorRelayerUpdated(validatorRelayer, r);
+        validatorRelayer = r;
     }
 
     function setUsdcToken(address t) external onlyOwner {

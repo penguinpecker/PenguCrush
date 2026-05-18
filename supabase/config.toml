@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.pengu-regen-sweep]
 verify_jwt = false
+
+[functions.pengu-validate-level]
+verify_jwt = false

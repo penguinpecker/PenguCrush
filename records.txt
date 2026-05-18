@@ -414,6 +414,33 @@ ADR-005 (2026-05-18) — AGW session keys for in-game txs
 4. DEPLOYMENT HISTORY
 ═══════════════════════════════════════════════════════════════════════════════
 
+2026-05-18  PenguCrushV2.2 (validation + score saturation)
+  proxy            0x06aCb91c46aD1359825560B19A9556118Aeb1896 (unchanged)
+  new impl         0x0dB9cB1Aa682f50EaF1b6820f39210336c834f01
+  upgrade tx       0x75e3819b867b801fc37977bd2c467dffad33d74d7f2c48d827d937174d8a6ea9
+  abscan verified  ID 12783
+  validatorRelayer set tx 0x38c8c6876f274f4643842524f46ec9c88d55c6b468202b5acb0302f2290b18d5
+                   (same EOA as priceRelayer + wheelRelayer for now)
+  changes — audit fixes:
+    #10 New submitLevelValidated(j, sig) function. EIP-712 Validation
+        typehash: keccak256("Validation(address player,bytes32 journalHash)")
+        Validator (Supabase edge fn pengu-validate-level) bounds-checks
+        the journal against per-level moves + score caps + recomputed
+        stars threshold, then signs. Contract verifies sig recovers to
+        validatorRelayer and emits LevelValidated(player, level, hash).
+        Off-chain leaderboards filter on the new event for cheat-resistant
+        rankings. Direct submitLevel still works (degrades gracefully if
+        validator unreachable) but doesn't get the validated marker.
+    #14 totalScore math switched from `a - b + c` (reverts on uint32
+        overflow) to saturating add capping at uint32.max. Elite players
+        who hit the cap stop accumulating but can keep improving their
+        best-results for individual levels.
+  storage layout: appended `address validatorRelayer` (1 slot), shrunk
+    __gap[38] → __gap[37]. Manual layout review documented in
+    deploy/upgrade-pengucrush-v2.cjs; passed unsafeSkipStorageCheck after.
+  new edge function: pengu-validate-level (verify_jwt=false; chain
+    signature is the trust boundary).
+
 2026-05-18  PenguCrushV2.1 (audit-hardening upgrade)
   proxy            0x06aCb91c46aD1359825560B19A9556118Aeb1896 (unchanged)
   new impl         0xe45A09e7B5816a16f6DA0cAd18c265DBFa174B91
