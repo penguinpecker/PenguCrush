@@ -1584,6 +1584,12 @@ function getStars() {
 // ═══════════════════════════════════════════════════════════════
 //  LEVEL COMPLETE / FAIL POPUP
 // ═══════════════════════════════════════════════════════════════
+/// In-flight chainSubmitLevel promise. The Next / Replay / Map buttons
+/// await this so the page never reloads with the submit tx still pending —
+/// otherwise the next level stays locked, the leaderboard misses the run,
+/// and the user sees "Next sent me to home" or "leaderboard is empty".
+let submitLevelPromise = null;
+
 function showLevelPopup(won) {
   gameOver = true;
   // Fire analytics first so we have a clean snapshot before any UI mutation
@@ -1673,9 +1679,11 @@ function showLevelPopup(won) {
     }).catch(() => {});
 
     // On-chain: submitLevel routes through pengu-validate-level (server
-    // bounds + EIP-712 signs) then submitLevelValidated. Fire-and-forget;
-    // the chain is the source of truth, the local UI already painted.
-    chainSubmitLevel({
+    // bounds + EIP-712 signs) then submitLevelValidated. We KEEP a handle
+    // on the promise so the Next / Map buttons can await it before they
+    // navigate — without that, the page reload abandoned the in-flight tx
+    // and level N+1 stayed locked even after a clean win.
+    submitLevelPromise = chainSubmitLevel({
       level: levelNum,
       score,
       stars,
@@ -1686,7 +1694,7 @@ function showLevelPopup(won) {
       shardsEarned: journal.shardsEarned,
       bigCombos: journal.bigCombos,
       fallerPenalties: fallerDropsPenalized,
-    }).catch(() => {});
+    }).then(r => ({ ok: true, r }), e => ({ ok: false, err: e }));
     // Clear any mid-game snapshot now that the level is over
     clearMidGameSnapshot(levelNum).catch(() => {});
   }
@@ -1695,13 +1703,43 @@ function showLevelPopup(won) {
 }
 
 function setupLevelPopupButtons() {
-  document.getElementById('levelPopupMap').addEventListener('click', () => {
+  /// Await the in-flight chainSubmitLevel before navigating. If the chain
+  /// rejected the run (or the tx hasn't landed yet), block navigation and
+  /// surface the reason — Level N+1 won't unlock otherwise.
+  async function awaitSubmitOrAlert(buttonEl) {
+    if (!submitLevelPromise) return true; // no pending submit
+    const origText = buttonEl ? buttonEl.textContent : null;
+    if (buttonEl) {
+      buttonEl.disabled = true;
+      buttonEl.textContent = 'Saving…';
+    }
+    const r = await submitLevelPromise;
+    if (buttonEl) {
+      buttonEl.disabled = false;
+      if (origText) buttonEl.textContent = origText;
+    }
+    if (r && r.ok) return true;
+    const err = r?.err;
+    const msg = String(err?.shortMessage || err?.message || err || 'unknown').slice(0, 240);
+    const lowBalance = /insufficient balance|insufficient funds|out of gas/i.test(msg);
+    if (!/reject|denied|cancel/i.test(msg)) {
+      alert(lowBalance
+        ? 'Your AGW wallet is out of ETH for gas on Abstract.\n\nFund your AGW address with a small amount of ETH on Abstract mainnet, then come back to this popup — your score is held until the chain accepts it.'
+        : `Couldn't save your level result on chain:\n\n${msg}\n\nThis level won't count and the next level stays locked until the chain accepts the result.`);
+    }
+    return false;
+  }
+
+  document.getElementById('levelPopupMap').addEventListener('click', async (e) => {
+    if (!(await awaitSubmitOrAlert(e.currentTarget))) return;
     window.__pengu.goToMap();
   });
-  document.getElementById('levelPopupReplay').addEventListener('click', () => {
-    window.location.href = `/?level=${levelNum}`;
+  document.getElementById('levelPopupReplay').addEventListener('click', async (e) => {
+    if (!(await awaitSubmitOrAlert(e.currentTarget))) return;
+    window.__pengu.goToLevel(levelNum);
   });
-  document.getElementById('levelPopupNext').addEventListener('click', () => {
+  document.getElementById('levelPopupNext').addEventListener('click', async (e) => {
+    if (!(await awaitSubmitOrAlert(e.currentTarget))) return;
     if (hasLevel(levelNum + 1)) window.__pengu.goToLevel(levelNum + 1);
   });
 }
@@ -2508,11 +2546,36 @@ function drawHUDPanel(cvs) {
 }
 
 async function init() {
-  // Fire-and-forget on-chain startLevel: consumes 1 life + emits LevelStarted.
-  // Via AGW session key so no wallet prompt. If the session isn't granted yet,
-  // the call falls back to a prompt (which the user just answered to play).
+  // Block the board from loading until the chain confirms startLevel.
+  // Pre-V2.4 this was fire-and-forget — the game would render even when
+  // the chain rejected the call (no lives, no gas), and submitLevel would
+  // silently fail later, locking the next level. Now we wait + surface
+  // the actual reason on failure and bounce back to the map.
   Events.levelStart(levelNum);
-  chainStartLevel(levelNum).catch(() => {});
+  const loadingMsgEl = document.querySelector('#loadingScreen .loading-screen__caption')
+    || document.getElementById('loadingScreenContent');
+  if (loadingMsgEl && loadingMsgEl.tagName !== 'IMG') {
+    loadingMsgEl.setAttribute('data-pengu-original', loadingMsgEl.textContent || '');
+    loadingMsgEl.textContent = 'Confirming on chain…';
+  }
+  try {
+    await chainStartLevel(levelNum);
+  } catch (err) {
+    const msg = String(err?.shortMessage || err?.message || err).slice(0, 240);
+    console.warn('startLevel failed:', msg);
+    const lowBalance = /insufficient balance|insufficient funds|out of gas/i.test(msg);
+    const noLives = /NoLives|no lives|0x[0-9a-f]{0,8}.*[Ll]ives/.test(msg);
+    if (!/reject|denied|cancel/i.test(msg)) {
+      alert(lowBalance
+        ? 'Your AGW wallet is out of ETH for gas on Abstract.\n\nFund your AGW address with a small amount of ETH on Abstract mainnet, then retry.'
+        : noLives
+        ? 'No lives left. Wait for regen or buy more from the shop.'
+        : `Could not start the level on chain: ${msg}\n\nNo life was consumed — try again.`);
+    }
+    sessionStorage.removeItem('pengu_current_level');
+    window.location.href = '/?page=map';
+    return;
+  }
 
   await preloadAssets(() => {});
   await ensureHammerSwingModel();

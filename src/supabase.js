@@ -70,14 +70,51 @@ export async function fetchPlayerProgress(wallet) {
   };
 }
 
+/// On-chain leaderboard reader. The Supabase mirror table `pengu_leaderboard`
+/// is no longer kept in sync (anon writes were revoked in the V2 audit and
+/// the signed-write edge function isn't built yet), so the table sat empty
+/// and the leaderboard rendered nothing even after real wins. Pivot: read
+/// `getPlayerCount` + `getPlayers(0, N)` + `getLeaderboardBatch` directly
+/// off the proxy. Chain is the source of truth, no replication delay.
 export async function fetchLeaderboard(limit = 20) {
-  const { data } = await supabase
-    .from('pengu_leaderboard')
-    .select('wallet_address, total_stars, total_score, highest_level')
-    .order('total_stars', { ascending: false })
-    .order('total_score', { ascending: false })
-    .limit(limit);
-  return data || [];
+  try {
+    const { getPublicClient } = await import('./agw.js');
+    const { PENGUCRUSH_ADDRESS } = await import('./onchain.js');
+    const abiJson = (await import('../contracts/PenguCrushABI.json')).default;
+    const abi = Array.isArray(abiJson) ? abiJson : abiJson.abi || [];
+    const client = getPublicClient();
+    const count = Number(await client.readContract({
+      address: PENGUCRUSH_ADDRESS, abi, functionName: 'getPlayerCount',
+    }));
+    if (count === 0) return [];
+    // Pull up to 4× the display limit to leave headroom for ties / unranked
+    // wallets, capped so a giant player set doesn't blow up the RPC round trip.
+    const fetchN = Math.min(count, Math.max(limit * 4, 50), 500);
+    const addrs = await client.readContract({
+      address: PENGUCRUSH_ADDRESS, abi, functionName: 'getPlayers', args: [0n, BigInt(fetchN)],
+    });
+    if (!addrs || addrs.length === 0) return [];
+    const stats = await client.readContract({
+      address: PENGUCRUSH_ADDRESS, abi, functionName: 'getLeaderboardBatch', args: [addrs],
+    });
+    const rows = addrs.map((addr, i) => {
+      const s = stats[i] || {};
+      return {
+        wallet_address: addr.toLowerCase(),
+        total_stars:   Number(s.totalStars   ?? s[2] ?? 0),
+        total_score:   Number(s.totalScore   ?? s[1] ?? 0),
+        highest_level: Number(s.highestLevel ?? s[0] ?? 0),
+      };
+    }).filter(r => r.total_stars > 0 || r.total_score > 0 || r.highest_level > 0);
+    rows.sort((a, b) =>
+      (b.total_stars - a.total_stars) ||
+      (b.total_score - a.total_score) ||
+      (b.highest_level - a.highest_level));
+    return rows.slice(0, limit);
+  } catch (err) {
+    console.warn('Leaderboard chain read failed:', err?.shortMessage || err?.message || err);
+    return [];
+  }
 }
 
 // ═══════════════════════════════════════════════════
