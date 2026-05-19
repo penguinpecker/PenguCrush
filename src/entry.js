@@ -9,6 +9,7 @@ import { Events, setAnalyticsUser } from './analytics.js';
 import './dev-stars.js'; // adds window.__pengu.starDev() — no UI unless enabled
 import './dev-shop.js';  // adds window.__pengu.shopDev() — align booster grid
 import './dev-booster-export.js'; // adds window.__pengu.exportBoosterPNGs()
+if (import.meta.env.DEV) import('./dev-audit.js'); // adds window.__pengu_audit.run()
 
 // ── Current level routing (internal, not in the URL bar) ───────
 // The URL never carries ?level=N anymore — the level is stored in
