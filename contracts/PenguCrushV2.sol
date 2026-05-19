@@ -790,6 +790,18 @@ contract PenguCrushV2 is
     function _consumeLife(address player) internal {
         LifeAccount storage la = lifeAccount[player];
 
+        // Seed the regen-cap on first touch. `_eligibleRegular` reports
+        // REGEN_CAP_REGULAR effective lives to `getLives` for a fresh wallet
+        // (lastConsumedAt == 0) but cannot write them — the seed has to be
+        // materialized by a state-changing path, otherwise every brand-new
+        // wallet reverts NoLives on its first startLevel despite the UI
+        // showing a full heart row.
+        if (la.regular == 0 && la.lastConsumedAt == 0 && la.frozen == 0) {
+            la.regular = REGEN_CAP_REGULAR;
+            la.lastConsumedAt = uint64(block.timestamp);
+            emit LifeRegenerated(player, REGEN_CAP_REGULAR, REGEN_CAP_REGULAR, uint64(block.timestamp));
+        }
+
         // Materialize regen first
         (uint8 eff, uint8 ticks, uint64 anc) = _eligibleRegular(la);
         if (ticks > 0) {
@@ -868,6 +880,14 @@ contract PenguCrushV2 is
 
     function _grantRegularLives(address p, uint8 qty) internal {
         LifeAccount storage la = lifeAccount[p];
+        // Same seed materialization as _consumeLife — a fresh wallet that
+        // buys lives before its first startLevel should have the seed
+        // included, not lose it.
+        if (la.regular == 0 && la.lastConsumedAt == 0 && la.frozen == 0) {
+            la.regular = REGEN_CAP_REGULAR;
+            la.lastConsumedAt = uint64(block.timestamp);
+            emit LifeRegenerated(p, REGEN_CAP_REGULAR, REGEN_CAP_REGULAR, uint64(block.timestamp));
+        }
         (uint8 eff, uint8 ticks, uint64 anc) = _eligibleRegular(la);
         if (ticks > 0) {
             la.regular = eff;
