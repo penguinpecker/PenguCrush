@@ -544,7 +544,13 @@ export function initMap() {
     if (origLabel) popupPlayBtn.textContent = 'Confirming…';
     try {
       const { startLevel: chainStartLevel } = await import('./onchain.js');
-      await chainStartLevel(currentPopupLevel.id);
+      const result = await chainStartLevel(currentPopupLevel.id);
+      // Defense in depth: chainWrite already throws on revert, but guard
+      // against a future code path that resolves without an actual receipt.
+      if (!result?.hash || !/^0x[0-9a-fA-F]+$/.test(result.hash)) {
+        throw new Error(`startLevel returned no tx hash (got ${JSON.stringify(result)})`);
+      }
+      console.info('[map-play] startLevel confirmed', result.hash, 'via', result.used);
       await Inventory.hydrateFromChain().catch(() => {});
       window.__pengu.goToLevel(currentPopupLevel.id);
     } catch (err) {
@@ -1140,7 +1146,8 @@ export function initMap() {
     crushPassCancelSubscriptionBtn.textContent = 'Cancelling…';
     try {
       const { cancelCrushPass: chainCancelCrushPass } = await import('./onchain.js');
-      await chainCancelCrushPass();
+      const r = await chainCancelCrushPass();
+      if (!r?.hash) throw new Error('no tx hash returned');
       await Inventory.hydrateFromChain().catch(() => {});
       Events.passCancelled();
       refreshCrushPassChrome();

@@ -1707,6 +1707,26 @@ function showLevelPopup(won) {
 }
 
 function setupLevelPopupButtons() {
+  /// Single-shot mutex across all three popup buttons. Once any button
+  /// kicks off its work (chain tx or navigation), every other click is a
+  /// no-op until the page navigates away. Prevents:
+  ///   • Double-fire of submitAndStartNext from rapid Next clicks.
+  ///   • Clicking Map mid-tx and navigating optimistically while the
+  ///     chain call is still pending.
+  let _levelEndBusy = false;
+
+  const mapBtn = document.getElementById('levelPopupMap');
+  const replayBtn = document.getElementById('levelPopupReplay');
+  const nextBtn = document.getElementById('levelPopupNext');
+
+  /// Toggle all popup buttons in lockstep so visual state matches the
+  /// busy flag — the user never sees a button that looks clickable while
+  /// another is mid-tx.
+  function setBusy(busy) {
+    _levelEndBusy = busy;
+    [mapBtn, replayBtn, nextBtn].forEach(b => { if (b) b.disabled = busy; });
+  }
+
   /// Common error path shared by all three popup buttons.
   function explainAndAlert(err, defaultMsg) {
     const msg = String(err?.shortMessage || err?.message || err).slice(0, 240);
@@ -1720,57 +1740,78 @@ function setupLevelPopupButtons() {
       : `${defaultMsg}\n\n${msg}`);
   }
 
+  /// Confirms the chainWrite return value actually represents a confirmed
+  /// tx (must have a hex tx hash). Defense in depth: chainWrite already
+  /// throws on revert, but if any future code path returns early without
+  /// awaiting the receipt this guard catches it before we navigate.
+  function assertConfirmed(result, label) {
+    if (!result || typeof result.hash !== 'string' || !/^0x[0-9a-fA-F]{1,}$/.test(result.hash)) {
+      throw new Error(`${label}: chain call returned no tx hash (received ${JSON.stringify(result)})`);
+    }
+  }
+
   /// Map button — zero chain calls, just navigate. The user is leaving;
   /// score is discarded. If they want to record the run, they click
   /// Next or Replay instead (both single-tx fused submits).
-  document.getElementById('levelPopupMap').addEventListener('click', () => {
+  mapBtn.addEventListener('click', () => {
+    if (_levelEndBusy) return;
     pendingJournal = null;
     window.__pengu.goToMap();
   });
 
   /// Replay button — fused submit + start same level (1 atomic tx).
-  document.getElementById('levelPopupReplay').addEventListener('click', async (e) => {
+  replayBtn.addEventListener('click', async (e) => {
+    if (_levelEndBusy) return;
     const btn = e.currentTarget;
-    if (btn.disabled) return;
     const orig = btn.textContent;
-    btn.disabled = true; btn.textContent = 'Confirming…';
+    setBusy(true);
+    btn.textContent = 'Confirming…';
     try {
+      let result;
       if (pendingJournal) {
-        await chainSubmitAndStartNext(pendingJournal, levelNum);
+        result = await chainSubmitAndStartNext(pendingJournal, levelNum);
         pendingJournal = null;
       } else {
         // No journal (failed run, started without a submit). Plain startLevel.
-        await chainStartLevel(levelNum);
+        result = await chainStartLevel(levelNum);
       }
+      assertConfirmed(result, 'Replay');
+      console.info('[level-end] Replay confirmed', result.hash, 'via', result.used);
       await Inventory.hydrateFromChain().catch(() => {});
       window.__pengu.goToLevel(levelNum);
     } catch (err) {
       console.warn('submitAndStartNext (Replay) failed:', err);
       explainAndAlert(err, 'Could not restart this level on chain.');
-      btn.disabled = false; if (orig) btn.textContent = orig;
+      setBusy(false);
+      if (orig) btn.textContent = orig;
     }
   });
 
   /// Next button — fused submit + start NEXT level (1 atomic tx).
-  document.getElementById('levelPopupNext').addEventListener('click', async (e) => {
-    const btn = e.currentTarget;
-    if (btn.disabled) return;
+  nextBtn.addEventListener('click', async (e) => {
+    if (_levelEndBusy) return;
     if (!hasLevel(levelNum + 1)) return;
+    const btn = e.currentTarget;
     const orig = btn.textContent;
-    btn.disabled = true; btn.textContent = 'Confirming…';
+    setBusy(true);
+    btn.textContent = 'Confirming…';
     try {
+      let result;
       if (pendingJournal) {
-        await chainSubmitAndStartNext(pendingJournal, levelNum + 1);
+        result = await chainSubmitAndStartNext(pendingJournal, levelNum + 1);
         pendingJournal = null;
       } else {
-        await chainStartLevel(levelNum + 1);
+        result = await chainStartLevel(levelNum + 1);
       }
+      assertConfirmed(result, 'Next');
+      console.info('[level-end] Next confirmed', result.hash, 'via', result.used);
       await Inventory.hydrateFromChain().catch(() => {});
       window.__pengu.goToLevel(levelNum + 1);
     } catch (err) {
       console.warn('submitAndStartNext (Next) failed:', err);
       explainAndAlert(err, 'Could not advance to the next level on chain.');
-      btn.disabled = false; if (orig) btn.textContent = orig;
+      setBusy(false);
+      if (orig) btn.textContent = orig;
     }
   });
 }
