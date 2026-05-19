@@ -3,9 +3,9 @@ import { createGLTFLoader } from './gltf-loader.js';
 import { getLevel, hasLevel } from './levels.js';
 import { getWallet, ensureWallet, saveLevelResult } from './supabase.js';
 import * as Inventory from './inventory.js';
-import { startLevel as chainStartLevel, submitLevel as chainSubmitLevel, submitAndStartNext as chainSubmitAndStartNext, levelCheckpoint as chainLevelCheckpoint, sku as nameToSku } from './onchain.js';
+import { startLevel as chainStartLevel, submitLevel as chainSubmitLevel, submitAndStartNext as chainSubmitAndStartNext, sku as nameToSku } from './onchain.js';
 import { rollShardsForMatch, renderShardSlots, computeTraits } from './shards.js';
-import { saveSnapshot as saveMidGameSnapshot, loadSnapshot as loadMidGameSnapshot, clearSnapshot as clearMidGameSnapshot, hashSnapshot } from './mid-game.js';
+import { saveSnapshot as saveMidGameSnapshot, loadSnapshot as loadMidGameSnapshot, clearSnapshot as clearMidGameSnapshot } from './mid-game.js';
 import { Events } from './analytics.js';
 
 // ─── Per-level journal accumulated during play, submitted on-chain at end ────
@@ -1784,8 +1784,10 @@ async function handleSwap(r1, c1, r2, c2) {
     showMsg('No match!', 500);
   } else {
     moves--; updateHUD(); await processMatches();
-    // Mid-game tamper trail every 5 moves — hash board snapshot, push on
-    // chain, and save to localStorage + Supabase for cross-device resume.
+    // Mid-game snapshot every 5 moves — saves to localStorage + Supabase for
+    // cross-device resume. On-chain checkpoint removed: rejecting it didn't
+    // block gameplay anyway, so it was a meaningless prompt for non-session
+    // wallets.
     const movesUsed = CONFIG.moves - moves;
     if (movesUsed > 0 && movesUsed % 5 === 0) {
       try {
@@ -1799,12 +1801,7 @@ async function handleSwap(r1, c1, r2, c2) {
           journal: { ...journal, boostersUsed: [...journal.boostersUsed], shardsEarned: [...journal.shardsEarned] },
           board: board.map(row => row.map(t => t ? { type: t.type, frozen: t.frozen, iceLayer: t.iceLayer, isWall: t.isWall, isFaller: t.isFaller } : null)),
         };
-        saveMidGameSnapshot(levelNum, snapshotObj).then(hash => {
-          chainLevelCheckpoint(levelNum, movesUsed, hash).catch(() => {});
-        }).catch(() => {
-          // Fallback: still emit on-chain checkpoint even if cloud save fails
-          chainLevelCheckpoint(levelNum, movesUsed, hashSnapshot(snapshotObj)).catch(() => {});
-        });
+        saveMidGameSnapshot(levelNum, snapshotObj).catch(() => {});
       } catch (_) { /* cosmetic */ }
     }
     await resolveLevelStateAfterBoardSettled();

@@ -56,7 +56,6 @@ const GAMEPLAY_METHODS = [
   // V2.6 fused submit + startLevel(nextLevel). Single-tx path for the level
   // popup's Next / Replay buttons.
   'submitAndStartNext((uint16,uint32,uint8,uint16,bool,uint32,bytes32[],bytes32[],uint16,uint16),bytes,uint16)',
-  'levelCheckpoint(uint16,uint16,bytes32)',
   'claimRegen()',
   'cancelCrushPass()',
   // V2.3 — one-time starter pack grant, idempotent. Session-key safe so the

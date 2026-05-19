@@ -248,12 +248,6 @@ export async function submitAndStartNext(journal, nextLevel) {
   );
 }
 
-export function levelCheckpoint(level, moveNum, snapshotHash) {
-  return chainWrite('levelCheckpoint', 'levelCheckpoint',
-    [Number(level), Number(moveNum), snapshotHash],
-    { waitForReceipt: false }); // fire-and-forget, low priority
-}
-
 export function claimRegen() {
   return chainWrite('claimRegen', 'claimRegen', []);
 }

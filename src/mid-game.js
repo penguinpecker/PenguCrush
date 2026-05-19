@@ -1,11 +1,9 @@
 // ═══════════════════════════════════════════════════════════════
-//  MID-GAME SNAPSHOT — save/restore + on-chain checkpoint trail
+//  MID-GAME SNAPSHOT — save/restore for cross-device resume
 //
-//  • Every 5 moves the game hashes its board snapshot and emits a
-//    LevelCheckpoint event on chain (via levelCheckpoint in game.js).
-//  • The same snapshot is persisted to localStorage (instant resume
-//    on the same device) and to Supabase pengu_game_snapshots (cross-
-//    device).
+//  • Every 5 moves the game persists its board snapshot to
+//    localStorage (instant resume on the same device) and to Supabase
+//    pengu_game_snapshots (cross-device).
 //  • On level load, if a snapshot exists for the current wallet+level
 //    we offer "resume or start fresh".
 //  • The snapshot is wiped on level completion (win or fail).
