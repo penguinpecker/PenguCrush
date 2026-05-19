@@ -674,7 +674,7 @@ body[data-screen="game"] {
   font-family: 'Fredoka', sans-serif;
   font-size: clamp(11px, 2.15cqw, 13px);
   font-weight: 800;
-  padding: clamp(3px, 1.05cqw, 6px) clamp(6px, 7cqw, 40px);
+  padding: clamp(3px, 1.05cqw, 6px) clamp(4px, 1.8cqw, 10px);
   border-radius: 20px;
   border: none;
   cursor: pointer;
@@ -682,6 +682,13 @@ body[data-screen="game"] {
   letter-spacing: 0.5px;
   background: transparent;
   color: #fff;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .level-popup-btn:hover {
@@ -1829,7 +1836,7 @@ body:not([data-screen="game"]) .shard-hud { display: none; }
 
   .level-popup-btn {
     font-size: clamp(9px, 2.35cqw, 12px);
-    padding: clamp(2px, 0.75cqw, 5px) clamp(4px, 3.4cqw, 18px);
+    padding: clamp(2px, 0.75cqw, 5px) clamp(3px, 1.4cqw, 8px);
     letter-spacing: 0.2px;
   }
 

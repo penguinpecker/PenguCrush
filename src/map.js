@@ -1172,41 +1172,88 @@ export function initMap() {
   const inventoryOpen = document.getElementById('inventoryMapOpen');
   const inventoryClose = document.getElementById('inventoryClose');
   const inventoryGrid = document.getElementById('inventoryGrid');
+  const inventoryDots = document.getElementById('inventoryDots');
+  const inventoryPrev = document.getElementById('inventoryPrev');
+  const inventoryNext = document.getElementById('inventoryNext');
+
+  const INVENTORY_ITEMS_PER_PAGE = 4;
+  let inventoryPage = 0;
 
   function renderInventoryGrid() {
     if (!inventoryGrid) return;
     const boosters = Inventory.getAllBoosters();
     const shards = Inventory.getShards();
+
+    // Collect non-zero items in display order
+    const items = INVENTORY_MAP_SLOTS.filter(def =>
+      (def.kind === 'booster' ? (boosters[def.id] ?? 0) : (shards[def.id] ?? 0)) > 0
+    );
+
+    const totalPages = Math.max(1, Math.ceil(items.length / INVENTORY_ITEMS_PER_PAGE));
+    inventoryPage = Math.min(inventoryPage, totalPages - 1);
+    const pageItems = items.slice(
+      inventoryPage * INVENTORY_ITEMS_PER_PAGE,
+      (inventoryPage + 1) * INVENTORY_ITEMS_PER_PAGE
+    );
+
+    // ── Grid ──
     inventoryGrid.innerHTML = '';
-    let rendered = 0;
-    for (const def of INVENTORY_MAP_SLOTS) {
-      const n = def.kind === 'booster' ? (boosters[def.id] ?? 0) : (shards[def.id] ?? 0);
-      if (n <= 0) continue; // hide empty items
-      const cell = document.createElement('div');
-      cell.className = 'inventory-slot';
-      cell.title = def.label;
-      const icon = document.createElement('img');
-      icon.className = 'inventory-slot__icon';
-      icon.src = def.icon;
-      icon.alt = def.label;
-      icon.draggable = false;
-      const qty = document.createElement('span');
-      qty.className = 'inventory-slot__qty';
-      qty.textContent = `×${n}`;
-      cell.appendChild(icon);
-      cell.appendChild(qty);
-      inventoryGrid.appendChild(cell);
-      rendered++;
-    }
-    if (rendered === 0) {
+    if (pageItems.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'inventory-slot inventory-slot--empty';
       empty.textContent = 'No items yet';
       inventoryGrid.appendChild(empty);
+    } else {
+      for (const def of pageItems) {
+        const n = def.kind === 'booster' ? (boosters[def.id] ?? 0) : (shards[def.id] ?? 0);
+        const cell = document.createElement('div');
+        cell.className = 'inventory-slot';
+        cell.title = def.label;
+        const icon = document.createElement('img');
+        icon.className = 'inventory-slot__icon';
+        icon.src = def.icon;
+        icon.alt = def.label;
+        icon.draggable = false;
+        const qty = document.createElement('span');
+        qty.className = 'inventory-slot__qty';
+        qty.textContent = `×${n}`;
+        cell.appendChild(icon);
+        cell.appendChild(qty);
+        inventoryGrid.appendChild(cell);
+      }
+    }
+
+    // ── Navigation arrows ──
+    const multiPage = totalPages > 1;
+    if (inventoryPrev) {
+      inventoryPrev.hidden = !multiPage;
+      inventoryPrev.disabled = inventoryPage === 0;
+    }
+    if (inventoryNext) {
+      inventoryNext.hidden = !multiPage;
+      inventoryNext.disabled = inventoryPage === totalPages - 1;
+    }
+
+    // ── Dots ──
+    if (inventoryDots) {
+      inventoryDots.innerHTML = '';
+      if (multiPage) {
+        for (let i = 0; i < totalPages; i++) {
+          const dot = document.createElement('button');
+          dot.type = 'button';
+          dot.className = 'inventory-popup__dot' + (i === inventoryPage ? ' inventory-popup__dot--active' : '');
+          dot.setAttribute('aria-label', `Page ${i + 1}`);
+          dot.setAttribute('aria-current', i === inventoryPage ? 'true' : 'false');
+          const pg = i;
+          dot.addEventListener('click', () => { inventoryPage = pg; renderInventoryGrid(); });
+          inventoryDots.appendChild(dot);
+        }
+      }
     }
   }
 
   function openInventory() {
+    inventoryPage = 0;
     renderInventoryGrid();
     inventoryOverlay?.classList.add('active');
     inventoryOverlay?.setAttribute('aria-hidden', 'false');
@@ -1216,6 +1263,13 @@ export function initMap() {
     inventoryOverlay?.classList.remove('active');
     inventoryOverlay?.setAttribute('aria-hidden', 'true');
   }
+
+  inventoryPrev?.addEventListener('click', () => {
+    if (inventoryPage > 0) { inventoryPage--; renderInventoryGrid(); }
+  });
+  inventoryNext?.addEventListener('click', () => {
+    inventoryPage++; renderInventoryGrid();
+  });
 
   inventoryOpen?.addEventListener('click', e => {
     e.stopPropagation();

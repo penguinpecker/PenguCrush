@@ -190,7 +190,15 @@
         <button type="button" class="inventory-popup__close" id="inventoryClose" aria-label="Close inventory"></button>
         <div class="inventory-popup__inner">
           <div class="inventory-popup__grid" id="inventoryGrid"></div>
+          <div class="inventory-popup__dots" id="inventoryDots" role="tablist" aria-label="Page"></div>
         </div>
+        <!-- Page navigation arrows -->
+        <button type="button" class="inventory-nav-btn inventory-nav-btn--prev" id="inventoryPrev" aria-label="Previous page" hidden>
+          <img src="/assets/ui/mini_arrow.png" draggable="false" alt="" />
+        </button>
+        <button type="button" class="inventory-nav-btn inventory-nav-btn--next" id="inventoryNext" aria-label="Next page" hidden>
+          <img src="/assets/ui/mini_arrow.png" draggable="false" alt="" />
+        </button>
       </div>
     </div>
 
