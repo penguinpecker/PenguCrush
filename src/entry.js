@@ -1,6 +1,6 @@
 import './style.css';
 import './map.css';
-import { getAGWAddress, isSignedIn, connectAGW, signInWithAGW, getAgwClient, getWalletClient, shortAddress } from './agw.js';
+import { getAGWAddress, isSignedIn, connectAGW, signInWithAGW, getAgwClient, getWalletClient } from './agw.js';
 import * as Inventory from './inventory.js';
 import { isLevelUnlocked } from './progress.js';
 import { buyBoosterETH, buyLivesETH, claimStarterPack, ensureStarterPack } from './onchain.js';
@@ -58,43 +58,14 @@ function showScreen(id) {
     s.classList.toggle('screen--active', s.id === id);
   });
   document.body.dataset.screen = id.replace('Screen', '');
-  if (id === 'homeScreen') syncHomeWalletUi();
 }
 
 function showHomeGateHint() {
   const hint = document.getElementById('homeGateHint');
-  const connected = document.getElementById('homeConnectedMsg');
-  if (connected) connected.hidden = true;
   if (!hint) return;
   hint.hidden = false;
   clearTimeout(showHomeGateHint._t);
   showHomeGateHint._t = setTimeout(() => { hint.hidden = true; }, 4000);
-}
-
-/** Home dialog: show signed-in status vs gate hint (wallet + SIWE). */
-function syncHomeWalletUi() {
-  const hint = document.getElementById('homeGateHint');
-  const connected = document.getElementById('homeConnectedMsg');
-  const playBtn = document.getElementById('homePlayBtn');
-  if (!connected) return;
-  if (hasSession()) {
-    const addr = getAGWAddress();
-    connected.textContent = addr
-      ? `Wallet connected · ${shortAddress(addr)}`
-      : 'Wallet connected';
-    connected.hidden = false;
-    if (hint) hint.hidden = true;
-    if (playBtn) {
-      playBtn.setAttribute('aria-label', 'Continue to map');
-      playBtn.textContent = 'CONTINUE';
-    }
-  } else {
-    connected.hidden = true;
-    if (playBtn) {
-      playBtn.setAttribute('aria-label', 'Connect Wallet and Play');
-      playBtn.textContent = 'CONNECT & PLAY';
-    }
-  }
 }
 
 Object.assign(window.__pengu ||= {}, {

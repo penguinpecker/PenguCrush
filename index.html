@@ -68,25 +68,34 @@
   <!-- ═══ HOME SCREEN ═══ -->
   <div id="homeScreen" class="screen screen--hidden">
     <div class="home-stage">
-      <img class="home-bg" src="/assets/ui/home/home_bg.png" alt="" draggable="false" />
-      <div class="home-content">
-        <div class="home-popup">
-          <h2 class="home-popup__title">START YOUR ADVENTURE</h2>
-          <div class="home-popup__divider" aria-hidden="true">— ✦ —</div>
-          <button
-            type="button"
-            class="home-play-visual"
-            onclick="document.getElementById('homePlayBtn').click()"
-            aria-hidden="true"
-            tabindex="-1"
-          ></button>
-          <p class="home-gate-hint" id="homeGateHint" hidden>Connect wallet to save progress</p>
-          <p class="home-connected-msg" id="homeConnectedMsg" hidden></p>
-          <button class="home-play-btn" id="homePlayBtn" type="button" aria-label="Connect Wallet and Play">
-            CONNECT &amp; PLAY
-          </button>
+      <img
+        class="home-bg"
+        src="/assets/ui/home-bg.png"
+        alt=""
+        width="1920"
+        height="1080"
+        draggable="false"
+        decoding="async"
+        fetchpriority="high"
+      />
+      <div class="home-play-wrap">
+        <div class="home-play-sun" aria-hidden="true">
+          <span class="home-play-sun__rays"></span>
+          <span class="home-play-sun__core"></span>
         </div>
+        <button class="home-play-btn" id="homePlayBtn" type="button" aria-label="Connect Wallet and Play">
+          <img
+            class="home-play-btn__img"
+            src="/assets/ui/home-play-button.png"
+            alt=""
+            width="512"
+            height="512"
+            draggable="false"
+            decoding="async"
+          />
+        </button>
       </div>
+      <p class="home-gate-hint" id="homeGateHint" hidden>Connect your wallet to continue</p>
     </div>
   </div>
 
