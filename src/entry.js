@@ -58,7 +58,31 @@ function showScreen(id) {
     s.classList.toggle('screen--active', s.id === id);
   });
   document.body.dataset.screen = id.replace('Screen', '');
+  if (id === 'homeScreen') syncHomeConnectUi();
 }
+
+function syncHomeConnectUi() {
+  const arc = document.getElementById('homeConnectArc');
+  const btn = document.getElementById('homePlayBtn');
+  if (!arc) return;
+  const walletConnected = !!getAGWAddress();
+  const session = hasSession();
+  if (walletConnected) {
+    arc.hidden = true;
+    arc.setAttribute('aria-hidden', 'true');
+  } else {
+    arc.hidden = false;
+    arc.setAttribute('aria-hidden', 'false');
+  }
+  if (btn) {
+    btn.setAttribute(
+      'aria-label',
+      session ? 'Continue to map' : walletConnected ? 'Sign in and play' : 'Connect wallet and play',
+    );
+  }
+}
+
+if (document.getElementById('homeConnectArc')) syncHomeConnectUi();
 
 function showHomeGateHint() {
   const hint = document.getElementById('homeGateHint');
@@ -458,6 +482,7 @@ homePlayBtn?.addEventListener('click', async () => {
       Events.agwConnectStart();
       try {
         await connectAGW();
+        syncHomeConnectUi();
         Events.agwConnectSuccess(getAGWAddress());
       } catch (e) {
         Events.agwConnectFail(String(e?.shortMessage || e?.message || e).slice(0, 100));
@@ -467,6 +492,7 @@ homePlayBtn?.addEventListener('click', async () => {
     if (!isSignedIn()) {
       try {
         await signInWithAGW();
+        syncHomeConnectUi();
         Events.siweSignSuccess(getAGWAddress());
       } catch (e) {
         Events.siweSignFail(String(e?.shortMessage || e?.message || e).slice(0, 100));

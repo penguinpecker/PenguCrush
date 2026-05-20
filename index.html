@@ -83,7 +83,7 @@
           <span class="home-play-sun__rays"></span>
           <span class="home-play-sun__core"></span>
         </div>
-        <button class="home-play-btn" id="homePlayBtn" type="button" aria-label="Connect Wallet and Play">
+        <button class="home-play-btn" id="homePlayBtn" type="button" aria-label="Connect wallet and play">
           <img
             class="home-play-btn__img"
             src="/assets/ui/home-play-button.png"
@@ -94,6 +94,32 @@
             decoding="async"
           />
         </button>
+        <svg
+          class="home-connect-arc"
+          id="homeConnectArc"
+          viewBox="0 198 240 178"
+          width="100%"
+          height="100%"
+          overflow="visible"
+          preserveAspectRatio="xMidYMax meet"
+          xmlns="http://www.w3.org/2000/svg"
+          xmlns:xlink="http://www.w3.org/1999/xlink"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <defs>
+            <path
+              id="homeConnectArcPath"
+              d="M 4 228 Q 120 372 236 228"
+              fill="none"
+            />
+          </defs>
+          <text class="home-connect-arc__text" dy="0.72em">
+            <textPath xlink:href="#homeConnectArcPath" href="#homeConnectArcPath" startOffset="50%" text-anchor="middle">
+              CONNECT WALLET
+            </textPath>
+          </text>
+        </svg>
       </div>
       <p class="home-gate-hint" id="homeGateHint" hidden>Connect your wallet to continue</p>
     </div>

@@ -161,19 +161,25 @@ body[data-screen="game"] {
   z-index: 2;
   transform: translate(-50%, -50%);
   transform-origin: center center;
-  width: min(360px, 46vw);
-  height: min(360px, 46vw);
+  width: min(420px, 52vw);
+  height: min(590px, 72vw);
   display: grid;
   place-items: center;
   pointer-events: none;
   animation: home-play-breathe-wrap 2.3s ease-in-out infinite;
+  overflow: visible;
 }
 
-/* Large soft sun bloom — long radial fades so edges dissolve, not clip */
+/* Large soft sun bloom — square box so radial glow stays circular in tall wrap */
 .home-play-wrap::before {
   content: '';
   position: absolute;
-  inset: -14%;
+  left: 50%;
+  top: 50%;
+  width: min(420px, 52vw);
+  aspect-ratio: 1;
+  height: auto;
+  transform: translate(-50%, -50%);
   border-radius: 50%;
   z-index: 0;
   pointer-events: none;
@@ -229,9 +235,49 @@ body[data-screen="game"] {
   transform: translate(-50%, -50%) scale(0.94);
 }
 
+/* Curved “CONNECT WALLET” — toggled in JS when wallet not connected */
+.home-connect-arc[hidden] {
+  display: none !important;
+}
+
+.home-connect-arc {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 4;
+  pointer-events: none;
+  overflow: visible;
+  /* Pin arc toward bottom of the wrap (YMax meet + slight nudge) */
+  transform: translateY(clamp(6px, 1.25vw, 14px));
+}
+
+.home-connect-arc__text {
+  font-family: 'Fredoka', 'Segoe UI', system-ui, sans-serif;
+  font-size: clamp(12.5px, 3.45vw, 18px);
+  font-weight: 800;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  fill: #7ebfe3;
+  stroke: #fff;
+  stroke-width: 2.9px;
+  stroke-linejoin: round;
+  paint-order: stroke fill;
+  vector-effect: non-scaling-stroke;
+  dominant-baseline: middle;
+}
+
 .home-play-sun {
   position: absolute;
-  inset: -12%;
+  left: 50%;
+  top: 50%;
+  width: min(368px, 46vw);
+  aspect-ratio: 1;
+  height: auto;
+  transform: translate(-50%, -50%);
   z-index: 1;
   display: grid;
   place-items: center;
@@ -385,10 +431,10 @@ body[data-screen="game"] {
   position: relative;
   z-index: 3;
   box-sizing: border-box;
-  width: min(268px, 36vw);
-  height: min(268px, 36vw);
-  min-width: 168px;
-  min-height: 168px;
+  width: min(318px, 42vw);
+  height: min(318px, 42vw);
+  min-width: 200px;
+  min-height: 200px;
   padding: 0;
   margin: 0;
   border: none;
@@ -434,7 +480,7 @@ body[data-screen="game"] {
 .home-gate-hint {
   position: absolute;
   left: 50%;
-  top: calc(50% + min(168px, 22vw));
+  top: calc(50% + min(298px, 35vw));
   transform: translateX(-50%);
   z-index: 3;
   margin: 0;
