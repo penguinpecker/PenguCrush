@@ -68,11 +68,25 @@
   <!-- ═══ HOME SCREEN ═══ -->
   <div id="homeScreen" class="screen screen--hidden">
     <div class="home-stage">
-      <video class="home-bg" autoplay loop muted playsinline>
-        <source src="/assets/ui/home-video.mp4" type="video/mp4" />
-      </video>
-      <button class="home-play-btn" id="homePlayBtn" aria-label="Connect Wallet and Play"></button>
-      <p class="home-gate-hint" id="homeGateHint" hidden>Connect your wallet to continue</p>
+      <img class="home-bg" src="/assets/ui/home/home_bg.png" alt="" draggable="false" />
+      <div class="home-content">
+        <div class="home-popup">
+          <h2 class="home-popup__title">START YOUR ADVENTURE</h2>
+          <div class="home-popup__divider" aria-hidden="true">— ✦ —</div>
+          <button
+            type="button"
+            class="home-play-visual"
+            onclick="document.getElementById('homePlayBtn').click()"
+            aria-hidden="true"
+            tabindex="-1"
+          ></button>
+          <p class="home-gate-hint" id="homeGateHint" hidden>Connect wallet to save progress</p>
+          <p class="home-connected-msg" id="homeConnectedMsg" hidden></p>
+          <button class="home-play-btn" id="homePlayBtn" type="button" aria-label="Connect Wallet and Play">
+            CONNECT &amp; PLAY
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 

@@ -136,12 +136,55 @@ body[data-screen="game"] {
 .home-stage {
   position: relative;
   width: 100vw;
+  min-height: 100dvh;
   height: 100vh;
   overflow: hidden;
   background: #0a1820;
 }
 
+/* Soft aurora-style glow over the background (below UI) */
+.home-stage::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      ellipse 90% 60% at 50% 38%,
+      rgba(130, 235, 255, 0.32) 0%,
+      transparent 58%
+    ),
+    radial-gradient(
+      ellipse 55% 45% at 78% 22%,
+      rgba(180, 240, 255, 0.14) 0%,
+      transparent 52%
+    ),
+    radial-gradient(
+      ellipse 50% 40% at 15% 28%,
+      rgba(120, 200, 255, 0.12) 0%,
+      transparent 48%
+    );
+  mix-blend-mode: screen;
+  opacity: 0.95;
+  animation: home-bg-glow 7s ease-in-out infinite alternate;
+}
+
+@keyframes home-bg-glow {
+  0% {
+    opacity: 0.75;
+    filter: brightness(1);
+  }
+  100% {
+    opacity: 1;
+    filter: brightness(1.12);
+  }
+}
+
 .home-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -149,109 +192,202 @@ body[data-screen="game"] {
   display: block;
 }
 
-.home-play-btn {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: min(200px, 26vw);
-  height: min(200px, 26vw);
-  border-radius: 50%;
-  background: transparent;
+.home-content {
+  position: relative;
+  z-index: 2;
+  box-sizing: border-box;
+  min-height: 100dvh;
+  padding: clamp(10px, 3vw, 24px) clamp(12px, 4vw, 20px)
+    max(12px, calc(env(safe-area-inset-bottom, 0px) + 88px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.home-popup {
+  box-sizing: border-box;
+  /* ~20% smaller than prior; aspect matches home-popup.png (1016×650) — no stretch */
+  width: min(432px, 77vw);
+  max-width: 464px;
+  aspect-ratio: 1016 / 650;
+  height: auto;
+  margin-top: clamp(70px, 16vh, 160px);
+  padding: clamp(26px, 6.5vw, 46px) clamp(13px, 4vw, 22px)
+    clamp(18px, 5vw, 28px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: clamp(4px, 1.2vw, 9px);
+  background-image: url('/assets/ui/home/home-popup.png');
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 100% 100%;
+  text-align: center;
+}
+
+.home-popup__title {
+  margin: 0;
+  font-family: 'Fredoka', sans-serif;
+  font-weight: 800;
+  font-size: clamp(11px, 2.8vw, 15px);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #0d3555;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.home-popup__divider {
+  width: 100%;
+  font-family: 'Fredoka', sans-serif;
+  font-size: clamp(11px, 2.8vw, 14px);
+  color: #3a7aa8;
+  opacity: 0.85;
+  letter-spacing: 0.12em;
+}
+
+@keyframes home-play-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-14px);
+  }
+}
+
+.home-play-visual {
+  flex-shrink: 0;
+  width: min(148px, 24vw);
+  height: min(148px, 24vw);
+  min-width: 112px;
+  min-height: 112px;
+  margin: clamp(2px, 0.8vh, 8px) 0;
+  padding: 0;
   border: none;
+  border-radius: 50%;
   cursor: pointer;
-  transition: transform 0.2s ease;
+  background-color: transparent;
+  background-image: url('/assets/ui/home/home_play_button.png');
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  filter: drop-shadow(0 8px 24px rgba(80, 200, 255, 0.45));
+  animation: home-play-bob 2.4s ease-in-out infinite;
+}
+
+.home-play-visual:hover {
+  animation-play-state: paused;
+  filter: drop-shadow(0 10px 28px rgba(100, 220, 255, 0.55)) brightness(1.08);
+  transform: translateY(-4px) scale(1.04);
+}
+
+.home-play-visual:active {
+  animation-play-state: paused;
+  transform: translateY(2px) scale(0.96);
+  filter: drop-shadow(0 4px 16px rgba(80, 200, 255, 0.4));
 }
 
 .home-gate-hint {
-  position: absolute;
-  left: 50%;
-  top: calc(50% + min(115px, 15vw));
-  transform: translateX(-50%);
   margin: 0;
-  padding: 8px 18px;
-  background: rgba(10, 30, 50, 0.55);
+  padding: 6px 14px;
+  max-width: 95%;
+  background: rgba(10, 40, 65, 0.45);
   color: #e8f8ff;
   font-family: 'Fredoka', sans-serif;
-  font-weight: 700;
-  font-size: clamp(13px, 1.6vw, 16px);
+  font-weight: 600;
+  font-size: clamp(11px, 2.8vw, 14px);
   border-radius: 999px;
-  letter-spacing: 0.3px;
-  backdrop-filter: blur(4px);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+  letter-spacing: 0.02em;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
   text-align: center;
   animation: gate-hint-pulse 2s ease-in-out infinite;
 }
+
+.home-connected-msg {
+  margin: 0;
+  padding: 6px 14px;
+  max-width: 95%;
+  background: rgba(8, 55, 45, 0.5);
+  color: #d8fff0;
+  font-family: 'Fredoka', sans-serif;
+  font-weight: 600;
+  font-size: clamp(11px, 2.8vw, 14px);
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+  text-align: center;
+  animation: home-connected-glow 2.5s ease-in-out infinite;
+}
+
+@keyframes home-connected-glow {
+  0%, 100% { filter: drop-shadow(0 0 6px rgba(90, 230, 170, 0.3)); }
+  50% { filter: drop-shadow(0 0 14px rgba(120, 255, 200, 0.55)); }
+}
+
 @keyframes gate-hint-pulse {
   0%, 100% { filter: drop-shadow(0 0 6px rgba(120, 220, 255, 0.3)); }
-  50% { filter: drop-shadow(0 0 18px rgba(120, 220, 255, 0.7)); }
+  50% { filter: drop-shadow(0 0 14px rgba(120, 220, 255, 0.65)); }
 }
 
-
-/* Ice shine — only on hover */
-.home-play-btn::before {
-  content: '';
-  position: absolute;
-  inset: -6px;
-  border-radius: 50%;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-  background: radial-gradient(
-    ellipse 100% 100% at 35% 30%,
-    rgba(255, 255, 255, 0.35) 0%,
-    rgba(180, 240, 255, 0.15) 30%,
-    transparent 60%
-  );
-  box-shadow:
-    0 0 40px 10px rgba(140, 220, 255, 0.4),
-    0 0 70px 20px rgba(100, 200, 255, 0.2),
-    inset 0 0 25px 6px rgba(180, 240, 255, 0.25);
-  pointer-events: none;
-}
-
-/* Shimmer sweep — only on hover */
-.home-play-btn::after {
-  content: '';
-  position: absolute;
-  top: -10%;
-  left: -80%;
-  width: 50%;
-  height: 120%;
-  background: linear-gradient(
-    100deg,
-    transparent 20%,
-    rgba(255, 255, 255, 0.4) 45%,
-    rgba(200, 245, 255, 0.55) 50%,
-    rgba(255, 255, 255, 0.4) 55%,
-    transparent 80%
-  );
-  transform: skewX(-18deg);
-  border-radius: 50%;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.home-play-btn:hover::before {
-  opacity: 1;
-}
-
-.home-play-btn:hover::after {
-  opacity: 1;
-  animation: play-shimmer 2s ease-in-out infinite;
+.home-play-btn {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: min(280px, 88%);
+  min-height: clamp(38px, 9vw, 46px);
+  margin-top: -4px;
+  padding: 8px 16px 12px;
+  border: none;
+  cursor: pointer;
+  font-family: 'Fredoka', sans-serif;
+  font-weight: 800;
+  font-size: clamp(12px, 3.2vw, 15px);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow:
+    0 1px 0 rgba(0, 60, 100, 0.45),
+    0 2px 8px rgba(0, 40, 80, 0.35);
+  background-color: transparent;
+  background-image: url('/assets/ui/home/home_button.png');
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 100% 100%;
+  transition: transform 0.18s ease, filter 0.18s ease;
 }
 
 .home-play-btn:hover {
-  transform: translate(-50%, -50%) scale(1.05);
-}
-
-@keyframes play-shimmer {
-  0%   { left: -80%; }
-  100% { left: 130%; }
+  transform: scale(1.03);
+  filter: brightness(1.08);
 }
 
 .home-play-btn:active {
-  transform: translate(-50%, -50%) scale(0.95);
+  transform: scale(0.97);
+}
+
+.home-play-btn:focus-visible {
+  outline: 2px solid rgba(180, 240, 255, 0.95);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-stage::after {
+    animation: none;
+  }
+
+  .home-play-visual {
+    animation: none;
+  }
+
+  .home-connected-msg {
+    animation: none;
+  }
 }
 
 #app {
