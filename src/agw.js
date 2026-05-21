@@ -68,19 +68,28 @@ function hasStoredCrossAppConnection() {
 }
 
 async function requestAccountsWithUserPopup(privy) {
-  // Always pre-open a defensive popup synchronously from the click gesture,
-  // even when localStorage shows a cached cross-app connection. The cached
-  // blob can outlive the real Privy session — when that happens Privy still
-  // needs to open an auth popup, but the user gesture has already been
-  // consumed by the await on privy.request, so the popup gets blocked and
-  // Privy throws "Failed to initialize request". Pre-opening defensively
-  // costs nothing (we close the popup ourselves if Privy doesn't navigate
-  // to it) and turns that failure into a smooth no-op.
+  // Happy path: when localStorage already has a non-expired Privy cross-app
+  // connection blob, Privy resolves eth_requestAccounts from cache without
+  // opening any popup at all. Pre-opening a defensive popup in this case
+  // creates a visible blank-window flash on every page navigation / silent
+  // reconnect — which is exactly what was happening after the audit's
+  // last-but-one round of fixes.
+  if (hasStoredCrossAppConnection()) {
+    await privy.request({ method: 'eth_requestAccounts' });
+    return;
+  }
+
+  // No cached blob → Privy will need to open an auth popup. We're inside
+  // a user-gesture handler (homePlayBtn click) so window.open is allowed.
+  // Pre-open a blank popup synchronously and let Privy navigate it.
+  // The cross-app connector does async setup before calling window.open
+  // internally — without this pre-open the gesture is consumed by the
+  // async await and Privy throws "Failed to initialize request".
   const originalOpen = window.open.bind(window);
   const popup = originalOpen('', undefined, getPopupFeatures());
-  // If the browser blocked even this pre-open, there's nothing we can do —
-  // fall through and let Privy report its own popup-blocked error.
   if (!popup) {
+    // Browser blocked even the pre-open. Fall through and let Privy
+    // surface its own popup-blocked error to the caller.
     await privy.request({ method: 'eth_requestAccounts' });
     return;
   }
@@ -161,7 +170,18 @@ function ensurePrivyProvider() {
     _privyProvider.on?.('accountsChanged', async (accounts) => {
       const next = (accounts?.[0] || '').toLowerCase();
       const prev = (_signerAddress || '').toLowerCase();
+      // CRITICAL: skip when prev is empty. Privy emits accountsChanged
+      // during the very first eth_requestAccounts resolution to deliver
+      // the freshly-connected EOA to listeners — that's NOT a wallet
+      // switch, it's the initial connect itself. Without this guard,
+      // every cold-start would trigger disconnectAGW + a reload 50ms
+      // after the user successfully connects, looking like the connect
+      // silently failed and dumping them back on the home screen.
+      if (!prev) return;
       if (next === prev) return; // identity — nothing to do
+      // Same guard for the "disconnected externally" case — accounts
+      // can be []. If we never had a wallet, ignore.
+      if (!next && !prev) return;
       console.warn('[agw] accountsChanged detected', { prev, next });
       // Drop wallet-scoped session blob for the prior signer so it
       // can't be reused under the new identity.

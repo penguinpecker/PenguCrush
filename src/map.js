@@ -200,22 +200,12 @@ export function initMap() {
   Events.mapView();
   setAnalyticsUser(getWallet());
 
-  // V2.3 — auto-claim the one-time starter pack on every map load. The chain
-  // already enforces one-per-wallet (StarterPackAlreadyClaimed), so this is
-  // safe to fire whenever; the read-check below skips when it's already done.
-  // This catches users who signed in before V2.3 shipped and would otherwise
-  // never trigger the home-page first-connect flow.
-  (async () => {
-    const w = getWallet();
-    if (!w) return;
-    try {
-      const already = await readStarterPackClaimed(w);
-      if (!already) {
-        await claimStarterPack();
-        await Inventory.hydrateFromChain().catch(() => {});
-      }
-    } catch (_) { /* non-fatal */ }
-  })();
+  // Starter pack claim is now handled lazily inside startLevelWithSetup
+  // (batched with the first startLevel call into one popup). Previously
+  // this block fired claimStarterPack() from a non-gesture async chain
+  // on EVERY map mount — which was both a ghost popup attempt (no user
+  // gesture, so Privy throws "Failed to initialize request") AND
+  // redundant with the batched flow. Removed entirely.
 
   const stage = document.getElementById('mapStage');
   const nodesContainer = document.getElementById('mapNodes');

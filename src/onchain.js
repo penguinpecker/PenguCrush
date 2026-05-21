@@ -463,6 +463,13 @@ export async function startLevelWithSetup(level) {
     const status = receipt.status === 'success' ? 'success' : 'reverted';
     logTxResult(rowId, { status, txHash: hash, blockNumber: Number(receipt.blockNumber) });
     if (status !== 'success') throw new Error(`startLevelWithSetup reverted (status=${receipt.status})`);
+    // This is a write that goes through walletClient.writeContract directly
+    // (not through chainWrite, so the auto-bust there doesn't fire). Without
+    // this explicit call the cached claimedStarterPack=false (TTL=Infinity)
+    // would persist for the whole tab → next level click would batch
+    // claimStarterPack AGAIN → revert StarterPackAlreadyClaimed → the whole
+    // atomic batch fails and the player can't start any more levels.
+    bustReadCache();
     return { hash, receipt, used: 'batch' };
   } catch (err) {
     const msg = err?.shortMessage || err?.message || String(err);
