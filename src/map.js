@@ -548,17 +548,9 @@ export function initMap() {
       await Inventory.hydrateFromChain().catch(() => {});
       window.__pengu.goToLevel(currentPopupLevel.id);
     } catch (err) {
-      const msg = String(err?.shortMessage || err?.message || err).slice(0, 240);
-      console.warn('startLevel failed:', msg);
-      const lowBalance = /insufficient balance|insufficient funds|out of gas/i.test(msg);
-      const noLives = /NoLives|no lives|0x[0-9a-f]{0,8}.*[Ll]ives/.test(msg);
-      if (!/reject|denied|cancel/i.test(msg)) {
-        alert(lowBalance
-          ? 'Your AGW wallet is out of ETH for gas on Abstract.\n\nFund your AGW address with a small amount of ETH on Abstract mainnet, then retry.'
-          : noLives
-          ? 'No lives left. Wait for regen or buy more from the shop.'
-          : `Could not start the level on chain:\n\n${msg}\n\nNo life was consumed — try again.`);
-      }
+      console.warn('startLevel failed:', err?.shortMessage || err?.message || err);
+      const { alertFriendly } = await import('./errors.js');
+      alertFriendly(err, 'Could not start this level on chain.');
       popupPlayBtn.disabled = false;
       popupPlayBtn.classList.remove('pop-play--disabled');
       if (origLabel) popupPlayBtn.textContent = origLabel;
@@ -765,18 +757,13 @@ export function initMap() {
       const msg = String(err?.shortMessage || err?.message || err).slice(0, 300);
       console.warn('Wheel spin failed:', msg);
       Events.wheelSpinFail(msg);
-      const lowBalance = /insufficient balance|insufficient funds|out of gas/i.test(msg);
+      const { friendlyError, alertFriendly } = await import('./errors.js');
+      const { user: friendly } = friendlyError(err);
       if (dailyResult) {
-        dailyResult.textContent = lowBalance
-          ? 'Spin failed: your AGW wallet has no ETH for gas. Fund it on Abstract mainnet and retry.'
-          : `Spin failed: ${msg.slice(0, 140)}`;
+        dailyResult.textContent = friendly;
         dailyResult.hidden = false;
       }
-      if (!/reject|denied|cancel/i.test(msg)) {
-        alert(lowBalance
-          ? 'Your AGW wallet is out of ETH for gas on Abstract.\n\nFund your AGW address with a small amount of ETH on Abstract mainnet, then retry the spin.'
-          : `Daily wheel spin failed:\n\n${msg}`);
-      }
+      alertFriendly(err, 'Daily wheel spin failed.');
     } finally {
       dailySpinning = false;
       refreshSpinButtonState();
@@ -1106,12 +1093,8 @@ export function initMap() {
     } catch (err) {
       const msg = String(err?.shortMessage || err?.message || err).slice(0, 200);
       Events.passBuyFail(msg);
-      const lowBalance = /insufficient balance|insufficient funds|out of gas/i.test(msg);
-      if (!/reject|denied|cancel/i.test(msg)) {
-        alert(lowBalance
-          ? 'Your AGW wallet is out of ETH for gas on Abstract.\n\nFund your AGW address with a small amount of ETH on Abstract mainnet, then retry.'
-          : 'Pass purchase failed: ' + msg);
-      }
+      const { alertFriendly } = await import('./errors.js');
+      alertFriendly(err, 'Pass purchase failed.');
     } finally {
       crushPassBuyBtn.textContent = origText;
       crushPassBuyBtn.disabled = false;

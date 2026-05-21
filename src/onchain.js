@@ -104,6 +104,41 @@ async function chainWrite(label, functionName, args, options = {}) {
     logTxError({ wallet: '0x0000000000000000000000000000000000000000', type: label, error: 'wallet_not_connected', details: logDetails });
     throw new Error('wallet not connected');
   }
+
+  // Low-balance pre-flight — catches "AGW wallet has 0 ETH" BEFORE we
+  // open the popup, so the player sees a clear "fund your AGW" message
+  // instead of approving a tx that then reverts with "insufficient
+  // funds for gas". Paymaster (if set) covers gas, so when sponsored we
+  // only need to gate on the value field (shop ETH purchases).
+  //
+  // Reserve: ~0.0005 ETH covers any single Abstract gameplay tx with
+  // plenty of headroom — slightly generous on purpose to avoid false
+  // positives on price spikes.
+  if (!options.skipBalanceCheck) {
+    try {
+      const pc = getPublicClient();
+      const bal = await pc.getBalance({ address: account });
+      const valueNeeded = options.value || 0n;
+      const gasReserve = ABSTRACT_PAYMASTER ? 0n : 500000000000000n; // 0.0005 ETH
+      const required = valueNeeded + gasReserve;
+      if (bal < required) {
+        const have = (Number(bal) / 1e18).toFixed(6);
+        const need = (Number(required) / 1e18).toFixed(6);
+        const reason = valueNeeded > 0n
+          ? `Insufficient balance: ${have} ETH on Abstract, need ~${need} ETH (purchase${gasReserve > 0n ? ' + gas' : ''}). Top up your AGW wallet.`
+          : `Insufficient balance: ${have} ETH on Abstract, need ~${need} ETH for gas. Top up your AGW wallet.`;
+        logTxError({ wallet: account, type: label, error: 'low_balance', details: { ...logDetails, balanceWei: String(bal), requiredWei: String(required) } });
+        throw new Error(reason);
+      }
+    } catch (err) {
+      // If our own pre-flight error is what bubbled, re-throw verbatim.
+      if (/^Insufficient balance/.test(err?.message || '')) throw err;
+      // Anything else (transient RPC failure, etc.) is logged but not fatal —
+      // we still let the write proceed; the chain will surface its own error.
+      console.warn('[chainWrite] balance pre-check failed (proceeding):', err?.message || err);
+    }
+  }
+
   const wantSession = !options.requireUserPrompt;
   let sessionClient = wantSession ? await getSessionClient(functionName).catch(() => null) : null;
   let client;

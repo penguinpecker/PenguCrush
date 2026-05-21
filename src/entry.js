@@ -403,12 +403,8 @@ document.querySelectorAll('.shop-tag[data-item]').forEach(tagEl => {
       Events.shopBuyFail(itemType, qty, 'ETH', msg);
       console.warn('Shop purchase failed:', msg);
       if (labelEl) labelEl.textContent = 'Failed';
-      const lowBalance = /insufficient balance|insufficient funds|out of gas/i.test(msg);
-      if (!/reject|denied|cancel/i.test(msg)) {
-        alert(lowBalance
-          ? 'Your AGW wallet is out of ETH for gas on Abstract.\n\nFund your AGW address with a small amount of ETH on Abstract mainnet, then retry.'
-          : `Shop purchase failed:\n\n${msg}`);
-      }
+      const { alertFriendly } = await import('./errors.js');
+      alertFriendly(err, 'Shop purchase failed.');
     } finally {
       setTimeout(() => {
         if (labelEl && origLabel) labelEl.textContent = origLabel;

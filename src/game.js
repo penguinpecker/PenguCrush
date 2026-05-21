@@ -1767,16 +1767,11 @@ function setupLevelPopupButtons() {
   }
 
   /// Common error path shared by all three popup buttons.
-  function explainAndAlert(err, defaultMsg) {
-    const msg = String(err?.shortMessage || err?.message || err).slice(0, 240);
-    const lowBalance = /insufficient balance|insufficient funds|out of gas/i.test(msg);
-    const noLives = /NoLives|no lives|0x[0-9a-f]{0,8}.*[Ll]ives/.test(msg);
-    if (/reject|denied|cancel/i.test(msg)) return; // user-initiated, no popup
-    alert(lowBalance
-      ? 'Your AGW wallet is out of ETH for gas on Abstract.\n\nFund your AGW address with a small amount of ETH on Abstract mainnet, then come back to this popup — your score is held until the chain accepts it.'
-      : noLives
-      ? 'No lives left. Wait for regen or buy more from the shop.'
-      : `${defaultMsg}\n\n${msg}`);
+  /// Routes through the central src/errors.js mapper so the player gets a
+  /// consistent friendly message regardless of which surface threw the err.
+  async function explainAndAlert(err, defaultMsg) {
+    const { alertFriendly } = await import('./errors.js');
+    alertFriendly(err, defaultMsg);
   }
 
   /// Confirms the chainWrite return value actually represents a confirmed
