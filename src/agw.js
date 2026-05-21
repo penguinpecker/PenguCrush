@@ -68,15 +68,18 @@ function hasStoredCrossAppConnection() {
 }
 
 async function requestAccountsWithUserPopup(privy) {
-  if (hasStoredCrossAppConnection()) {
-    await privy.request({ method: 'eth_requestAccounts' });
-    return;
-  }
-
-  // The cross-app connector does async setup before calling window.open().
-  // Pre-open the popup from the real click, then let Privy navigate it.
+  // Always pre-open a defensive popup synchronously from the click gesture,
+  // even when localStorage shows a cached cross-app connection. The cached
+  // blob can outlive the real Privy session — when that happens Privy still
+  // needs to open an auth popup, but the user gesture has already been
+  // consumed by the await on privy.request, so the popup gets blocked and
+  // Privy throws "Failed to initialize request". Pre-opening defensively
+  // costs nothing (we close the popup ourselves if Privy doesn't navigate
+  // to it) and turns that failure into a smooth no-op.
   const originalOpen = window.open.bind(window);
   const popup = originalOpen('', undefined, getPopupFeatures());
+  // If the browser blocked even this pre-open, there's nothing we can do —
+  // fall through and let Privy report its own popup-blocked error.
   if (!popup) {
     await privy.request({ method: 'eth_requestAccounts' });
     return;
