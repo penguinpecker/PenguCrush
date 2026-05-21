@@ -30,6 +30,7 @@ async function loadAgwSessionApi() {
       LimitUnlimited: mod.LimitUnlimited,
       LimitZero: mod.LimitZero,
       createSessionClient: mod.createSessionClient,
+      prepareCreateSessionCall: mod.prepareCreateSessionCall,
     };
     return _agwSessionApi;
   } catch (err) {
@@ -98,6 +99,16 @@ function clearStoredSession(agwAddress) {
 }
 
 /**
+ * Wipe the locally-stored session for a wallet without prompting the user or
+ * touching chain. Called on disconnect / wallet-switch so a session can't be
+ * silently resurrected on a later reconnect (audit H5).
+ */
+export function clearSessionForAddress(agwAddress) {
+  if (!agwAddress) return;
+  clearStoredSession(agwAddress);
+}
+
+/**
  * Has the user already granted a valid session key? Read-only check.
  */
 export function hasActiveSession() {
@@ -106,13 +117,13 @@ export function hasActiveSession() {
   return !!loadStoredSession(a);
 }
 
-/**
- * Grant a fresh 24h session key. Requires one explicit AGW prompt.
- * After this, in-game txs execute silently.
- *
- * `agwClient` must be the user-facing AbstractClient (with `createSession`).
- */
-export async function grantSession(agwClient) {
+// Build a fresh session spec + matching local private key. Returns both the
+// spec (to feed into createSession / sendTransactionBatch) and a `commit()`
+// callback the caller invokes once the on-chain registration confirms — that
+// writes the session blob to localStorage so subsequent gameplay calls find
+// it via getSessionClient(). Splitting build vs commit lets the batch path
+// stage the spec without leaving an orphan blob in storage if the tx reverts.
+async function buildSessionSpec() {
   const api = await loadAgwSessionApi();
   if (!api) throw new Error('AGW session API unavailable');
   const agwAddress = getAGWAddress();
@@ -143,6 +154,35 @@ export async function grantSession(agwClient) {
     transferPolicies: [],
   };
 
+  function commit(createTxHash) {
+    persistSession(agwAddress, {
+      sessionPk,
+      session: {
+        ...sessionSpec,
+        expiresAt: String(sessionSpec.expiresAt),
+        feeLimit: {
+          ...sessionSpec.feeLimit,
+          limit: String(sessionSpec.feeLimit.limit),
+          period: String(sessionSpec.feeLimit.period),
+        },
+      },
+      grantedAt: Date.now(),
+      createTxHash: createTxHash || null,
+    });
+  }
+
+  return { api, agwAddress, sessionSpec, sessionSigner, commit };
+}
+
+/**
+ * Grant a fresh 24h session key. Requires one explicit AGW prompt.
+ * After this, in-game txs execute silently.
+ *
+ * `agwClient` must be the user-facing AbstractClient (with `createSession`).
+ */
+export async function grantSession(agwClient) {
+  const { agwAddress, sessionSpec, sessionSigner, commit } = await buildSessionSpec();
+
   // The agwClient.createSession signature varies by package version;
   // try the documented form first, then a positional fallback.
   let createResult;
@@ -156,22 +196,23 @@ export async function grantSession(agwClient) {
     }
   }
 
-  persistSession(agwAddress, {
-    sessionPk,
-    session: {
-      ...sessionSpec,
-      expiresAt: String(sessionSpec.expiresAt),
-      feeLimit: {
-        ...sessionSpec.feeLimit,
-        limit: String(sessionSpec.feeLimit.limit),
-        period: String(sessionSpec.feeLimit.period),
-      },
-    },
-    grantedAt: Date.now(),
-    createTxHash: createResult?.transactionHash || null,
-  });
+  commit(createResult?.transactionHash);
+  return { sessionAddress: sessionSigner.address, txHash: createResult?.transactionHash, agwAddress };
+}
 
-  return { sessionAddress: sessionSigner.address, txHash: createResult?.transactionHash };
+/**
+ * Prepare the session-registration on-chain call WITHOUT sending it, so the
+ * caller can bundle it into a larger `sendTransactionBatch` (createSession +
+ * claimStarterPack + startLevel in one user prompt). Returns the raw
+ * { to, data, value } and a `commit()` to call after the batch confirms.
+ */
+export async function prepareSessionGrantCall(agwClient) {
+  const { api, agwAddress, sessionSpec, sessionSigner, commit } = await buildSessionSpec();
+  if (!api.prepareCreateSessionCall) {
+    throw new Error('prepareCreateSessionCall not exported by this agw-client version');
+  }
+  const call = await api.prepareCreateSessionCall(agwAddress, agwClient, sessionSpec);
+  return { call, commit, sessionAddress: sessionSigner.address };
 }
 
 /**

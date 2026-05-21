@@ -34,6 +34,18 @@ function persist(addr) {
 
 function clearSignIn() { localStorage.removeItem(SIGNIN_KEY); }
 
+// Dynamic import to avoid the session-key.js ↔ agw.js cycle (session-key.js
+// already imports getAGWAddress from here). Caller awaits.
+async function clearSessionFor(addr) {
+  if (!addr) return;
+  try {
+    const mod = await import('./session-key.js');
+    mod.clearSessionForAddress?.(addr);
+  } catch (_) {
+    // session-key module unavailable — nothing to clear
+  }
+}
+
 function getPopupFeatures(width = 440, height = 680) {
   const leftEdge = window.screenLeft ?? window.screenX ?? 0;
   const topEdge = window.screenTop ?? window.screenY ?? 0;
@@ -163,7 +175,15 @@ export async function connectAGW() {
 
   // 4. Get AGW smart contract wallet address
   const agwAccounts = await _agwProvider.request({ method: 'eth_accounts' });
-  _address = agwAccounts[0] || _signerAddress;
+  const newAddress = agwAccounts[0] || _signerAddress;
+
+  // Wallet switch: drop any session key bound to the previous address before
+  // overwriting `_address`, so a switch can't silently inherit prior auth
+  // (audit H5).
+  if (_address && newAddress && _address.toLowerCase() !== newAddress.toLowerCase()) {
+    await clearSessionFor(_address);
+  }
+  _address = newAddress;
 
   // 5. Build viem clients
   _walletClient = createWalletClient({
@@ -234,6 +254,11 @@ export async function signInWithAGW() {
 
 /** Disconnect (clear local state + revoke permissions) */
 export function disconnectAGW() {
+  // Wipe the local session key for the wallet we're about to drop so a later
+  // reconnect to the same wallet can't silently resurrect it (audit H5).
+  // Fire-and-forget — clearing localStorage doesn't need to block disconnect.
+  const prev = _address;
+  if (prev) clearSessionFor(prev).catch(() => {});
   if (_privyProvider) {
     try {
       _privyProvider.request({

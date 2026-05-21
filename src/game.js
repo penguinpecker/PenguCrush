@@ -559,6 +559,34 @@ function getRandomEmptyCells(count) {
 // ═══════════════════════════════════════════════════════════════
 //  MATCH DETECTION
 // ═══════════════════════════════════════════════════════════════
+/**
+ * Returns true if at least one swap of adjacent non-blocker tiles would create
+ * a 3+ match. Used by the shuffle booster to verify the post-shuffle board is
+ * actually playable (audit H9) — otherwise the player would lose the booster
+ * charge AND the level.
+ */
+function hasAnyValidSwap() {
+  const canSwap = (r, c) => {
+    const t = board[r]?.[c];
+    return !!t && !t.isWall && !t.frozen && !t.isFaller;
+  };
+  const trySwap = (r1, c1, r2, c2) => {
+    if (!canSwap(r1, c1) || !canSwap(r2, c2)) return false;
+    const a = board[r1][c1], b = board[r2][c2];
+    board[r1][c1] = b; board[r2][c2] = a;
+    const has = findMatches().size > 0;
+    board[r1][c1] = a; board[r2][c2] = b;
+    return has;
+  };
+  for (let r = 0; r < GRID; r++) {
+    for (let c = 0; c < GRID; c++) {
+      if (c + 1 < GRID && trySwap(r, c, r, c + 1)) return true;
+      if (r + 1 < GRID && trySwap(r, c, r + 1, c)) return true;
+    }
+  }
+  return false;
+}
+
 function findMatches() {
   const matched = new Set();
   const runs = [];
@@ -1559,9 +1587,20 @@ function checkObjective() {
       return (tilesCleared[obj.tileType] || 0) >= obj.count;
     case 'breakBlocker':
       return (blockersDestroyed[obj.blockerType] || 0) >= obj.count;
-    case 'breakAll':
-      // Check no blockers remain on board (placeholder — blockers not placed yet)
-      return score >= CONFIG.targetScore;
+    case 'breakAll': {
+      // Every breakable blocker the level spawned must be destroyed. Walls are
+      // unbreakable by design; fallers respawn continuously and are tracked
+      // via fallerPenalties — neither counts toward breakAll.
+      const list = Array.isArray(CONFIG.blockers) ? CONFIG.blockers : [];
+      if (list.length === 0) return false;
+      for (const b of list) {
+        if (b.type === 'wall' || b.type === 'faller') continue;
+        const need = b.count || 0;
+        if (need <= 0) continue;
+        if ((blockersDestroyed[b.type] || 0) < need) return false;
+      }
+      return true;
+    }
     case 'clearPercent': {
       const total = GRID * GRID;
       return totalTilesCleared >= Math.ceil(total * obj.percent / 100);
@@ -2146,17 +2185,35 @@ async function useBoosterShuffle() {
   await Promise.all(vanishPs);
   for (const [r, c] of positions) board[r][c] = null;
 
-  const spawnPs = [];
-  for (const [r, c] of positions) {
-    let type;
-    do { type = randomType(); } while (
-      (c >= 2 && board[r][c-1]?.type === type && board[r][c-2]?.type === type) ||
-      (r >= 2 && board[r-1]?.[c]?.type === type && board[r-2]?.[c]?.type === type)
-    );
-    const tile = createTile(type, r, c);
-    board[r][c] = tile;
-    spawnPs.push(animSpawn(tile.mesh, gridToWorld(r, c), 450));
+  // Try up to a few layouts so a degenerate shuffle (no valid swap exists)
+  // doesn't soft-lock the level (audit H9). Each retry only re-rolls tile
+  // types — no extra vanish/spawn animation. On the final attempt we accept
+  // whatever came out so the player isn't left with an empty board.
+  const MAX_SHUFFLE_ATTEMPTS = 6;
+  const newTiles = [];
+  let solvable = false;
+  for (let attempt = 0; attempt < MAX_SHUFFLE_ATTEMPTS && !solvable; attempt++) {
+    if (attempt > 0) {
+      for (const tile of newTiles) {
+        try { scene.remove(tile.mesh); } catch (_) {}
+      }
+    }
+    for (const [r, c] of positions) board[r][c] = null;
+    newTiles.length = 0;
+    for (const [r, c] of positions) {
+      let type;
+      do { type = randomType(); } while (
+        (c >= 2 && board[r][c-1]?.type === type && board[r][c-2]?.type === type) ||
+        (r >= 2 && board[r-1]?.[c]?.type === type && board[r-2]?.[c]?.type === type)
+      );
+      const tile = createTile(type, r, c);
+      board[r][c] = tile;
+      newTiles.push(tile);
+    }
+    solvable = hasAnyValidSwap();
   }
+
+  const spawnPs = newTiles.map(tile => animSpawn(tile.mesh, gridToWorld(tile.row, tile.col), 450));
   await Promise.all(spawnPs);
 
   await close();
@@ -2353,6 +2410,19 @@ canvas.addEventListener('click', async e => {
   // Booster mode — click applies the booster
   if (activeBooster) {
     const bType = activeBooster;
+    // Validate the click target BEFORE consuming the charge so a misclick on
+    // a wall / frozen tile doesn't silently burn the booster (audit H8).
+    const target = board[cl.row]?.[cl.col];
+    let validTarget = true;
+    if (bType === 'hammer') {
+      validTarget = !!target && !target.isWall;
+    } else if (bType === 'colorBomb') {
+      validTarget = !!target && !target.isWall && !target.frozen;
+    }
+    if (!validTarget) {
+      // Keep the booster armed; player can pick a different tile.
+      return;
+    }
     activeBooster = null;
     updateBoosterUI();
     consumeBooster(bType);

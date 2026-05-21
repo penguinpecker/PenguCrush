@@ -8,10 +8,10 @@
 //  payment prompt.
 // ═══════════════════════════════════════════════════════════════
 
-import { getWalletClient, ensureWalletClient, getAGWAddress, getPublicClient } from './agw.js';
-import { getSessionClient } from './session-key.js';
+import { getWalletClient, ensureWalletClient, getAGWAddress, getPublicClient, getAgwClient } from './agw.js';
+import { getSessionClient, hasActiveSession, prepareSessionGrantCall } from './session-key.js';
 import { abstract } from 'viem/chains';
-import { keccak256, toBytes, encodeAbiParameters, parseAbiParameters } from 'viem';
+import { keccak256, toBytes, encodeAbiParameters, parseAbiParameters, encodeFunctionData } from 'viem';
 import { logTxSubmitted, logTxResult, logTxError } from './tx-log.js';
 import penguCrushAbiJson from '../contracts/PenguCrushABI.json';
 
@@ -50,9 +50,25 @@ function isDisabled() {
 
 // ── Internal write helper ─────────────────────────────────────
 
+/// Patterns AGW / zksync surface when a session key is no longer usable —
+/// usually because the lifetime fee budget (0.05 ETH) is exhausted, or the
+/// 24h TTL expired, or the session was revoked. Hitting any of these is the
+/// signal to ask the user for a fresh session and retry the write through it.
+const SESSION_EXHAUSTED_RX = /session[-_ ]?(expired|closed|invalid|exhaust|disabled|revoked)|feeLimit|fee[-_ ]?limit|FeeLimit|SessionLib|sessionState|validation\s+failed|hook validation failed|no longer authorized/i;
+
+function looksLikeSessionExhausted(msg) {
+  return SESSION_EXHAUSTED_RX.test(String(msg || ''));
+}
+
 /**
  * Send a write. If a session key is granted for this method, use it (silent
  * tx, no prompt). Otherwise route through the user's AGW (prompts).
+ *
+ * Auto-renewal: if a session-key write fails with a "session exhausted /
+ * expired / fee-limit hit" error, we clear the local blob, ask the user to
+ * sign one re-grant, then retry the write through the fresh session. Net UX
+ * is a single extra prompt when the 0.05 ETH lifetime budget runs out (or
+ * the 24h TTL hits) instead of an unexplained revert.
  */
 async function chainWrite(label, functionName, args, options = {}) {
   const account = getAGWAddress();
@@ -72,7 +88,7 @@ async function chainWrite(label, functionName, args, options = {}) {
     throw new Error('wallet not connected');
   }
   const wantSession = !options.requireUserPrompt;
-  const sessionClient = wantSession ? await getSessionClient(functionName).catch(() => null) : null;
+  let sessionClient = wantSession ? await getSessionClient(functionName).catch(() => null) : null;
   let client;
   try {
     client = sessionClient || await ensureWalletClient();
@@ -100,6 +116,20 @@ async function chainWrite(label, functionName, args, options = {}) {
   } catch (err) {
     const msg = err?.shortMessage || err?.message || String(err);
     const rejected = /reject|denied|cancel/i.test(msg);
+
+    // Auto-renewal path: only kicks in when (a) the failed write was via the
+    // session client, (b) the error looks like a session-exhausted signature,
+    // (c) the user didn't just cancel, and (d) we're not in a recursive
+    // retry already (options._retriedAfterRenew prevents loops).
+    if (sessionClient && !rejected && !options._retriedAfterRenew && looksLikeSessionExhausted(msg)) {
+      const renewed = await _renewSessionInteractive(account, label, msg).catch(() => false);
+      if (renewed) {
+        // Retry via the freshly-granted session. Mark the recursive flag so
+        // a second failure doesn't loop us back into another re-grant prompt.
+        return chainWrite(label, functionName, args, { ...options, _retriedAfterRenew: true });
+      }
+    }
+
     logTxError({ wallet: account, type: label, error: rejected ? `user_rejected: ${msg}` : `writeContract: ${msg}`, details: { ...logDetails, used: sessionClient ? 'session' : 'wallet' } });
     throw err;
   }
@@ -111,14 +141,18 @@ async function chainWrite(label, functionName, args, options = {}) {
   if (options.waitForReceipt !== false) {
     const pc = getPublicClient();
     try {
-      const receipt = await pc.waitForTransactionReceipt({ hash, confirmations: 1 });
+      // Bounded wait so a sequencer / RPC stall can't pin the level-popup
+      // Next button forever. 120 s is well past Abstract's ~2 s block time
+      // and well past a normal worst-case sequencer hiccup (audit H6).
+      const receipt = await pc.waitForTransactionReceipt({ hash, confirmations: 1, timeout: 120_000 });
       const status = receipt.status === 'success' ? 'success' : 'reverted';
       logTxResult(rowId, { status, txHash: hash, blockNumber: Number(receipt.blockNumber) });
       if (status !== 'success') throw new Error(`reverted (status=${receipt.status})`);
       return { hash, receipt, used: sessionClient ? 'session' : 'wallet' };
     } catch (err) {
       const msg = err?.shortMessage || err?.message || String(err);
-      logTxResult(rowId, { status: 'reverted', txHash: hash, error: `receipt: ${msg}` });
+      const isTimeout = /timed?\s*out|timeout|WaitForTransactionReceiptTimeoutError/i.test(msg);
+      logTxResult(rowId, { status: isTimeout ? 'timeout' : 'reverted', txHash: hash, error: `receipt: ${msg}` });
       throw err;
     }
   }
@@ -136,12 +170,204 @@ async function chainRead(functionName, args = []) {
   });
 }
 
+/**
+ * Ask the user to re-grant a fresh AGW session key after the current one
+ * exhausted (fee budget hit / TTL expired / revoked). One wallet prompt —
+ * the createSession tx. Returns true on success, false if the user
+ * cancelled or the AGW client wasn't available. The caller is expected
+ * to retry the original write through the new session after this resolves.
+ *
+ * Deduped: parallel writes that all trip the exhaustion check await a
+ * single in-flight renewal instead of all popping separate prompts.
+ */
+let _renewInFlight = null;
+async function _renewSessionInteractive(walletAddr, triggeringLabel, originalErrMsg) {
+  if (_renewInFlight) return _renewInFlight;
+  _renewInFlight = (async () => {
+    try {
+      const agwClient = getAgwClient();
+      if (!agwClient) {
+        console.warn('[session-renew] no AGW client — cannot renew');
+        return false;
+      }
+      const { clearSessionForAddress, grantSession } = await import('./session-key.js');
+      // Drop the stale local blob so getSessionClient stops returning a
+      // dead client during the renewal window.
+      clearSessionForAddress(walletAddr);
+
+      // Best-effort analytics — module is optional in case of refactor.
+      try {
+        const { Events } = await import('./analytics.js');
+        Events.sessionKeyFailed?.(`renew_triggered_by_${triggeringLabel}: ${String(originalErrMsg).slice(0, 80)}`);
+      } catch (_) { /* ignore */ }
+
+      console.info('[session-renew] prompting user to renew session-key (triggered by ' + triggeringLabel + ')');
+      const r = await grantSession(agwClient);
+
+      try {
+        const { Events } = await import('./analytics.js');
+        Events.sessionKeyGranted?.(r?.sessionAddress);
+      } catch (_) { /* ignore */ }
+
+      return true;
+    } catch (err) {
+      const msg = err?.shortMessage || err?.message || String(err);
+      // User cancelled the renewal popup — fine, just don't retry.
+      if (/reject|denied|cancel/i.test(msg)) {
+        console.info('[session-renew] user declined renewal');
+      } else {
+        console.warn('[session-renew] grantSession threw:', msg);
+      }
+      return false;
+    } finally {
+      _renewInFlight = null;
+    }
+  })();
+  return _renewInFlight;
+}
+
 // ═══════════════════════════════════════════════════════════════
 //  GAMEPLAY WRITES — session-key safe
 // ═══════════════════════════════════════════════════════════════
 
 export function startLevel(level) {
   return chainWrite('startLevel', 'startLevel', [Number(level)]);
+}
+
+/**
+ * Cold-start bootstrap — collapses up to three on-chain operations into a
+ * single user-prompted batched tx via AGW's `sendTransactionBatch`:
+ *   1. createSession (if no active session-key blob locally)
+ *   2. claimStarterPack (if not already claimed on chain)
+ *   3. startLevel(level)
+ *
+ * The whole batch is atomic — if anything inside reverts, none of it lands,
+ * and the session blob is NOT persisted locally (no orphan). Returns
+ * `{ hash, used: 'batch', sessionAddress?, included: { session, starter, start } }`.
+ *
+ * Falls back to a sequential path (grantSession → ensureStarterPack →
+ * startLevel) if the AGW high-level client or batch API isn't available,
+ * so older AGW package versions still work — they just see the old prompt
+ * count.
+ */
+export async function bootstrapBatch(level) {
+  const player = getAGWAddress();
+  if (!player) throw new Error('wallet not connected');
+
+  const agwClient = getAgwClient();
+  const canBatch = !!agwClient && typeof agwClient.sendTransactionBatch === 'function';
+
+  // Check current chain state so we only include the steps that are actually
+  // needed. Reads are cheap on Abstract; the alternative (always including
+  // claimStarterPack) reverts the whole batch on second-connect with
+  // StarterPackAlreadyClaimed.
+  const [alreadyClaimed] = await Promise.all([
+    readStarterPackClaimed(player).catch(() => false),
+  ]);
+  const sessionLive = hasActiveSession();
+
+  const included = { session: !sessionLive, starter: !alreadyClaimed, start: true };
+
+  // If AGW batch isn't available, fall back to the legacy sequence so the
+  // user still gets all three operations done — just with extra prompts.
+  if (!canBatch) {
+    let sessionAddress = null;
+    if (included.session && agwClient) {
+      try {
+        const { grantSession } = await import('./session-key.js');
+        const r = await grantSession(agwClient);
+        sessionAddress = r?.sessionAddress || null;
+      } catch (err) {
+        // Surface but don't throw — starter+startLevel can still succeed
+        // through AGW prompts.
+        console.warn('bootstrapBatch: session grant failed, will fall through to per-tx prompts:', err?.shortMessage || err?.message || err);
+      }
+    }
+    if (included.starter) {
+      try { await claimStarterPack(); } catch (err) {
+        const msg = err?.shortMessage || err?.message || String(err);
+        if (!/already/i.test(msg)) throw err;
+      }
+    }
+    const r = await startLevel(level);
+    return { hash: r?.hash, used: 'sequential', sessionAddress, included };
+  }
+
+  // Build the batch.
+  const calls = [];
+  let sessionCommit = null;
+  let sessionAddress = null;
+  if (included.session) {
+    try {
+      const prep = await prepareSessionGrantCall(agwClient);
+      calls.push(prep.call);
+      sessionCommit = prep.commit;
+      sessionAddress = prep.sessionAddress;
+    } catch (err) {
+      // If we can't even prepare the session call, give up on batching that
+      // piece — but still try to do the rest as a smaller batch.
+      console.warn('bootstrapBatch: prepareSessionGrantCall failed, batch will skip session:', err?.shortMessage || err?.message || err);
+      included.session = false;
+    }
+  }
+  if (included.starter) {
+    calls.push({
+      to: PENGUCRUSH_ADDRESS,
+      value: 0n,
+      data: encodeFunctionData({ abi: penguCrushAbi, functionName: 'claimStarterPack', args: [] }),
+    });
+  }
+  if (included.start) {
+    calls.push({
+      to: PENGUCRUSH_ADDRESS,
+      value: 0n,
+      data: encodeFunctionData({ abi: penguCrushAbi, functionName: 'startLevel', args: [Number(level)] }),
+    });
+  }
+
+  // Edge: nothing to do (already-set-up returning user calling this helper).
+  // Just kick startLevel through the normal path.
+  if (calls.length === 0) {
+    const r = await startLevel(level);
+    return { hash: r?.hash, used: r?.used, included };
+  }
+
+  const logDetails = { batchLen: calls.length, included, level: Number(level) };
+  const rowId = await logTxSubmitted({ wallet: player, type: 'bootstrapBatch', details: logDetails });
+  let hash;
+  try {
+    hash = await agwClient.sendTransactionBatch({ calls });
+  } catch (err) {
+    const msg = err?.shortMessage || err?.message || String(err);
+    const rejected = /reject|denied|cancel/i.test(msg);
+    logTxResult(rowId, { status: 'error', error: rejected ? `user_rejected: ${msg}` : `sendTransactionBatch: ${msg}` });
+    throw err;
+  }
+
+  // Wait for confirmation — same 120 s bound as chainWrite.
+  try {
+    const pc = getPublicClient();
+    const receipt = await pc.waitForTransactionReceipt({ hash, confirmations: 1, timeout: 120_000 });
+    const status = receipt.status === 'success' ? 'success' : 'reverted';
+    logTxResult(rowId, { status, txHash: hash, blockNumber: Number(receipt.blockNumber) });
+    if (status !== 'success') throw new Error(`bootstrapBatch reverted (status=${receipt.status})`);
+  } catch (err) {
+    const msg = err?.shortMessage || err?.message || String(err);
+    const isTimeout = /timed?\s*out|timeout|WaitForTransactionReceiptTimeoutError/i.test(msg);
+    logTxResult(rowId, { status: isTimeout ? 'timeout' : 'reverted', txHash: hash, error: `receipt: ${msg}` });
+    throw err;
+  }
+
+  // Only persist the session blob AFTER the batch lands successfully — if
+  // the tx reverts, the session was never registered on chain, so we don't
+  // want an orphan local blob pointing at a non-existent on-chain session.
+  if (sessionCommit) {
+    try { sessionCommit(hash); } catch (err) {
+      console.warn('bootstrapBatch: session commit threw (batch landed; session blob NOT saved — gameplay will prompt):', err?.message || err);
+    }
+  }
+
+  return { hash, used: 'batch', sessionAddress, included };
 }
 
 /**

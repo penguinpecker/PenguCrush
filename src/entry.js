@@ -3,7 +3,7 @@ import './map.css';
 import { getAGWAddress, isSignedIn, connectAGW, signInWithAGW, getAgwClient, getWalletClient } from './agw.js';
 import * as Inventory from './inventory.js';
 import { isLevelUnlocked } from './progress.js';
-import { buyBoosterETH, buyLivesETH, claimStarterPack, ensureStarterPack } from './onchain.js';
+import { buyBoosterETH, buyLivesETH, claimStarterPack, ensureStarterPack, bootstrapBatch, readStarterPackClaimed } from './onchain.js';
 import { hasActiveSession, grantSession } from './session-key.js';
 import { Events, setAnalyticsUser } from './analytics.js';
 import './dev-stars.js'; // adds window.__pengu.starDev() — no UI unless enabled
@@ -502,8 +502,46 @@ homePlayBtn?.addEventListener('click', async () => {
     setAnalyticsUser(getAGWAddress());
     // Pull chain state right after sign-in so the map HUD shows the truth.
     Inventory.hydrateFromChain().catch(() => {});
-    // One-time AGW session-key grant so in-game txs auto-execute. Failures
-    // here are non-fatal — txs will just fall back to AGW prompts.
+
+    // Detect cold-start: a wallet that's never claimed the starter pack is
+    // brand-new to PenguCrush. For those we collapse {createSession,
+    // claimStarterPack, startLevel(1)} into a single AGW-batched tx so the
+    // player goes through ONE on-chain prompt instead of three, and lands
+    // straight in level 1.
+    const player = getAGWAddress();
+    let alreadyClaimed = true;
+    try { alreadyClaimed = await readStarterPackClaimed(player); }
+    catch (_) { alreadyClaimed = false; /* err on the side of running setup */ }
+
+    const agwClient = getAgwClient();
+    const coldStart = !alreadyClaimed;
+
+    if (coldStart && agwClient) {
+      try {
+        const r = await bootstrapBatch(1);
+        Events.sessionKeyGranted?.(r?.sessionAddress);
+        await Inventory.hydrateFromChain().catch(() => {});
+        setCurrentLevel(1);
+        window.location.href = '/?page=play';
+        return;
+      } catch (err) {
+        // Surface — don't silently swallow. The user pays for prompts; if
+        // we silently fall through they'd get a wallet prompt for every
+        // gameplay tx with no explanation.
+        const msg = String(err?.shortMessage || err?.message || err).slice(0, 200);
+        console.warn('bootstrapBatch failed, falling back to sequential prompts:', msg);
+        Events.sessionKeyFailed?.(msg);
+        if (!/reject|denied|cancel/i.test(msg)) {
+          alert('Setup did not complete. You may see extra wallet prompts as we retry.\n\n' + msg);
+        }
+        // Fall through to the legacy sequential path so the player can still
+        // proceed.
+      }
+    }
+
+    // Legacy / fallback path — returning user, or batch unavailable / failed.
+    // Failures here used to be silently swallowed; now they're surfaced so a
+    // degraded session-key state is detectable (audit H5 follow-up).
     if (!hasActiveSession()) {
       const client = getAgwClient();
       if (client) {
@@ -511,8 +549,13 @@ homePlayBtn?.addEventListener('click', async () => {
           const r = await grantSession(client);
           Events.sessionKeyGranted(r?.sessionAddress);
         } catch (err) {
-          Events.sessionKeyFailed(String(err?.message || err).slice(0, 100));
+          const msg = String(err?.shortMessage || err?.message || err).slice(0, 200);
+          console.warn('session-key grant failed — gameplay will require per-tx prompts:', msg);
+          Events.sessionKeyFailed(msg);
         }
+      } else {
+        console.warn('AGW high-level client not available — session keys disabled this load; gameplay will prompt per tx');
+        Events.sessionKeyFailed?.('agw_client_missing');
       }
     }
     // V2.3 — claim the one-time starter pack (1 of each booster on chain).

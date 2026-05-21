@@ -32,6 +32,10 @@ const ABI = [
 ] as const;
 
 const BATCH_SIZE = 50;
+// Hard caps on a single invocation so a leaked CRON_SECRET can't force the
+// relayer to burn unbounded gas via a giant POST body (audit H12).
+const MAX_POST_PLAYERS = 500;
+const MAX_BATCHES_PER_RUN = 10; // 10 × BATCH_SIZE = 500 claimRegen calls / run
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
@@ -55,7 +59,20 @@ Deno.serve(async (req) => {
     if (req.method === 'POST') {
       try {
         const body = await req.json();
-        if (Array.isArray(body?.players)) candidates = body.players.map((x: string) => x.toLowerCase() as `0x${string}`);
+        if (Array.isArray(body?.players)) {
+          if (body.players.length > MAX_POST_PLAYERS) {
+            return json({ error: 'too_many_players', max: MAX_POST_PLAYERS }, 413);
+          }
+          const seen = new Set<string>();
+          for (const raw of body.players) {
+            if (typeof raw !== 'string') continue;
+            const lo = raw.toLowerCase();
+            if (!/^0x[a-f0-9]{40}$/.test(lo)) continue;
+            if (seen.has(lo)) continue;
+            seen.add(lo);
+            candidates.push(lo as `0x${string}`);
+          }
+        }
       } catch (_) {}
     }
     if (candidates.length === 0) {
@@ -85,14 +102,28 @@ Deno.serve(async (req) => {
     if (eligible.length === 0) return json({ swept: 0, candidates: candidates.length });
 
     const txHashes: string[] = [];
-    for (let i = 0; i < eligible.length; i += BATCH_SIZE) {
+    const failed: Array<{ batch: number; error: string }> = [];
+    let sweptCount = 0;
+    const maxToProcess = Math.min(eligible.length, BATCH_SIZE * MAX_BATCHES_PER_RUN);
+    let truncated = false;
+    if (eligible.length > maxToProcess) truncated = true;
+    for (let i = 0; i < maxToProcess; i += BATCH_SIZE) {
       const chunk = eligible.slice(i, i + BATCH_SIZE);
-      const hash = await walletClient.writeContract({
-        address: PENGUCRUSH_ADDRESS, abi: ABI, functionName: 'claimRegenBatch', args: [chunk],
-      });
-      txHashes.push(hash);
+      try {
+        const hash = await walletClient.writeContract({
+          address: PENGUCRUSH_ADDRESS, abi: ABI, functionName: 'claimRegenBatch', args: [chunk],
+        });
+        txHashes.push(hash);
+        sweptCount += chunk.length;
+      } catch (err) {
+        // Don't let one bad batch silently abort the rest — record and continue.
+        failed.push({ batch: Math.floor(i / BATCH_SIZE), error: (err as Error)?.message?.slice(0, 200) || 'unknown' });
+      }
     }
-    return json({ swept: eligible.length, batches: txHashes.length, txHashes });
+    return json({
+      swept: sweptCount, eligible: eligible.length, batches: txHashes.length, txHashes,
+      failedBatches: failed.length, failed, truncated,
+    });
   } catch (err) {
     console.error('pengu-regen-sweep error:', err);
     return json({ error: 'server_error' }, 500);
