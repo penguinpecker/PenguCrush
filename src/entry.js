@@ -531,9 +531,9 @@ homePlayBtn?.addEventListener('click', async () => {
     console.info('[entry] post-SIWE state: sessionLive=', sessionLive, 'starterClaimed=', alreadyClaimed, 'agwClient?', !!agwClient, 'needsBootstrap=', needsBootstrap);
 
     if (needsBootstrap && agwClient) {
-      setupStatus('Setting up gameplay — one transaction…', {
+      setupStatus('Granting session key — confirm in the wallet popup…', {
         step: 'Step 3 of 3',
-        detail: 'Bundling session key + starter pack + level 1 start into a single tx',
+        detail: 'After this one popup, gameplay runs silently via the session key',
       });
       try {
         const r = await bootstrapBatch(1);

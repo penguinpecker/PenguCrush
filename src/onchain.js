@@ -11,7 +11,7 @@
 import { getWalletClient, ensureWalletClient, getAGWAddress, getPublicClient, getAgwClient } from './agw.js';
 import { getSessionClient, hasActiveSession, prepareSessionGrantCall } from './session-key.js';
 import { abstract } from 'viem/chains';
-import { keccak256, toBytes, encodeAbiParameters, parseAbiParameters, encodeFunctionData } from 'viem';
+import { keccak256, toBytes, encodeAbiParameters, parseAbiParameters } from 'viem';
 import { logTxSubmitted, logTxResult, logTxError } from './tx-log.js';
 import penguCrushAbiJson from '../contracts/PenguCrushABI.json';
 
@@ -238,60 +238,42 @@ export function startLevel(level) {
   return chainWrite('startLevel', 'startLevel', [Number(level)]);
 }
 
-// ABI fragment for the AGW smart account's `batchCall` entry point.
-// Pulled by hand from @abstract-foundation/agw-client/abis/AGWAccount so we
-// don't have to ship the whole AGW ABI just for this one selector.
-const AGW_BATCH_CALL_ABI = [{
-  type: 'function',
-  name: 'batchCall',
-  stateMutability: 'payable',
-  outputs: [],
-  inputs: [{
-    name: '_calls',
-    type: 'tuple[]',
-    internalType: 'struct Call[]',
-    components: [
-      { name: 'target',       type: 'address' },
-      { name: 'allowFailure', type: 'bool'    },
-      { name: 'value',        type: 'uint256' },
-      { name: 'callData',     type: 'bytes'   },
-    ],
-  }],
-}];
-
 /**
- * Cold-start bootstrap — fires up to three on-chain operations as a single
- * atomic tx and a single user-prompted Privy signature:
- *   1. createSession (if no active session-key blob locally)
- *   2. claimStarterPack (if not already claimed on chain)
- *   3. startLevel(level)
+ * Cold-start bootstrap — sequential, NOT atomic.
  *
- * Implementation note: instead of using AGW's high-level
- * `agwClient.sendTransactionBatch` (which broke for us — required either
- * isPrivyCrossApp signing through privy_signSmartWalletTx that didn't
- * surface a popup as expected, or a fully-functional `_agwClient` that
- * wasn't reliably initialised), we just call the AGW smart account's
- * own `batchCall(Call[])` entry point through the regular walletClient
- * → transformEIP1193Provider → Privy cross-app popup path. That's the
- * EXACT same path that powers every individual chainWrite, so we
- * inherit its reliability for free. One Privy popup, atomic batch.
+ * Previously this tried to bundle createSession + claimStarterPack +
+ * startLevel into a single AGW batchCall tx. That blew up in production
+ * with "Session key policy violation. Status: Unset" because the Privy
+ * cross-app signer auto-picks a validator based on what's installed on
+ * the smart wallet, and on a wallet that already has a session module
+ * (from any prior attempt) it would route the batchCall through the
+ * SESSION validator instead of the EOA validator — and the just-being-
+ * added session obviously has no policy for PenguCrushV2 yet, so the
+ * wallet rejects with the policy violation.
  *
- * The batch is atomic — if anything inside reverts, none of it lands,
- * and the session blob is NOT persisted locally (no orphan).
+ * There's no public API to tell Privy "use the EOA validator for this
+ * one" — agw-client's signPrivyTransaction(client, parameters) hands
+ * the whole tx to Privy and Privy decides. So we abandon the in-batch
+ * session-creation trick and go back to the proven AGW pattern:
+ *
+ *   1. grantSession (one Privy popup)  ← uses agwClient.createSession
+ *      which AGW explicitly signs with EOA_VALIDATOR_ADDRESS — Privy
+ *      respects that because it's a wallet-management call.
+ *   2. claimStarterPack — silent through the freshly-granted session
+ *   3. startLevel(level) — silent through the freshly-granted session
+ *
+ * Net cold-start UX: AGW login + SIWE + ONE Privy popup (the grant) =
+ * three signatures, then every gameplay tx is silent via the session
+ * key. Returning users with a still-valid local session skip the grant
+ * and the whole bootstrap is silent.
  */
 export async function bootstrapBatch(level) {
   const player = getAGWAddress();
   if (!player) throw new Error('wallet not connected');
 
-  const walletClient = await ensureWalletClient();
-  const agwClient = getAgwClient();  // still needed for prepareCreateSessionCall
-
+  const agwClient = getAgwClient();
   console.info('[bootstrap] start, player=', player, 'agwClient?', !!agwClient);
 
-  // Inspect chain state so we only include the steps that are actually
-  // needed. Reads are cheap on Abstract; the alternative (always including
-  // claimStarterPack) reverts the whole batch on second-connect with
-  // StarterPackAlreadyClaimed and burns the whole flow for the user.
   let alreadyClaimed = false;
   try {
     alreadyClaimed = !!(await readStarterPackClaimed(player));
@@ -302,114 +284,54 @@ export async function bootstrapBatch(level) {
   const included = { session: !sessionLive, starter: !alreadyClaimed, start: true };
   console.info('[bootstrap] included=', included);
 
-  // ── 1. Build the Call[] tuple for the smart-wallet's own batchCall ──
-  const calls = [];
-  let sessionCommit = null;
   let sessionAddress = null;
+
+  // ── 1. Session grant (if needed) — one Privy popup ──
   if (included.session) {
     if (!agwClient) {
-      console.warn('[bootstrap] no AGW high-level client — session call cannot be prepared; skipping session step');
-      included.session = false;
+      console.warn('[bootstrap] no AGW high-level client — cannot grant session, gameplay will prompt per tx');
     } else {
       try {
-        const prep = await prepareSessionGrantCall(agwClient);
-        calls.push({
-          target: prep.call.to,
-          allowFailure: false,
-          value: BigInt(prep.call.value || 0),
-          callData: prep.call.data,
-        });
-        sessionCommit = prep.commit;
-        sessionAddress = prep.sessionAddress;
-        console.info('[bootstrap] session call prepared, sessionAddress=', sessionAddress);
+        console.info('[bootstrap] requesting session grant — wallet popup incoming');
+        const { grantSession } = await import('./session-key.js');
+        const r = await grantSession(agwClient);
+        sessionAddress = r?.sessionAddress || null;
+        console.info('[bootstrap] session granted, sessionAddress=', sessionAddress, 'createTxHash=', r?.txHash);
       } catch (err) {
-        console.warn('[bootstrap] prepareSessionGrantCall failed, skipping session in batch:', err?.shortMessage || err?.message || err);
-        included.session = false;
+        const msg = err?.shortMessage || err?.message || String(err);
+        console.error('[bootstrap] grantSession failed:', msg);
+        // If the user cancelled, propagate so the UI shows it. Otherwise
+        // continue — claimStarterPack + startLevel will fall back to
+        // per-tx wallet prompts but the player can still play.
+        if (/reject|denied|cancel/i.test(msg)) throw err;
       }
     }
   }
+
+  // ── 2. Claim starter pack (if needed) — silent via session ──
   if (included.starter) {
-    calls.push({
-      target: PENGUCRUSH_ADDRESS,
-      allowFailure: false,
-      value: 0n,
-      callData: encodeFunctionData({ abi: penguCrushAbi, functionName: 'claimStarterPack', args: [] }),
-    });
-  }
-  if (included.start) {
-    calls.push({
-      target: PENGUCRUSH_ADDRESS,
-      allowFailure: false,
-      value: 0n,
-      callData: encodeFunctionData({ abi: penguCrushAbi, functionName: 'startLevel', args: [Number(level)] }),
-    });
-  }
-
-  // Edge: nothing actually to batch (returning warm user). Use the regular
-  // startLevel path; this will fire one wallet prompt at worst.
-  if (calls.length === 0) {
-    console.info('[bootstrap] nothing to batch — falling through to single startLevel');
-    const r = await startLevel(level);
-    return { hash: r?.hash, used: r?.used, included };
-  }
-
-  // ── 2. Fire the batch as a single batchCall on the smart wallet ──
-  // walletClient routes through _agwProvider (transformEIP1193Provider with
-  // isPrivyCrossApp:true), which rewrites eth_sendTransaction to
-  // privy_sendSmartWalletTx in the cross-app connector — exactly ONE Privy
-  // popup, regardless of how many sub-calls are inside.
-  const logDetails = { batchLen: calls.length, included, level: Number(level), path: 'AGWAccount.batchCall' };
-  const rowId = await logTxSubmitted({ wallet: player, type: 'bootstrapBatch', details: logDetails });
-  let hash;
-  try {
-    console.info('[bootstrap] sending batchCall with', calls.length, 'sub-calls via walletClient.writeContract');
-    hash = await walletClient.writeContract({
-      address: player,           // call batchCall ON the AGW smart wallet itself
-      abi: AGW_BATCH_CALL_ABI,
-      functionName: 'batchCall',
-      args: [calls],
-      account: player,
-      chain: abstract,
-      value: 0n,
-    });
-    console.info('[bootstrap] batchCall tx submitted:', hash);
-  } catch (err) {
-    const msg = err?.shortMessage || err?.message || String(err);
-    const rejected = /reject|denied|cancel/i.test(msg);
-    console.error('[bootstrap] batchCall write failed:', msg);
-    logTxResult(rowId, { status: 'error', error: rejected ? `user_rejected: ${msg}` : `batchCall: ${msg}` });
-    throw err;
-  }
-
-  // Wait for confirmation — same 120 s bound as chainWrite.
-  try {
-    const pc = getPublicClient();
-    const receipt = await pc.waitForTransactionReceipt({ hash, confirmations: 1, timeout: 120_000 });
-    const status = receipt.status === 'success' ? 'success' : 'reverted';
-    console.info('[bootstrap] batchCall receipt:', status, 'block=', Number(receipt.blockNumber));
-    logTxResult(rowId, { status, txHash: hash, blockNumber: Number(receipt.blockNumber) });
-    if (status !== 'success') throw new Error(`bootstrapBatch reverted (status=${receipt.status})`);
-  } catch (err) {
-    const msg = err?.shortMessage || err?.message || String(err);
-    const isTimeout = /timed?\s*out|timeout|WaitForTransactionReceiptTimeoutError/i.test(msg);
-    console.error('[bootstrap] receipt wait failed:', msg);
-    logTxResult(rowId, { status: isTimeout ? 'timeout' : 'reverted', txHash: hash, error: `receipt: ${msg}` });
-    throw err;
-  }
-
-  // Only persist the session blob AFTER the batch lands — if it reverted, the
-  // session was never registered on chain and we don't want a local blob
-  // pointing at a phantom session.
-  if (sessionCommit) {
     try {
-      sessionCommit(hash);
-      console.info('[bootstrap] session blob committed locally');
+      console.info('[bootstrap] claiming starter pack — should be silent via session');
+      await claimStarterPack();
+      console.info('[bootstrap] starter pack claimed');
     } catch (err) {
-      console.warn('[bootstrap] session commit threw (batch landed; gameplay may prompt):', err?.message || err);
+      const msg = err?.shortMessage || err?.message || String(err);
+      // Tolerate "already claimed" — chain is idempotent here even if our
+      // pre-check missed it (race between two tabs, etc.).
+      if (!/already|StarterPackAlreadyClaimed/i.test(msg)) {
+        console.error('[bootstrap] claimStarterPack failed:', msg);
+        throw err;
+      }
+      console.info('[bootstrap] starter pack was already claimed (reverted gracefully)');
     }
   }
 
-  return { hash, used: 'batchCall', sessionAddress, included };
+  // ── 3. Start the requested level — silent via session ──
+  console.info('[bootstrap] starting level', level, '— should be silent via session');
+  const r = await startLevel(level);
+  console.info('[bootstrap] startLevel landed, hash=', r?.hash, 'used=', r?.used);
+
+  return { hash: r?.hash, used: r?.used, sessionAddress, included };
 }
 
 /**
