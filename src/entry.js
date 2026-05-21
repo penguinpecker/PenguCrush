@@ -48,13 +48,16 @@ function migrateLegacyLevelParam() {
 }
 migrateLegacyLevelParam();
 
-// "Session" here means "we have a usable wallet for this browser tab",
-// not the EIP-1271 SIWE marker that older builds required. AGW connection
-// + a live viem walletClient is enough — SIWE was a local-only marker
-// that no server or contract ever read, so dropping it saves one popup
-// from the cold-start flow without changing what the app can prove.
+// "Session" here means "we know which wallet this browser tab belongs to".
+// We check ONLY the persisted address (loaded from localStorage on module
+// init), NOT the live viem walletClient — the walletClient lives in
+// module memory and resets every page navigation, so requiring it here
+// would bounce the user back to home immediately after the post-connect
+// redirect lands on /?page=map. The silent-reconnect block in boot()
+// below is responsible for re-hydrating the walletClient when address
+// is present but client is null.
 function hasSession() {
-  return !!getAGWAddress() && !!getWalletClient();
+  return !!getAGWAddress();
 }
 
 function showScreen(id) {
