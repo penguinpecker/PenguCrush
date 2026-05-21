@@ -215,6 +215,15 @@ export async function connectAGW() {
           chain: abstract,
           signer: signerAccount,
           transport: custom(privy),
+          // CRITICAL: without this flag, AGW routes batch / session
+          // transactions through the EOA's signTypedData (which our
+          // toAccount intentionally rejects with "not used") and the
+          // call throws — bootstrapBatch then silently falls back to
+          // the legacy multi-prompt path. With isPrivyCrossApp=true,
+          // signing routes through Privy's privy_signSmartWalletTx
+          // method, which uses the same popup we already pre-opened
+          // and reuses the user's Privy session.
+          isPrivyCrossApp: true,
         });
       }
     }
