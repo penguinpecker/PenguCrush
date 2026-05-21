@@ -1,10 +1,9 @@
 import './style.css';
 import './map.css';
-import { getAGWAddress, isSignedIn, connectAGW, signInWithAGW, getAgwClient, getWalletClient } from './agw.js';
+import { getAGWAddress, isSignedIn, connectAGW, signInWithAGW, getWalletClient } from './agw.js';
 import * as Inventory from './inventory.js';
 import { isLevelUnlocked } from './progress.js';
 import { buyBoosterETH, buyLivesETH, claimStarterPack, ensureStarterPack, bootstrapBatch, readStarterPackClaimed } from './onchain.js';
-import { hasActiveSession, grantSession } from './session-key.js';
 import { setupStatus, hideSetupStatus } from './setup-status.js';
 import { Events, setAnalyticsUser } from './analytics.js';
 import './dev-stars.js'; // adds window.__pengu.starDev() — no UI unless enabled
@@ -512,12 +511,10 @@ homePlayBtn?.addEventListener('click', async () => {
     // Pull chain state right after sign-in so the map HUD shows the truth.
     Inventory.hydrateFromChain().catch(() => {});
 
-    // Decide which on-chain setup the player still needs. We were previously
-    // gating bootstrap on "starter pack unclaimed" only — that's wrong, because
-    // a returning user with an expired session locally also benefits from
-    // batching (one createSession + startLevel tx instead of two separate
-    // prompts). So: run bootstrap whenever the local session is gone OR the
-    // starter pack hasn't been claimed yet OR both.
+    // We only need bootstrap if the player hasn't claimed the starter pack
+    // yet (session-key grant is disabled on mainnet until our contract is
+    // allowlisted in Abstract's SessionKeyPolicyRegistry; trying it just
+    // produces noisy errors). Once registered we'll add it back here.
     const player = getAGWAddress();
     let alreadyClaimed = false;
     try {
@@ -525,19 +522,16 @@ homePlayBtn?.addEventListener('click', async () => {
     } catch (e) {
       console.warn('[entry] readStarterPackClaimed failed, assuming not claimed:', e?.shortMessage || e?.message || e);
     }
-    const sessionLive = hasActiveSession();
-    const agwClient = getAgwClient();
-    const needsBootstrap = !sessionLive || !alreadyClaimed;
-    console.info('[entry] post-SIWE state: sessionLive=', sessionLive, 'starterClaimed=', alreadyClaimed, 'agwClient?', !!agwClient, 'needsBootstrap=', needsBootstrap);
+    const needsBootstrap = !alreadyClaimed;
+    console.info('[entry] post-SIWE state: starterClaimed=', alreadyClaimed, 'needsBootstrap=', needsBootstrap);
 
-    if (needsBootstrap && agwClient) {
-      setupStatus('Granting session key — confirm in the wallet popup…', {
+    if (needsBootstrap) {
+      setupStatus('Claiming your starter pack — confirm one gasless popup…', {
         step: 'Step 3 of 3',
-        detail: 'After this one popup, gameplay runs silently via the session key',
+        detail: 'Abstract sponsors the gas — you only approve the action',
       });
       try {
-        const r = await bootstrapBatch();
-        Events.sessionKeyGranted?.(r?.sessionAddress);
+        await bootstrapBatch();
         setupStatus('Ready! Loading map…', { tone: 'ok' });
         await Inventory.hydrateFromChain().catch(() => {});
         hideSetupStatus(1500);
@@ -552,22 +546,9 @@ homePlayBtn?.addEventListener('click', async () => {
           hideSetupStatus(4000);
           return;
         }
-        setupStatus('Session setup failed', { detail: msg + '  —  proceeding to map; gameplay may prompt per tx.', tone: 'error' });
-        // Fall through so the player can still reach the map and at least
-        // try to play with per-tx prompts.
+        setupStatus('Starter-pack claim failed', { detail: msg + ' — proceeding to map anyway; you can retry later.', tone: 'error' });
+        // Fall through so the player can still reach the map.
       }
-    } else if (needsBootstrap && !agwClient) {
-      console.warn('[entry] needsBootstrap but no agwClient — gameplay will prompt per tx');
-      setupStatus('Session manager unavailable — gameplay will prompt per tx', { tone: 'error' });
-    }
-
-    // Make sure the starter pack landed even if bootstrap above threw before
-    // claiming it (idempotent on chain, cheap if already claimed).
-    if (!alreadyClaimed) {
-      try {
-        const r = await ensureStarterPack();
-        if (r.claimed) await Inventory.hydrateFromChain().catch(() => {});
-      } catch (_) { /* non-fatal, retried on next load */ }
     }
 
     hideSetupStatus(1500);

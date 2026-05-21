@@ -12,6 +12,7 @@ import { getWalletClient, ensureWalletClient, getAGWAddress, getPublicClient, ge
 import { getSessionClient, hasActiveSession, prepareSessionGrantCall } from './session-key.js';
 import { abstract } from 'viem/chains';
 import { keccak256, toBytes, encodeAbiParameters, parseAbiParameters } from 'viem';
+import { getGeneralPaymasterInput } from 'viem/zksync';
 import { logTxSubmitted, logTxResult, logTxError } from './tx-log.js';
 import penguCrushAbiJson from '../contracts/PenguCrushABI.json';
 
@@ -27,6 +28,18 @@ export const USDC_ADDRESS =
 const QUOTE_API_BASE =
   ENV.VITE_QUOTE_API_BASE ||
   'https://saftqlwxmdqxzfuwdgtu.supabase.co/functions/v1';
+
+/// Abstract's official general-purpose paymaster. Every tx that goes through
+/// it is GASLESS for the user — paymaster pays the network fee, user only
+/// approves the action itself. This is the pattern Abstract's own examples
+/// (and production AGW apps like jarrodwatts/plinko, axestract, mines) use.
+/// Override via VITE_ABSTRACT_PAYMASTER if Abstract rotates the address.
+export const ABSTRACT_PAYMASTER =
+  ENV.VITE_ABSTRACT_PAYMASTER || '0x5407B5040dec3D339A9247f3654E59EEccbb6391';
+
+/// Static general-paymaster input (no extra calldata). Encoded once at module
+/// load — same payload for every gameplay tx.
+const GENERAL_PAYMASTER_INPUT = getGeneralPaymasterInput({ innerInput: '0x' });
 
 const penguCrushAbi = Array.isArray(penguCrushAbiJson) ? penguCrushAbiJson : penguCrushAbiJson.abi || [];
 
@@ -116,6 +129,15 @@ async function chainWrite(label, functionName, args, options = {}) {
       account,
       chain: abstract,
       value: options.value || 0n,
+      // Gasless. Abstract's general paymaster sponsors every tx that goes
+      // through this client — user only approves the action itself, never
+      // sees "approve $X gas" in the popup. Matches the production pattern
+      // used by every official Abstract example + jarrodwatts/plinko,
+      // axestract, web4-js/mines. Shop functions that carry `value` (ETH
+      // / USDC purchases) still send the payment to treasury; the paymaster
+      // only covers gas.
+      paymaster: ABSTRACT_PAYMASTER,
+      paymasterInput: GENERAL_PAYMASTER_INPUT,
     });
   } catch (err) {
     const msg = err?.shortMessage || err?.message || String(err);
@@ -239,32 +261,40 @@ export function startLevel(level) {
 }
 
 /**
- * Cold-start bootstrap — sequential, NOT atomic.
+ * Cold-start bootstrap — minimal, paymaster-sponsored.
  *
- * Does the work that needs to happen ONCE per wallet so subsequent
- * gameplay is silent: grant a session key + claim the starter pack.
- * Does NOT call startLevel — the player lands on the MAP after this,
- * picks the level they want to play, and the map's existing
- * chainStartLevel call fires silently via the session.
+ * What this does:
+ *   - Claims the one-time starter pack on chain (gasless via paymaster).
  *
- * Net cold-start UX (signature count):
+ * What this DOESN'T do (and why):
+ *   - Does NOT grant a session key. Abstract's `assertSessionKeyPolicies`
+ *     check in `agw-client/sessionValidator` requires our contract to be
+ *     registered in `SessionKeyPolicyRegistry` (`0xfD20…cC9F`). Until that
+ *     registration lands, every grantSession call throws `Status: Unset`
+ *     before even opening a popup. Trying it just produces noisy console
+ *     errors with no upside. Code is left in `session-key.js` so the
+ *     session path can be re-enabled here in one line when registration
+ *     completes — see `enableSessionGrant` switch in entry.js.
+ *   - Does NOT call startLevel. The player lands on the MAP and picks
+ *     the level themselves.
+ *
+ * Cold-start signature count today (without registration):
  *   1. AGW Privy login popup
  *   2. SIWE message sign popup
- *   3. grantSession popup  ← the one explicit on-chain confirmation
- *   then everything below is silent if the session is valid:
- *      • claimStarterPack
- *      • startLevel(N) when the player picks a level on the map
+ *   3. claimStarterPack popup (GASLESS via paymaster)
+ *   → map screen → one gasless popup per level transition
  *
- * The level argument is ignored — kept for backwards-compat with
- * existing callers — and bootstrap always returns the user to the
- * map, never to the play screen.
+ * Cold-start signature count after registration (just flip the switch
+ * in entry.js to re-enable grantSession):
+ *   1. AGW Privy login popup
+ *   2. SIWE message sign popup
+ *   3. grantSession popup (gasless, persistent — covers gameplay for 24h)
+ *   → silent gameplay (no popups for startLevel / submitLevel / etc.)
  */
 export async function bootstrapBatch(_unusedLevel) {
   const player = getAGWAddress();
   if (!player) throw new Error('wallet not connected');
-
-  const agwClient = getAgwClient();
-  console.info('[bootstrap] start, player=', player, 'agwClient?', !!agwClient);
+  console.info('[bootstrap] start, player=', player);
 
   let alreadyClaimed = false;
   try {
@@ -272,44 +302,25 @@ export async function bootstrapBatch(_unusedLevel) {
   } catch (err) {
     console.warn('[bootstrap] readStarterPackClaimed failed, assuming not claimed:', err?.shortMessage || err?.message || err);
   }
-  const sessionLive = hasActiveSession();
-  const included = { session: !sessionLive, starter: !alreadyClaimed };
-  console.info('[bootstrap] included=', included);
+  if (alreadyClaimed) {
+    console.info('[bootstrap] starter pack already claimed — nothing to do');
+    return { sessionAddress: null, included: { session: false, starter: false } };
+  }
 
-  let sessionAddress = null;
-
-  // ── 1. Session grant (if needed) — one Privy popup ──
-  if (included.session) {
-    if (!agwClient) {
-      console.warn('[bootstrap] no AGW high-level client — cannot grant session, gameplay will prompt per tx');
+  console.info('[bootstrap] claiming starter pack (gasless via paymaster)');
+  try {
+    await claimStarterPack();
+    console.info('[bootstrap] starter pack claimed');
+  } catch (err) {
+    const msg = err?.shortMessage || err?.message || String(err);
+    if (/already|StarterPackAlreadyClaimed/i.test(msg)) {
+      console.info('[bootstrap] starter pack was already claimed (race-tolerated)');
     } else {
-      console.info('[bootstrap] requesting session grant — wallet popup incoming');
-      const { grantSession } = await import('./session-key.js');
-      const r = await grantSession(agwClient);
-      sessionAddress = r?.sessionAddress || null;
-      console.info('[bootstrap] session granted, sessionAddress=', sessionAddress, 'createTxHash=', r?.txHash);
+      throw err;
     }
   }
 
-  // ── 2. Claim starter pack (if needed) — silent via session ──
-  if (included.starter) {
-    try {
-      console.info('[bootstrap] claiming starter pack — should be silent via session');
-      await claimStarterPack();
-      console.info('[bootstrap] starter pack claimed');
-    } catch (err) {
-      const msg = err?.shortMessage || err?.message || String(err);
-      // Tolerate "already claimed" — chain is idempotent here even if our
-      // pre-check missed it (race between tabs, etc.).
-      if (!/already|StarterPackAlreadyClaimed/i.test(msg)) {
-        console.warn('[bootstrap] claimStarterPack failed (non-fatal, will retry on next load):', msg);
-      } else {
-        console.info('[bootstrap] starter pack was already claimed (reverted gracefully)');
-      }
-    }
-  }
-
-  return { sessionAddress, included };
+  return { sessionAddress: null, included: { session: false, starter: true } };
 }
 
 /**
