@@ -265,6 +265,120 @@ export function startLevel(level) {
   return chainWrite('startLevel', 'startLevel', [Number(level)]);
 }
 
+// AGWAccount.batchCall(Call[]) ABI fragment — used to atomically fire
+// multiple sub-calls (claimStarterPack + startLevel) inside one popup.
+// `assertSessionKeyPolicies` in agw-client only fires when a sub-call
+// encodes a session-creation; pure gameplay batches sail through it.
+const AGW_BATCH_CALL_ABI = [{
+  type: 'function',
+  name: 'batchCall',
+  stateMutability: 'payable',
+  outputs: [],
+  inputs: [{
+    name: '_calls',
+    type: 'tuple[]',
+    internalType: 'struct Call[]',
+    components: [
+      { name: 'target',       type: 'address' },
+      { name: 'allowFailure', type: 'bool'    },
+      { name: 'value',        type: 'uint256' },
+      { name: 'callData',     type: 'bytes'   },
+    ],
+  }],
+}];
+
+/**
+ * Start a level, optionally fused with the first-time starter pack claim.
+ *
+ * - Returning player (starter pack already claimed): plain startLevel — one
+ *   popup.
+ * - Brand-new player (starter pack not yet claimed): one batched tx that
+ *   fires claimStarterPack + startLevel(level) atomically on the smart
+ *   wallet via AGWAccount.batchCall — still one popup, but the player
+ *   ends up with their starter pack inventory by the time the game
+ *   board renders.
+ *
+ * Called from the map's level-click handler (instead of plain
+ * chainStartLevel) so the cold-start flow never has to fire an explicit
+ * popup for claimStarterPack.
+ */
+export async function startLevelWithSetup(level) {
+  const { encodeFunctionData } = await import('viem');
+  const player = getAGWAddress();
+  if (!player) throw new Error('wallet not connected');
+
+  let alreadyClaimed = false;
+  try { alreadyClaimed = !!(await readStarterPackClaimed(player)); }
+  catch (err) {
+    console.warn('[startLevelWithSetup] readStarterPackClaimed failed, assuming not claimed:', err?.shortMessage || err?.message || err);
+  }
+
+  if (alreadyClaimed) {
+    console.info('[startLevelWithSetup] returning player — plain startLevel(' + level + ')');
+    return startLevel(level);
+  }
+
+  console.info('[startLevelWithSetup] cold-start — batching claimStarterPack + startLevel(' + level + ') into one popup');
+  const calls = [
+    {
+      target: PENGUCRUSH_ADDRESS,
+      allowFailure: false,
+      value: 0n,
+      callData: encodeFunctionData({ abi: penguCrushAbi, functionName: 'claimStarterPack', args: [] }),
+    },
+    {
+      target: PENGUCRUSH_ADDRESS,
+      allowFailure: false,
+      value: 0n,
+      callData: encodeFunctionData({ abi: penguCrushAbi, functionName: 'startLevel', args: [Number(level)] }),
+    },
+  ];
+
+  const walletClient = await ensureWalletClient();
+  const logDetails = { batchLen: calls.length, level: Number(level), path: 'AGWAccount.batchCall' };
+  const rowId = await logTxSubmitted({ wallet: player, type: 'startLevelWithSetup', details: logDetails });
+
+  // Optional paymaster sponsorship (matches chainWrite behavior — empty by
+  // default until VITE_ABSTRACT_PAYMASTER is set).
+  const sponsorship = ABSTRACT_PAYMASTER
+    ? { paymaster: ABSTRACT_PAYMASTER, paymasterInput: GENERAL_PAYMASTER_INPUT }
+    : {};
+
+  let hash;
+  try {
+    hash = await walletClient.writeContract({
+      address: player,
+      abi: AGW_BATCH_CALL_ABI,
+      functionName: 'batchCall',
+      args: [calls],
+      account: player,
+      chain: abstract,
+      value: 0n,
+      ...sponsorship,
+    });
+  } catch (err) {
+    const msg = err?.shortMessage || err?.message || String(err);
+    const rejected = /reject|denied|cancel/i.test(msg);
+    console.error('[startLevelWithSetup] batchCall write failed:', msg);
+    logTxResult(rowId, { status: 'error', error: rejected ? `user_rejected: ${msg}` : `batchCall: ${msg}` });
+    throw err;
+  }
+
+  try {
+    const pc = getPublicClient();
+    const receipt = await pc.waitForTransactionReceipt({ hash, confirmations: 1, timeout: 120_000 });
+    const status = receipt.status === 'success' ? 'success' : 'reverted';
+    logTxResult(rowId, { status, txHash: hash, blockNumber: Number(receipt.blockNumber) });
+    if (status !== 'success') throw new Error(`startLevelWithSetup reverted (status=${receipt.status})`);
+    return { hash, receipt, used: 'batch' };
+  } catch (err) {
+    const msg = err?.shortMessage || err?.message || String(err);
+    const isTimeout = /timed?\s*out|timeout|WaitForTransactionReceiptTimeoutError/i.test(msg);
+    logTxResult(rowId, { status: isTimeout ? 'timeout' : 'reverted', txHash: hash, error: `receipt: ${msg}` });
+    throw err;
+  }
+}
+
 /**
  * Cold-start bootstrap — minimal, paymaster-sponsored.
  *

@@ -352,16 +352,6 @@ export function initMap() {
     agwBtn.disabled = true;
     try {
       await connectAGW();
-      agwBtn.textContent = 'Sign in…';
-      try {
-        await signInWithAGW();
-      } catch (sigErr) {
-        console.warn('AGW sign-in rejected:', sigErr);
-        disconnectAGW();
-        updateAgwBtn();
-        alert('Signature required to sign in. Please try again.');
-        return;
-      }
       updateAgwBtn();
       loadProgress(); // refresh map with wallet data
     } catch (err) {
@@ -543,10 +533,14 @@ export function initMap() {
     popupPlayBtn.classList.add('pop-play--disabled');
     if (origLabel) popupPlayBtn.textContent = 'Confirming…';
     try {
-      const { startLevel: chainStartLevel } = await import('./onchain.js');
-      const result = await chainStartLevel(currentPopupLevel.id);
-      // Defense in depth: chainWrite already throws on revert, but guard
-      // against a future code path that resolves without an actual receipt.
+      // startLevelWithSetup: returning players get a plain startLevel tx;
+      // brand-new players (starter pack not yet claimed) get a SINGLE
+      // batched tx that fires claimStarterPack + startLevel atomically.
+      // Either way the player only sees one popup at this step.
+      const { startLevelWithSetup } = await import('./onchain.js');
+      const result = await startLevelWithSetup(currentPopupLevel.id);
+      // Defense in depth: throws on revert already, but guard against a
+      // future code path that resolves without an actual receipt.
       if (!result?.hash || !/^0x[0-9a-fA-F]+$/.test(result.hash)) {
         throw new Error(`startLevel returned no tx hash (got ${JSON.stringify(result)})`);
       }

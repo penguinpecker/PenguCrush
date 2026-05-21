@@ -1,9 +1,9 @@
 import './style.css';
 import './map.css';
-import { getAGWAddress, isSignedIn, connectAGW, signInWithAGW, getWalletClient } from './agw.js';
+import { getAGWAddress, connectAGW, getWalletClient } from './agw.js';
 import * as Inventory from './inventory.js';
 import { isLevelUnlocked } from './progress.js';
-import { buyBoosterETH, buyLivesETH, claimStarterPack, ensureStarterPack, bootstrapBatch, readStarterPackClaimed } from './onchain.js';
+import { buyBoosterETH, buyLivesETH, claimStarterPack, ensureStarterPack } from './onchain.js';
 import { setupStatus, hideSetupStatus } from './setup-status.js';
 import { Events, setAnalyticsUser } from './analytics.js';
 import './dev-stars.js'; // adds window.__pengu.starDev() — no UI unless enabled
@@ -48,8 +48,13 @@ function migrateLegacyLevelParam() {
 }
 migrateLegacyLevelParam();
 
+// "Session" here means "we have a usable wallet for this browser tab",
+// not the EIP-1271 SIWE marker that older builds required. AGW connection
+// + a live viem walletClient is enough — SIWE was a local-only marker
+// that no server or contract ever read, so dropping it saves one popup
+// from the cold-start flow without changing what the app can prove.
 function hasSession() {
-  return !!getAGWAddress() && isSignedIn();
+  return !!getAGWAddress() && !!getWalletClient();
 }
 
 function showScreen(id) {
@@ -480,7 +485,7 @@ homePlayBtn?.addEventListener('click', async () => {
     }
     if (!getAGWAddress()) {
       Events.agwConnectStart();
-      setupStatus('Connecting Abstract Global Wallet…', { step: 'Step 1 of 3' });
+      setupStatus('Connecting Abstract Global Wallet…');
       try {
         await connectAGW();
         syncHomeConnectUi();
@@ -493,64 +498,21 @@ homePlayBtn?.addEventListener('click', async () => {
         throw e;
       }
     }
-    if (!isSignedIn()) {
-      setupStatus('Sign the SIWE message in your wallet…', { step: 'Step 2 of 3' });
-      try {
-        await signInWithAGW();
-        syncHomeConnectUi();
-        Events.siweSignSuccess(getAGWAddress());
-      } catch (e) {
-        const msg = String(e?.shortMessage || e?.message || e).slice(0, 200);
-        Events.siweSignFail(msg.slice(0, 100));
-        setupStatus('Sign-in failed', { detail: msg, tone: 'error' });
-        hideSetupStatus(6000);
-        throw e;
-      }
-    }
+    // SIWE removed: nothing in the codebase or server stack actually reads
+    // the pengu_siwe marker — it was a local-only "logged in" flag that
+    // cost one popup per cold-start for zero security benefit. AGW
+    // connection (above) already proves wallet ownership.
     setAnalyticsUser(getAGWAddress());
-    // Pull chain state right after sign-in so the map HUD shows the truth.
+    // Pull chain state right after connect so the map HUD shows the truth.
     Inventory.hydrateFromChain().catch(() => {});
 
-    // We only need bootstrap if the player hasn't claimed the starter pack
-    // yet (session-key grant is disabled on mainnet until our contract is
-    // allowlisted in Abstract's SessionKeyPolicyRegistry; trying it just
-    // produces noisy errors). Once registered we'll add it back here.
-    const player = getAGWAddress();
-    let alreadyClaimed = false;
-    try {
-      alreadyClaimed = !!(await readStarterPackClaimed(player));
-    } catch (e) {
-      console.warn('[entry] readStarterPackClaimed failed, assuming not claimed:', e?.shortMessage || e?.message || e);
-    }
-    const needsBootstrap = !alreadyClaimed;
-    console.info('[entry] post-SIWE state: starterClaimed=', alreadyClaimed, 'needsBootstrap=', needsBootstrap);
-
-    if (needsBootstrap) {
-      setupStatus('Claiming your starter pack — confirm one popup…', {
-        step: 'Step 3 of 3',
-        detail: 'One-time on-chain setup. You only need to do this once.',
-      });
-      try {
-        await bootstrapBatch();
-        setupStatus('Ready! Loading map…', { tone: 'ok' });
-        await Inventory.hydrateFromChain().catch(() => {});
-        hideSetupStatus(1500);
-        window.location.href = '/?page=map';
-        return;
-      } catch (err) {
-        const msg = String(err?.shortMessage || err?.message || err).slice(0, 240);
-        console.warn('[entry] bootstrap failed:', msg);
-        Events.sessionKeyFailed?.(msg);
-        if (/reject|denied|cancel/i.test(msg)) {
-          setupStatus('Cancelled', { detail: 'You cancelled the wallet prompt. Tap Play to try again.', tone: 'error' });
-          hideSetupStatus(4000);
-          return;
-        }
-        setupStatus('Starter-pack claim failed', { detail: msg + ' — proceeding to map anyway; you can retry later.', tone: 'error' });
-        // Fall through so the player can still reach the map.
-      }
-    }
-
+    // No eager starter-pack claim popup. The first level-click on the map
+    // fires `startLevelWithSetup`, which atomically bundles
+    // claimStarterPack + startLevel into ONE popup via AGWAccount.batchCall
+    // for brand-new wallets. Returning players (already claimed) just fire
+    // a plain startLevel. Either way the cold-start home flow is just
+    // "Connect Wallet → Map" — a single popup.
+    setupStatus('Ready! Loading map…', { tone: 'ok' });
     hideSetupStatus(1500);
     window.location.href = '/?page=map';
   } catch (err) {
