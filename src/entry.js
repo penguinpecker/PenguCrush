@@ -536,58 +536,40 @@ homePlayBtn?.addEventListener('click', async () => {
         detail: 'After this one popup, gameplay runs silently via the session key',
       });
       try {
-        const r = await bootstrapBatch(1);
+        const r = await bootstrapBatch();
         Events.sessionKeyGranted?.(r?.sessionAddress);
-        setupStatus('Ready! Loading level 1…', { tone: 'ok' });
+        setupStatus('Ready! Loading map…', { tone: 'ok' });
         await Inventory.hydrateFromChain().catch(() => {});
-        setCurrentLevel(1);
         hideSetupStatus(1500);
-        window.location.href = '/?page=play';
+        window.location.href = '/?page=map';
         return;
       } catch (err) {
         const msg = String(err?.shortMessage || err?.message || err).slice(0, 240);
-        console.warn('[entry] bootstrapBatch failed, falling back to sequential prompts:', msg);
+        console.warn('[entry] bootstrap failed:', msg);
         Events.sessionKeyFailed?.(msg);
         if (/reject|denied|cancel/i.test(msg)) {
           setupStatus('Cancelled', { detail: 'You cancelled the wallet prompt. Tap Play to try again.', tone: 'error' });
           hideSetupStatus(4000);
           return;
         }
-        setupStatus('One-tx setup failed — falling back to per-tx prompts', { detail: msg, tone: 'error' });
-        // Fall through to the legacy sequential path so the player can still
-        // proceed even if the batch path errored out for some reason.
+        setupStatus('Session setup failed', { detail: msg + '  —  proceeding to map; gameplay may prompt per tx.', tone: 'error' });
+        // Fall through so the player can still reach the map and at least
+        // try to play with per-tx prompts.
       }
     } else if (needsBootstrap && !agwClient) {
-      console.warn('[entry] needsBootstrap but no agwClient — falling through to legacy prompts');
-      setupStatus('Session manager unavailable — using per-tx prompts', { tone: 'error' });
+      console.warn('[entry] needsBootstrap but no agwClient — gameplay will prompt per tx');
+      setupStatus('Session manager unavailable — gameplay will prompt per tx', { tone: 'error' });
     }
 
-    // Legacy / fallback path — runs only if bootstrap was unavailable or
-    // threw above. Failures here used to be silently swallowed; now they're
-    // surfaced so a degraded session-key state is detectable.
-    if (!hasActiveSession()) {
-      const client = getAgwClient();
-      if (client) {
-        setupStatus('Granting session key…', { step: 'Fallback', detail: 'Confirm in the Privy popup' });
-        try {
-          const r = await grantSession(client);
-          Events.sessionKeyGranted(r?.sessionAddress);
-        } catch (err) {
-          const msg = String(err?.shortMessage || err?.message || err).slice(0, 200);
-          console.warn('[entry] session-key grant failed — gameplay will require per-tx prompts:', msg);
-          Events.sessionKeyFailed(msg);
-          setupStatus('Session-key grant failed', { detail: msg, tone: 'error' });
-        }
-      } else {
-        console.warn('[entry] AGW high-level client not available — session keys disabled');
-        Events.sessionKeyFailed?.('agw_client_missing');
-      }
+    // Make sure the starter pack landed even if bootstrap above threw before
+    // claiming it (idempotent on chain, cheap if already claimed).
+    if (!alreadyClaimed) {
+      try {
+        const r = await ensureStarterPack();
+        if (r.claimed) await Inventory.hydrateFromChain().catch(() => {});
+      } catch (_) { /* non-fatal, retried on next load */ }
     }
-    // V2.3 — claim the one-time starter pack (1 of each booster on chain).
-    setupStatus('Claiming starter pack…', { step: 'Fallback' });
-    const r = await ensureStarterPack();
-    if (r.claimed) await Inventory.hydrateFromChain().catch(() => {});
-    setupStatus('Ready! Loading map…', { tone: 'ok' });
+
     hideSetupStatus(1500);
     window.location.href = '/?page=map';
   } catch (err) {

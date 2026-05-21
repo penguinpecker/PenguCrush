@@ -241,33 +241,25 @@ export function startLevel(level) {
 /**
  * Cold-start bootstrap — sequential, NOT atomic.
  *
- * Previously this tried to bundle createSession + claimStarterPack +
- * startLevel into a single AGW batchCall tx. That blew up in production
- * with "Session key policy violation. Status: Unset" because the Privy
- * cross-app signer auto-picks a validator based on what's installed on
- * the smart wallet, and on a wallet that already has a session module
- * (from any prior attempt) it would route the batchCall through the
- * SESSION validator instead of the EOA validator — and the just-being-
- * added session obviously has no policy for PenguCrushV2 yet, so the
- * wallet rejects with the policy violation.
+ * Does the work that needs to happen ONCE per wallet so subsequent
+ * gameplay is silent: grant a session key + claim the starter pack.
+ * Does NOT call startLevel — the player lands on the MAP after this,
+ * picks the level they want to play, and the map's existing
+ * chainStartLevel call fires silently via the session.
  *
- * There's no public API to tell Privy "use the EOA validator for this
- * one" — agw-client's signPrivyTransaction(client, parameters) hands
- * the whole tx to Privy and Privy decides. So we abandon the in-batch
- * session-creation trick and go back to the proven AGW pattern:
+ * Net cold-start UX (signature count):
+ *   1. AGW Privy login popup
+ *   2. SIWE message sign popup
+ *   3. grantSession popup  ← the one explicit on-chain confirmation
+ *   then everything below is silent if the session is valid:
+ *      • claimStarterPack
+ *      • startLevel(N) when the player picks a level on the map
  *
- *   1. grantSession (one Privy popup)  ← uses agwClient.createSession
- *      which AGW explicitly signs with EOA_VALIDATOR_ADDRESS — Privy
- *      respects that because it's a wallet-management call.
- *   2. claimStarterPack — silent through the freshly-granted session
- *   3. startLevel(level) — silent through the freshly-granted session
- *
- * Net cold-start UX: AGW login + SIWE + ONE Privy popup (the grant) =
- * three signatures, then every gameplay tx is silent via the session
- * key. Returning users with a still-valid local session skip the grant
- * and the whole bootstrap is silent.
+ * The level argument is ignored — kept for backwards-compat with
+ * existing callers — and bootstrap always returns the user to the
+ * map, never to the play screen.
  */
-export async function bootstrapBatch(level) {
+export async function bootstrapBatch(_unusedLevel) {
   const player = getAGWAddress();
   if (!player) throw new Error('wallet not connected');
 
@@ -281,7 +273,7 @@ export async function bootstrapBatch(level) {
     console.warn('[bootstrap] readStarterPackClaimed failed, assuming not claimed:', err?.shortMessage || err?.message || err);
   }
   const sessionLive = hasActiveSession();
-  const included = { session: !sessionLive, starter: !alreadyClaimed, start: true };
+  const included = { session: !sessionLive, starter: !alreadyClaimed };
   console.info('[bootstrap] included=', included);
 
   let sessionAddress = null;
@@ -291,20 +283,11 @@ export async function bootstrapBatch(level) {
     if (!agwClient) {
       console.warn('[bootstrap] no AGW high-level client — cannot grant session, gameplay will prompt per tx');
     } else {
-      try {
-        console.info('[bootstrap] requesting session grant — wallet popup incoming');
-        const { grantSession } = await import('./session-key.js');
-        const r = await grantSession(agwClient);
-        sessionAddress = r?.sessionAddress || null;
-        console.info('[bootstrap] session granted, sessionAddress=', sessionAddress, 'createTxHash=', r?.txHash);
-      } catch (err) {
-        const msg = err?.shortMessage || err?.message || String(err);
-        console.error('[bootstrap] grantSession failed:', msg);
-        // If the user cancelled, propagate so the UI shows it. Otherwise
-        // continue — claimStarterPack + startLevel will fall back to
-        // per-tx wallet prompts but the player can still play.
-        if (/reject|denied|cancel/i.test(msg)) throw err;
-      }
+      console.info('[bootstrap] requesting session grant — wallet popup incoming');
+      const { grantSession } = await import('./session-key.js');
+      const r = await grantSession(agwClient);
+      sessionAddress = r?.sessionAddress || null;
+      console.info('[bootstrap] session granted, sessionAddress=', sessionAddress, 'createTxHash=', r?.txHash);
     }
   }
 
@@ -317,21 +300,16 @@ export async function bootstrapBatch(level) {
     } catch (err) {
       const msg = err?.shortMessage || err?.message || String(err);
       // Tolerate "already claimed" — chain is idempotent here even if our
-      // pre-check missed it (race between two tabs, etc.).
+      // pre-check missed it (race between tabs, etc.).
       if (!/already|StarterPackAlreadyClaimed/i.test(msg)) {
-        console.error('[bootstrap] claimStarterPack failed:', msg);
-        throw err;
+        console.warn('[bootstrap] claimStarterPack failed (non-fatal, will retry on next load):', msg);
+      } else {
+        console.info('[bootstrap] starter pack was already claimed (reverted gracefully)');
       }
-      console.info('[bootstrap] starter pack was already claimed (reverted gracefully)');
     }
   }
 
-  // ── 3. Start the requested level — silent via session ──
-  console.info('[bootstrap] starting level', level, '— should be silent via session');
-  const r = await startLevel(level);
-  console.info('[bootstrap] startLevel landed, hash=', r?.hash, 'used=', r?.used);
-
-  return { hash: r?.hash, used: r?.used, sessionAddress, included };
+  return { sessionAddress, included };
 }
 
 /**
