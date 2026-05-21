@@ -5,6 +5,7 @@ import * as Inventory from './inventory.js';
 import { isLevelUnlocked } from './progress.js';
 import { buyBoosterETH, buyLivesETH, claimStarterPack, ensureStarterPack, bootstrapBatch, readStarterPackClaimed } from './onchain.js';
 import { hasActiveSession, grantSession } from './session-key.js';
+import { setupStatus, hideSetupStatus } from './setup-status.js';
 import { Events, setAnalyticsUser } from './analytics.js';
 import './dev-stars.js'; // adds window.__pengu.starDev() — no UI unless enabled
 import './dev-shop.js';  // adds window.__pengu.shopDev() — align booster grid
@@ -480,22 +481,30 @@ homePlayBtn?.addEventListener('click', async () => {
     }
     if (!getAGWAddress()) {
       Events.agwConnectStart();
+      setupStatus('Connecting Abstract Global Wallet…', { step: 'Step 1 of 3' });
       try {
         await connectAGW();
         syncHomeConnectUi();
         Events.agwConnectSuccess(getAGWAddress());
       } catch (e) {
-        Events.agwConnectFail(String(e?.shortMessage || e?.message || e).slice(0, 100));
+        const msg = String(e?.shortMessage || e?.message || e).slice(0, 200);
+        Events.agwConnectFail(msg.slice(0, 100));
+        setupStatus('Wallet connect failed', { detail: msg, tone: 'error' });
+        hideSetupStatus(6000);
         throw e;
       }
     }
     if (!isSignedIn()) {
+      setupStatus('Sign the SIWE message in your wallet…', { step: 'Step 2 of 3' });
       try {
         await signInWithAGW();
         syncHomeConnectUi();
         Events.siweSignSuccess(getAGWAddress());
       } catch (e) {
-        Events.siweSignFail(String(e?.shortMessage || e?.message || e).slice(0, 100));
+        const msg = String(e?.shortMessage || e?.message || e).slice(0, 200);
+        Events.siweSignFail(msg.slice(0, 100));
+        setupStatus('Sign-in failed', { detail: msg, tone: 'error' });
+        hideSetupStatus(6000);
         throw e;
       }
     }
@@ -503,66 +512,83 @@ homePlayBtn?.addEventListener('click', async () => {
     // Pull chain state right after sign-in so the map HUD shows the truth.
     Inventory.hydrateFromChain().catch(() => {});
 
-    // Detect cold-start: a wallet that's never claimed the starter pack is
-    // brand-new to PenguCrush. For those we collapse {createSession,
-    // claimStarterPack, startLevel(1)} into a single AGW-batched tx so the
-    // player goes through ONE on-chain prompt instead of three, and lands
-    // straight in level 1.
+    // Decide which on-chain setup the player still needs. We were previously
+    // gating bootstrap on "starter pack unclaimed" only — that's wrong, because
+    // a returning user with an expired session locally also benefits from
+    // batching (one createSession + startLevel tx instead of two separate
+    // prompts). So: run bootstrap whenever the local session is gone OR the
+    // starter pack hasn't been claimed yet OR both.
     const player = getAGWAddress();
-    let alreadyClaimed = true;
-    try { alreadyClaimed = await readStarterPackClaimed(player); }
-    catch (_) { alreadyClaimed = false; /* err on the side of running setup */ }
-
+    let alreadyClaimed = false;
+    try {
+      alreadyClaimed = !!(await readStarterPackClaimed(player));
+    } catch (e) {
+      console.warn('[entry] readStarterPackClaimed failed, assuming not claimed:', e?.shortMessage || e?.message || e);
+    }
+    const sessionLive = hasActiveSession();
     const agwClient = getAgwClient();
-    const coldStart = !alreadyClaimed;
+    const needsBootstrap = !sessionLive || !alreadyClaimed;
+    console.info('[entry] post-SIWE state: sessionLive=', sessionLive, 'starterClaimed=', alreadyClaimed, 'agwClient?', !!agwClient, 'needsBootstrap=', needsBootstrap);
 
-    if (coldStart && agwClient) {
+    if (needsBootstrap && agwClient) {
+      setupStatus('Setting up gameplay — one transaction…', {
+        step: 'Step 3 of 3',
+        detail: 'Bundling session key + starter pack + level 1 start into a single tx',
+      });
       try {
         const r = await bootstrapBatch(1);
         Events.sessionKeyGranted?.(r?.sessionAddress);
+        setupStatus('Ready! Loading level 1…', { tone: 'ok' });
         await Inventory.hydrateFromChain().catch(() => {});
         setCurrentLevel(1);
+        hideSetupStatus(1500);
         window.location.href = '/?page=play';
         return;
       } catch (err) {
-        // Surface — don't silently swallow. The user pays for prompts; if
-        // we silently fall through they'd get a wallet prompt for every
-        // gameplay tx with no explanation.
-        const msg = String(err?.shortMessage || err?.message || err).slice(0, 200);
-        console.warn('bootstrapBatch failed, falling back to sequential prompts:', msg);
+        const msg = String(err?.shortMessage || err?.message || err).slice(0, 240);
+        console.warn('[entry] bootstrapBatch failed, falling back to sequential prompts:', msg);
         Events.sessionKeyFailed?.(msg);
-        if (!/reject|denied|cancel/i.test(msg)) {
-          alert('Setup did not complete. You may see extra wallet prompts as we retry.\n\n' + msg);
+        if (/reject|denied|cancel/i.test(msg)) {
+          setupStatus('Cancelled', { detail: 'You cancelled the wallet prompt. Tap Play to try again.', tone: 'error' });
+          hideSetupStatus(4000);
+          return;
         }
+        setupStatus('One-tx setup failed — falling back to per-tx prompts', { detail: msg, tone: 'error' });
         // Fall through to the legacy sequential path so the player can still
-        // proceed.
+        // proceed even if the batch path errored out for some reason.
       }
+    } else if (needsBootstrap && !agwClient) {
+      console.warn('[entry] needsBootstrap but no agwClient — falling through to legacy prompts');
+      setupStatus('Session manager unavailable — using per-tx prompts', { tone: 'error' });
     }
 
-    // Legacy / fallback path — returning user, or batch unavailable / failed.
-    // Failures here used to be silently swallowed; now they're surfaced so a
-    // degraded session-key state is detectable (audit H5 follow-up).
+    // Legacy / fallback path — runs only if bootstrap was unavailable or
+    // threw above. Failures here used to be silently swallowed; now they're
+    // surfaced so a degraded session-key state is detectable.
     if (!hasActiveSession()) {
       const client = getAgwClient();
       if (client) {
+        setupStatus('Granting session key…', { step: 'Fallback', detail: 'Confirm in the Privy popup' });
         try {
           const r = await grantSession(client);
           Events.sessionKeyGranted(r?.sessionAddress);
         } catch (err) {
           const msg = String(err?.shortMessage || err?.message || err).slice(0, 200);
-          console.warn('session-key grant failed — gameplay will require per-tx prompts:', msg);
+          console.warn('[entry] session-key grant failed — gameplay will require per-tx prompts:', msg);
           Events.sessionKeyFailed(msg);
+          setupStatus('Session-key grant failed', { detail: msg, tone: 'error' });
         }
       } else {
-        console.warn('AGW high-level client not available — session keys disabled this load; gameplay will prompt per tx');
+        console.warn('[entry] AGW high-level client not available — session keys disabled');
         Events.sessionKeyFailed?.('agw_client_missing');
       }
     }
     // V2.3 — claim the one-time starter pack (1 of each booster on chain).
-    // Wait for it before navigating so the map / game HUD sees the chain
-    // grant on first load (no flicker of "0 boosters" → starter pack).
+    setupStatus('Claiming starter pack…', { step: 'Fallback' });
     const r = await ensureStarterPack();
     if (r.claimed) await Inventory.hydrateFromChain().catch(() => {});
+    setupStatus('Ready! Loading map…', { tone: 'ok' });
+    hideSetupStatus(1500);
     window.location.href = '/?page=map';
   } catch (err) {
     console.error('AGW connect/sign-in error:', err);

@@ -101,6 +101,10 @@ async function chainWrite(label, functionName, args, options = {}) {
     logTxError({ wallet: account, type: label, error: 'no_client', details: logDetails });
     throw new Error('wallet client missing — reconnect AGW');
   }
+  // Loud per-tx logging so you can see at a glance which calls run silently
+  // through the session key vs which ones pop the wallet. If gameplay calls
+  // are showing 'wallet', the session-key path is broken and needs fixing.
+  console.info(`[chainWrite] ${label} (${functionName}) → ${sessionClient ? 'SESSION (silent)' : 'WALLET (popup)'}${options.requireUserPrompt ? ' [requireUserPrompt]' : ''}${wantSession && !sessionClient ? ' [session unavailable]' : ''}`);
 
   let hash;
   try {
