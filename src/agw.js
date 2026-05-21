@@ -152,6 +152,41 @@ function ensurePrivyProvider() {
     chainId: abstract.id,
     smartWalletMode: true,
   });
+  // accountsChanged listener: catches the case where the user switches
+  // their AGW account in another tab / via Privy UI. Without this we'd
+  // keep signing txs for the OLD account until next page reload.
+  // Strategy: drop everything (session blob, read cache, in-memory
+  // clients) and force a fresh connectAGW from a user gesture.
+  try {
+    _privyProvider.on?.('accountsChanged', async (accounts) => {
+      const next = (accounts?.[0] || '').toLowerCase();
+      const prev = (_signerAddress || '').toLowerCase();
+      if (next === prev) return; // identity — nothing to do
+      console.warn('[agw] accountsChanged detected', { prev, next });
+      // Drop wallet-scoped session blob for the prior signer so it
+      // can't be reused under the new identity.
+      const priorSmartWallet = _address;
+      try { await clearSessionFor(priorSmartWallet); } catch (_) {}
+      // Bust the chain-read cache — old wallet's cached lives /
+      // inventory / best-results would otherwise leak into the new
+      // wallet's UI.
+      try {
+        const { bustReadCache } = await import('./onchain.js');
+        bustReadCache();
+      } catch (_) {}
+      // Tear down in-memory state and force the user to re-connect
+      // from a click (avoids consuming a popup gesture without one).
+      disconnectAGW();
+      // Notify the rest of the app via a custom event so screens can
+      // re-render / redirect to home without polling.
+      try { window.dispatchEvent(new CustomEvent('pengu:walletSwitched', { detail: { next, prev } })); } catch (_) {}
+      // Belt-and-braces: hard reload so any retained references in
+      // closures (Three.js scenes, viem clients) come up clean.
+      try { setTimeout(() => { location.href = '/'; }, 50); } catch (_) {}
+    });
+  } catch (err) {
+    console.warn('[agw] failed to attach accountsChanged listener:', err?.message || err);
+  }
   return _privyProvider;
 }
 
@@ -271,6 +306,9 @@ export function disconnectAGW() {
   // Fire-and-forget — clearing localStorage doesn't need to block disconnect.
   const prev = _address;
   if (prev) clearSessionFor(prev).catch(() => {});
+  // Invalidate the chain-read cache so a fresh connect (potentially to a
+  // different wallet) doesn't see the prior wallet's cached state.
+  import('./onchain.js').then(m => m.bustReadCache?.()).catch(() => {});
   if (_privyProvider) {
     try {
       _privyProvider.request({

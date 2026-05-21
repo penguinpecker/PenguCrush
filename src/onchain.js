@@ -214,6 +214,10 @@ async function chainWrite(label, functionName, args, options = {}) {
       const status = receipt.status === 'success' ? 'success' : 'reverted';
       logTxResult(rowId, { status, txHash: hash, blockNumber: Number(receipt.blockNumber) });
       if (status !== 'success') throw new Error(`reverted (status=${receipt.status})`);
+      // Successful write — invalidate the chain-read cache so the next
+      // getLives / getInventory / getBestResult etc. picks up the new
+      // on-chain state instead of returning a stale cached value.
+      bustReadCache();
       return { hash, receipt, used: sessionClient ? 'session' : 'wallet' };
     } catch (err) {
       const msg = err?.shortMessage || err?.message || String(err);
@@ -222,18 +226,72 @@ async function chainWrite(label, functionName, args, options = {}) {
       throw err;
     }
   }
+  // Fire-and-forget path also busts — the tx is in flight, we'd rather
+  // refetch than return cached pre-write state on the next read.
+  bustReadCache();
   // Fire-and-forget — we already logged "submitted"; outcome will be visible on Abscan.
   return { hash, used: sessionClient ? 'session' : 'wallet' };
 }
 
+/// Per-method TTL for read cache. Tuned so frequently-changing state
+/// (lives, regen timer) re-fetches quickly while truly static fields
+/// (sku prices, claimed-starter-pack flag) stick around for the
+/// whole tab session. Any chainWrite success bust the whole cache
+/// (see chainWrite above), so these ceilings are upper bounds only —
+/// stale reads after a write don't happen.
+const READ_TTL_MS = {
+  claimedStarterPack:    Infinity,
+  skuPriceUsdMicros:     Infinity,
+  getCrushPass:          60_000,
+  lastWheelDay:          60_000,
+  getPlayers:            30_000,
+  getPlayerCount:        30_000,
+  getLeaderboardBatch:   30_000,
+  getBestResult:         30_000,
+  getInventory:          15_000,
+  getLives:              5_000,
+  getNextRegenIn:        5_000,
+};
+const READ_TTL_DEFAULT = 10_000;
+const READ_CACHE = new Map(); // cacheKey → { value, expiresAt }
+
+/// Stable JSON stringification that handles BigInt — viem returns
+/// BigInts in arg arrays and JSON.stringify on a BigInt throws.
+function stableArgs(args) {
+  try {
+    return JSON.stringify(args, (_, v) => typeof v === 'bigint' ? `${v}n` : v);
+  } catch (_) {
+    return Array.isArray(args) ? args.map(String).join(',') : String(args);
+  }
+}
+
 async function chainRead(functionName, args = []) {
+  const ttl = READ_TTL_MS[functionName] ?? READ_TTL_DEFAULT;
+  const key = `${functionName}:${stableArgs(args)}`;
+  const now = Date.now();
+  const cached = READ_CACHE.get(key);
+  if (cached && cached.expiresAt > now) return cached.value;
   const pc = getPublicClient();
-  return pc.readContract({
+  const value = await pc.readContract({
     address: PENGUCRUSH_ADDRESS,
     abi: penguCrushAbi,
     functionName,
     args,
   });
+  // Infinity TTL → expiresAt = Number.POSITIVE_INFINITY; never expires
+  // until manual bust (cache fully cleared on every chainWrite).
+  const expiresAt = ttl === Infinity ? Number.POSITIVE_INFINITY : now + ttl;
+  READ_CACHE.set(key, { value, expiresAt });
+  return value;
+}
+
+/**
+ * Invalidate the entire chain-read cache. Called automatically from
+ * chainWrite on success, and from agw.js on wallet switch / disconnect
+ * so a new wallet doesn't see the previous wallet's cached state.
+ */
+export function bustReadCache() {
+  READ_CACHE.clear();
 }
 
 /**
