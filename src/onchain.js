@@ -29,17 +29,21 @@ const QUOTE_API_BASE =
   ENV.VITE_QUOTE_API_BASE ||
   'https://saftqlwxmdqxzfuwdgtu.supabase.co/functions/v1';
 
-/// Abstract's official general-purpose paymaster. Every tx that goes through
-/// it is GASLESS for the user — paymaster pays the network fee, user only
-/// approves the action itself. This is the pattern Abstract's own examples
-/// (and production AGW apps like jarrodwatts/plinko, axestract, mines) use.
-/// Override via VITE_ABSTRACT_PAYMASTER if Abstract rotates the address.
-export const ABSTRACT_PAYMASTER =
-  ENV.VITE_ABSTRACT_PAYMASTER || '0x5407B5040dec3D339A9247f3654E59EEccbb6391';
+/// Optional paymaster sponsorship. The address Abstract docs reference
+/// (`0x5407B5040dec3D339A9247f3654E59EEccbb6391`) is deployed on Abstract
+/// TESTNET only — `eth_getCode` against it on mainnet returns `0x` (no
+/// contract). Production mainnet apps either (a) deploy their own
+/// GeneralPaymaster and fund it, or (b) ship without sponsorship and let
+/// the user pay their own gas (axestract pattern: empty paymaster on
+/// mainnet). Until we deploy our own paymaster on mainnet, we leave
+/// VITE_ABSTRACT_PAYMASTER unset — the constant resolves to '' and
+/// chainWrite below skips the sponsorship fields entirely.
+export const ABSTRACT_PAYMASTER = (ENV.VITE_ABSTRACT_PAYMASTER || '').trim();
 
-/// Static general-paymaster input (no extra calldata). Encoded once at module
-/// load — same payload for every gameplay tx.
-const GENERAL_PAYMASTER_INPUT = getGeneralPaymasterInput({ innerInput: '0x' });
+/// Encoded once at module load when (and only when) a paymaster is set.
+const GENERAL_PAYMASTER_INPUT = ABSTRACT_PAYMASTER
+  ? getGeneralPaymasterInput({ innerInput: '0x' })
+  : undefined;
 
 const penguCrushAbi = Array.isArray(penguCrushAbiJson) ? penguCrushAbiJson : penguCrushAbiJson.abi || [];
 
@@ -121,6 +125,15 @@ async function chainWrite(label, functionName, args, options = {}) {
 
   let hash;
   try {
+    // Optional paymaster sponsorship — only spread the fields if
+    // VITE_ABSTRACT_PAYMASTER is set AND the paymaster contract is
+    // deployed on the active chain. On Abstract mainnet there is no
+    // Abstract-deployed general paymaster, so until we deploy our own
+    // these fields are omitted and the user pays their own gas — the
+    // same pattern axestract uses in production.
+    const sponsorship = ABSTRACT_PAYMASTER
+      ? { paymaster: ABSTRACT_PAYMASTER, paymasterInput: GENERAL_PAYMASTER_INPUT }
+      : {};
     hash = await client.writeContract({
       address: PENGUCRUSH_ADDRESS,
       abi: penguCrushAbi,
@@ -129,15 +142,7 @@ async function chainWrite(label, functionName, args, options = {}) {
       account,
       chain: abstract,
       value: options.value || 0n,
-      // Gasless. Abstract's general paymaster sponsors every tx that goes
-      // through this client — user only approves the action itself, never
-      // sees "approve $X gas" in the popup. Matches the production pattern
-      // used by every official Abstract example + jarrodwatts/plinko,
-      // axestract, web4-js/mines. Shop functions that carry `value` (ETH
-      // / USDC purchases) still send the payment to treasury; the paymaster
-      // only covers gas.
-      paymaster: ABSTRACT_PAYMASTER,
-      paymasterInput: GENERAL_PAYMASTER_INPUT,
+      ...sponsorship,
     });
   } catch (err) {
     const msg = err?.shortMessage || err?.message || String(err);
@@ -307,7 +312,7 @@ export async function bootstrapBatch(_unusedLevel) {
     return { sessionAddress: null, included: { session: false, starter: false } };
   }
 
-  console.info('[bootstrap] claiming starter pack (gasless via paymaster)');
+  console.info('[bootstrap] claiming starter pack');
   try {
     await claimStarterPack();
     console.info('[bootstrap] starter pack claimed');

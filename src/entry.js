@@ -526,9 +526,9 @@ homePlayBtn?.addEventListener('click', async () => {
     console.info('[entry] post-SIWE state: starterClaimed=', alreadyClaimed, 'needsBootstrap=', needsBootstrap);
 
     if (needsBootstrap) {
-      setupStatus('Claiming your starter pack — confirm one gasless popup…', {
+      setupStatus('Claiming your starter pack — confirm one popup…', {
         step: 'Step 3 of 3',
-        detail: 'Abstract sponsors the gas — you only approve the action',
+        detail: 'One-time on-chain setup. You only need to do this once.',
       });
       try {
         await bootstrapBatch();
