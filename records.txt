@@ -25,6 +25,16 @@ Contracts (LEGACY — will be deprecated by v2):
   v1 proxy owner               0x5fc1542618222BC6ECD0912e9B1F8D9a929Ed331
   Authorized relayer (v1)      0x6cB7318BCb62bec46F4A48E0E8d4E4E9EB0Ce6d3
 
+Contracts (V2 — current, on Abstract mainnet chainId 2741):
+  PenguCrushV2 UUPS proxy      0x06aCb91c46aD1359825560B19A9556118Aeb1896
+  PenguCrushV2 impl (V2.7)     0x4F82066ae2924B1EAd467A22C79FD1606718193E
+  PenguCrushPaymaster (parked) 0xE40e31e8DAD86F9b9C4B9e178CC838c500c09bB9
+                               (deployed 2026-05-22; target-restricted to
+                                PenguCrushV2; funded 0.005 ETH. NOT wired
+                                in production — VITE_ABSTRACT_PAYMASTER
+                                unset on Vercel per user decision. Re-enable
+                                gasless = set the env var, no contract action.)
+
 Owners / treasury / relayer (v2):
   Deployer EOA                 0xDdbbc73A42814c42943095cc7F51762fb038BC9A
                                (contract owner; admin actions only —
@@ -318,6 +328,122 @@ Frontend:
     on-chain lives + regen events + signed-quote oracle + USDC path. AGW
     session keys remove the per-tx prompt UX issue.
 
+2026-05-22 — Session 3: audit fixes + cold-start UX rebuild
+  Frontend-only session. No contract upgrades (V2.7 still live). Everything
+  below is shipped to production at https://www.pengucrush.com via Vercel
+  `main` auto-deploy. Listing ONLY what landed; experiments that didn't ship
+  are intentionally omitted.
+
+  ▸ Audit fixes from the line-by-line review (Sessions 1+2 backlog):
+      H2  breakAll objective replaced score-only placeholder with proper
+          per-blocker destroyed-count check (walls + fallers excluded).
+      H5  Session blob now cleared on disconnect + wallet switch
+          (audit gap: stale key resurrected on reconnect).
+      H6  waitForTransactionReceipt bounded to 120s; timeout logged
+          distinctly from revert so a sequencer stall stops pinning UI.
+      H8  Booster click pre-validates target before consumeBooster —
+          misclick on wall / frozen tile no longer burns the charge.
+      H9  Shuffle booster retries up to 6 layouts until at least one
+          valid swap exists (hasAnyValidSwap helper). No more dead
+          boards after shuffle.
+      H12 pengu-regen-sweep body capped at 500 players (deduped +
+          regex-validated); outer loop capped at 10 batches with
+          per-batch try/catch + failed[] in response.
+
+  ▸ Cold-start signature count: 4 popups → 2 popups
+      A. New startLevelWithSetup(level) in src/onchain.js — when starter
+         pack is unclaimed, AGW.batchCall fires {claimStarterPack,
+         startLevel(N)} atomically in ONE popup. Returning players get
+         a plain startLevel. Cache-busts on success.
+      B. SIWE dropped from cold-start. hasSession() now reads only the
+         persisted AGW address (walletClient lives in module memory
+         and resets on every page nav, so requiring it bounced users
+         back to home after the post-connect redirect). signInWithAGW
+         + pengu_siwe code kept in agw.js for back-compat but no
+         first-party caller anymore.
+
+  ▸ Session-key hardening (dormant on mainnet until Abstract
+    Foundation allowlists our contract in SessionKeyPolicyRegistry
+    at 0xfD20…cC9F, but ready to flip on):
+      ▸ AES-GCM encryption of session blob via src/session-crypto.js
+        (was plaintext; any extension or crash dump could scrape).
+      ▸ On-chain getSessionStatus() validation in getSessionClient —
+        revoked / closed sessions are detected pre-write. 60s TTL
+        cache so we don't spam the RPC.
+      ▸ Policy fingerprint stored alongside every session — if
+        GAMEPLAY_METHODS changes, all old session blobs are dropped
+        on next load (forces re-grant with correct policy set).
+
+  ▸ Friendly error mapper (src/errors.js, ~1.9 kB chunk, dynamically
+    imported). Single regex table replaces the lowBalance / noLives /
+    user-rejected / nonce / timeout duplicates that were copy-pasted
+    across entry.js, map.js (3 sites), game.js. Every alert now goes
+    through alertFriendly(err, fallbackTitle).
+
+  ▸ Low-balance pre-flight in chainWrite — getBalance(player) before
+    opening the popup. Catches zero/insufficient AGW ETH balance
+    BEFORE the wallet prompt opens, so players see "Top up your AGW"
+    instead of a post-popup revert.
+
+  ▸ Per-method TTL read cache wrapping chainRead. Tuned table:
+      claimedStarterPack / skuPriceUsdMicros : Infinity
+      getCrushPass / lastWheelDay            : 60 s
+      getPlayers / getPlayerCount /
+      getLeaderboardBatch / getBestResult    : 30 s
+      getInventory                           : 15 s
+      getLives / getNextRegenIn              :  5 s
+      (default 10 s)
+    bustReadCache() fires on every chainWrite success AND inside
+    startLevelWithSetup's batchCall success path (separate code path
+    that doesn't go through chainWrite, so it has its own bust).
+
+  ▸ accountsChanged listener attached to the Privy provider. External
+    AGW account switch in another tab → clear session blob for
+    prior signer, bust read cache, disconnectAGW, hard reload to /.
+    Guarded with `if (!prev) return` so Privy's initial-connect
+    emission (prev='', next=newAddr) is NOT treated as a switch —
+    that bug was bouncing users back to home immediately after a
+    successful first connect.
+
+  ▸ Stray claimStarterPack call removed from map.js initMap. It was
+    firing on every map mount from a non-gesture async chain →
+    "Failed to initialize request" popup-blocked errors. Starter
+    pack now claims EXCLUSIVELY inside startLevelWithSetup's batch.
+
+  ▸ requestAccountsWithUserPopup restored to original conditional
+    pre-open. Earlier "always pre-open defensively" change was
+    flashing a blank popup window on every silent reconnect during
+    page navs (~50-200ms visible). Now pre-opens only when cached
+    cross-app blob is absent (i.e., genuine first connect).
+
+  ▸ getAGWAddress: 2nd GA4 property (G-CVRP3XWW56) was briefly added
+    then reverted same day — it duplicated the existing G-R5T4Y4B629
+    tracking we already had configured.
+
+  ▸ Paymaster sponsorship explored but parked:
+      ▸ PenguCrushPaymaster.sol deployed at
+        0xE40e31e8DAD86F9b9C4B9e178CC838c500c09bB9 (target-restricted
+        to PenguCrushV2 to prevent drain). Funded 0.005 ETH.
+        Deploy tx 0x6c3f8b9a7dddb617e722df2493b66059ee45c3b80af64df029b2356df1ee08e8.
+        Owner = 0xDdbbc73A…BC9A.
+      ▸ NOT wired in production. User explicitly declined gas
+        sponsorship — players pay own gas. VITE_ABSTRACT_PAYMASTER
+        is unset on Vercel (production + preview + development);
+        chainWrite reads the env at build and omits paymaster fields
+        when empty.
+      ▸ Contract is parked: 0.005 ETH inside, owner can withdrawAll
+        any time. Re-enabling gasless is a one-line env-var set.
+
+  ▸ End-to-end verification on this wallet (0x90C4846d…80f6):
+      ▸ Pre-fix on-chain state: ZERO submitLevels in entire history
+        despite multiple play attempts (every level transition
+        bounced off the post-redirect "back to home" bug).
+      ▸ Post-fix: startLevel(1) tx 0x316cddb7… and submitAndStartNext
+        tx 0x98d9fd7f… both landed cleanly at block 63727489.
+      ▸ getBestResult(player, 1) → level=1, score=3020, stars=1,
+        moves=7. getPlayerStats → highestLevel=1, gamesWon=1.
+        First successful submission this wallet has ever recorded.
+
 ═══════════════════════════════════════════════════════════════════════════════
 2. ARCHITECTURE DECISIONS
 ═══════════════════════════════════════════════════════════════════════════════
@@ -428,6 +554,22 @@ ADR-005 (2026-05-18) — AGW session keys for in-game txs
 ═══════════════════════════════════════════════════════════════════════════════
 4. DEPLOYMENT HISTORY
 ═══════════════════════════════════════════════════════════════════════════════
+
+2026-05-22  PenguCrushPaymaster (parked — gas sponsorship NOT activated)
+  paymaster        0xE40e31e8DAD86F9b9C4B9e178CC838c500c09bB9
+  target           0x06aCb91c46aD1359825560B19A9556118Aeb1896 (PenguCrushV2)
+  owner            0xDdbbc73A42814c42943095cc7F51762fb038BC9A (deployer)
+  deploy tx        0x6c3f8b9a7dddb617e722df2493b66059ee45c3b80af64df029b2356df1ee08e8
+  fund tx          0xb67840a4c0cb83837e8143ba742326d15321b221e82ef92ac332d7ee7108e828
+  funded           0.005 ETH (~7-15k gameplay txs at current Abstract gas)
+  source           contracts/PenguCrushPaymaster.sol — self-contained zkSync
+                   EIP-712 paymaster; refuses any tx whose `to` != target
+                   (drain-proof against arbitrary-target abuse). Owner has
+                   withdraw(addr, amount) + withdrawAll(addr) + transferOwnership.
+  status           DEPLOYED + FUNDED but NOT WIRED on production. User declined
+                   gas sponsorship; VITE_ABSTRACT_PAYMASTER unset on Vercel,
+                   so chainWrite omits paymaster fields and players pay own gas.
+                   Re-enable = set the env var + redeploy (no contract action).
 
 2026-05-18  PenguCrushV2.7 (regen target = 5, kills "4/5 + Full!" bug)
   proxy            0x06aCb91c46aD1359825560B19A9556118Aeb1896 (unchanged)

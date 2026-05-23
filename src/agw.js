@@ -34,6 +34,18 @@ function persist(addr) {
 
 function clearSignIn() { localStorage.removeItem(SIGNIN_KEY); }
 
+// Dynamic import to avoid the session-key.js ↔ agw.js cycle (session-key.js
+// already imports getAGWAddress from here). Caller awaits.
+async function clearSessionFor(addr) {
+  if (!addr) return;
+  try {
+    const mod = await import('./session-key.js');
+    mod.clearSessionForAddress?.(addr);
+  } catch (_) {
+    // session-key module unavailable — nothing to clear
+  }
+}
+
 function getPopupFeatures(width = 440, height = 680) {
   const leftEdge = window.screenLeft ?? window.screenX ?? 0;
   const topEdge = window.screenTop ?? window.screenY ?? 0;
@@ -56,16 +68,28 @@ function hasStoredCrossAppConnection() {
 }
 
 async function requestAccountsWithUserPopup(privy) {
+  // Happy path: when localStorage already has a non-expired Privy cross-app
+  // connection blob, Privy resolves eth_requestAccounts from cache without
+  // opening any popup at all. Pre-opening a defensive popup in this case
+  // creates a visible blank-window flash on every page navigation / silent
+  // reconnect — which is exactly what was happening after the audit's
+  // last-but-one round of fixes.
   if (hasStoredCrossAppConnection()) {
     await privy.request({ method: 'eth_requestAccounts' });
     return;
   }
 
-  // The cross-app connector does async setup before calling window.open().
-  // Pre-open the popup from the real click, then let Privy navigate it.
+  // No cached blob → Privy will need to open an auth popup. We're inside
+  // a user-gesture handler (homePlayBtn click) so window.open is allowed.
+  // Pre-open a blank popup synchronously and let Privy navigate it.
+  // The cross-app connector does async setup before calling window.open
+  // internally — without this pre-open the gesture is consumed by the
+  // async await and Privy throws "Failed to initialize request".
   const originalOpen = window.open.bind(window);
   const popup = originalOpen('', undefined, getPopupFeatures());
   if (!popup) {
+    // Browser blocked even the pre-open. Fall through and let Privy
+    // surface its own popup-blocked error to the caller.
     await privy.request({ method: 'eth_requestAccounts' });
     return;
   }
@@ -137,6 +161,52 @@ function ensurePrivyProvider() {
     chainId: abstract.id,
     smartWalletMode: true,
   });
+  // accountsChanged listener: catches the case where the user switches
+  // their AGW account in another tab / via Privy UI. Without this we'd
+  // keep signing txs for the OLD account until next page reload.
+  // Strategy: drop everything (session blob, read cache, in-memory
+  // clients) and force a fresh connectAGW from a user gesture.
+  try {
+    _privyProvider.on?.('accountsChanged', async (accounts) => {
+      const next = (accounts?.[0] || '').toLowerCase();
+      const prev = (_signerAddress || '').toLowerCase();
+      // CRITICAL: skip when prev is empty. Privy emits accountsChanged
+      // during the very first eth_requestAccounts resolution to deliver
+      // the freshly-connected EOA to listeners — that's NOT a wallet
+      // switch, it's the initial connect itself. Without this guard,
+      // every cold-start would trigger disconnectAGW + a reload 50ms
+      // after the user successfully connects, looking like the connect
+      // silently failed and dumping them back on the home screen.
+      if (!prev) return;
+      if (next === prev) return; // identity — nothing to do
+      // Same guard for the "disconnected externally" case — accounts
+      // can be []. If we never had a wallet, ignore.
+      if (!next && !prev) return;
+      console.warn('[agw] accountsChanged detected', { prev, next });
+      // Drop wallet-scoped session blob for the prior signer so it
+      // can't be reused under the new identity.
+      const priorSmartWallet = _address;
+      try { await clearSessionFor(priorSmartWallet); } catch (_) {}
+      // Bust the chain-read cache — old wallet's cached lives /
+      // inventory / best-results would otherwise leak into the new
+      // wallet's UI.
+      try {
+        const { bustReadCache } = await import('./onchain.js');
+        bustReadCache();
+      } catch (_) {}
+      // Tear down in-memory state and force the user to re-connect
+      // from a click (avoids consuming a popup gesture without one).
+      disconnectAGW();
+      // Notify the rest of the app via a custom event so screens can
+      // re-render / redirect to home without polling.
+      try { window.dispatchEvent(new CustomEvent('pengu:walletSwitched', { detail: { next, prev } })); } catch (_) {}
+      // Belt-and-braces: hard reload so any retained references in
+      // closures (Three.js scenes, viem clients) come up clean.
+      try { setTimeout(() => { location.href = '/'; }, 50); } catch (_) {}
+    });
+  } catch (err) {
+    console.warn('[agw] failed to attach accountsChanged listener:', err?.message || err);
+  }
   return _privyProvider;
 }
 
@@ -163,7 +233,15 @@ export async function connectAGW() {
 
   // 4. Get AGW smart contract wallet address
   const agwAccounts = await _agwProvider.request({ method: 'eth_accounts' });
-  _address = agwAccounts[0] || _signerAddress;
+  const newAddress = agwAccounts[0] || _signerAddress;
+
+  // Wallet switch: drop any session key bound to the previous address before
+  // overwriting `_address`, so a switch can't silently inherit prior auth
+  // (audit H5).
+  if (_address && newAddress && _address.toLowerCase() !== newAddress.toLowerCase()) {
+    await clearSessionFor(_address);
+  }
+  _address = newAddress;
 
   // 5. Build viem clients
   _walletClient = createWalletClient({
@@ -192,6 +270,15 @@ export async function connectAGW() {
           chain: abstract,
           signer: signerAccount,
           transport: custom(privy),
+          // CRITICAL: without this flag, AGW routes batch / session
+          // transactions through the EOA's signTypedData (which our
+          // toAccount intentionally rejects with "not used") and the
+          // call throws — bootstrapBatch then silently falls back to
+          // the legacy multi-prompt path. With isPrivyCrossApp=true,
+          // signing routes through Privy's privy_signSmartWalletTx
+          // method, which uses the same popup we already pre-opened
+          // and reuses the user's Privy session.
+          isPrivyCrossApp: true,
         });
       }
     }
@@ -234,6 +321,14 @@ export async function signInWithAGW() {
 
 /** Disconnect (clear local state + revoke permissions) */
 export function disconnectAGW() {
+  // Wipe the local session key for the wallet we're about to drop so a later
+  // reconnect to the same wallet can't silently resurrect it (audit H5).
+  // Fire-and-forget — clearing localStorage doesn't need to block disconnect.
+  const prev = _address;
+  if (prev) clearSessionFor(prev).catch(() => {});
+  // Invalidate the chain-read cache so a fresh connect (potentially to a
+  // different wallet) doesn't see the prior wallet's cached state.
+  import('./onchain.js').then(m => m.bustReadCache?.()).catch(() => {});
   if (_privyProvider) {
     try {
       _privyProvider.request({

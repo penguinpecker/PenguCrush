@@ -8,10 +8,11 @@
 //  payment prompt.
 // ═══════════════════════════════════════════════════════════════
 
-import { getWalletClient, ensureWalletClient, getAGWAddress, getPublicClient } from './agw.js';
-import { getSessionClient } from './session-key.js';
+import { getWalletClient, ensureWalletClient, getAGWAddress, getPublicClient, getAgwClient } from './agw.js';
+import { getSessionClient, hasActiveSession, prepareSessionGrantCall } from './session-key.js';
 import { abstract } from 'viem/chains';
 import { keccak256, toBytes, encodeAbiParameters, parseAbiParameters } from 'viem';
+import { getGeneralPaymasterInput } from 'viem/zksync';
 import { logTxSubmitted, logTxResult, logTxError } from './tx-log.js';
 import penguCrushAbiJson from '../contracts/PenguCrushABI.json';
 
@@ -27,6 +28,22 @@ export const USDC_ADDRESS =
 const QUOTE_API_BASE =
   ENV.VITE_QUOTE_API_BASE ||
   'https://saftqlwxmdqxzfuwdgtu.supabase.co/functions/v1';
+
+/// Optional paymaster sponsorship. The address Abstract docs reference
+/// (`0x5407B5040dec3D339A9247f3654E59EEccbb6391`) is deployed on Abstract
+/// TESTNET only — `eth_getCode` against it on mainnet returns `0x` (no
+/// contract). Production mainnet apps either (a) deploy their own
+/// GeneralPaymaster and fund it, or (b) ship without sponsorship and let
+/// the user pay their own gas (axestract pattern: empty paymaster on
+/// mainnet). Until we deploy our own paymaster on mainnet, we leave
+/// VITE_ABSTRACT_PAYMASTER unset — the constant resolves to '' and
+/// chainWrite below skips the sponsorship fields entirely.
+export const ABSTRACT_PAYMASTER = (ENV.VITE_ABSTRACT_PAYMASTER || '').trim();
+
+/// Encoded once at module load when (and only when) a paymaster is set.
+const GENERAL_PAYMASTER_INPUT = ABSTRACT_PAYMASTER
+  ? getGeneralPaymasterInput({ innerInput: '0x' })
+  : undefined;
 
 const penguCrushAbi = Array.isArray(penguCrushAbiJson) ? penguCrushAbiJson : penguCrushAbiJson.abi || [];
 
@@ -50,9 +67,25 @@ function isDisabled() {
 
 // ── Internal write helper ─────────────────────────────────────
 
+/// Patterns AGW / zksync surface when a session key is no longer usable —
+/// usually because the lifetime fee budget (0.05 ETH) is exhausted, or the
+/// 24h TTL expired, or the session was revoked. Hitting any of these is the
+/// signal to ask the user for a fresh session and retry the write through it.
+const SESSION_EXHAUSTED_RX = /session[-_ ]?(expired|closed|invalid|exhaust|disabled|revoked)|feeLimit|fee[-_ ]?limit|FeeLimit|SessionLib|sessionState|validation\s+failed|hook validation failed|no longer authorized/i;
+
+function looksLikeSessionExhausted(msg) {
+  return SESSION_EXHAUSTED_RX.test(String(msg || ''));
+}
+
 /**
  * Send a write. If a session key is granted for this method, use it (silent
  * tx, no prompt). Otherwise route through the user's AGW (prompts).
+ *
+ * Auto-renewal: if a session-key write fails with a "session exhausted /
+ * expired / fee-limit hit" error, we clear the local blob, ask the user to
+ * sign one re-grant, then retry the write through the fresh session. Net UX
+ * is a single extra prompt when the 0.05 ETH lifetime budget runs out (or
+ * the 24h TTL hits) instead of an unexplained revert.
  */
 async function chainWrite(label, functionName, args, options = {}) {
   const account = getAGWAddress();
@@ -71,8 +104,43 @@ async function chainWrite(label, functionName, args, options = {}) {
     logTxError({ wallet: '0x0000000000000000000000000000000000000000', type: label, error: 'wallet_not_connected', details: logDetails });
     throw new Error('wallet not connected');
   }
+
+  // Low-balance pre-flight — catches "AGW wallet has 0 ETH" BEFORE we
+  // open the popup, so the player sees a clear "fund your AGW" message
+  // instead of approving a tx that then reverts with "insufficient
+  // funds for gas". Paymaster (if set) covers gas, so when sponsored we
+  // only need to gate on the value field (shop ETH purchases).
+  //
+  // Reserve: ~0.0005 ETH covers any single Abstract gameplay tx with
+  // plenty of headroom — slightly generous on purpose to avoid false
+  // positives on price spikes.
+  if (!options.skipBalanceCheck) {
+    try {
+      const pc = getPublicClient();
+      const bal = await pc.getBalance({ address: account });
+      const valueNeeded = options.value || 0n;
+      const gasReserve = ABSTRACT_PAYMASTER ? 0n : 500000000000000n; // 0.0005 ETH
+      const required = valueNeeded + gasReserve;
+      if (bal < required) {
+        const have = (Number(bal) / 1e18).toFixed(6);
+        const need = (Number(required) / 1e18).toFixed(6);
+        const reason = valueNeeded > 0n
+          ? `Insufficient balance: ${have} ETH on Abstract, need ~${need} ETH (purchase${gasReserve > 0n ? ' + gas' : ''}). Top up your AGW wallet.`
+          : `Insufficient balance: ${have} ETH on Abstract, need ~${need} ETH for gas. Top up your AGW wallet.`;
+        logTxError({ wallet: account, type: label, error: 'low_balance', details: { ...logDetails, balanceWei: String(bal), requiredWei: String(required) } });
+        throw new Error(reason);
+      }
+    } catch (err) {
+      // If our own pre-flight error is what bubbled, re-throw verbatim.
+      if (/^Insufficient balance/.test(err?.message || '')) throw err;
+      // Anything else (transient RPC failure, etc.) is logged but not fatal —
+      // we still let the write proceed; the chain will surface its own error.
+      console.warn('[chainWrite] balance pre-check failed (proceeding):', err?.message || err);
+    }
+  }
+
   const wantSession = !options.requireUserPrompt;
-  const sessionClient = wantSession ? await getSessionClient(functionName).catch(() => null) : null;
+  let sessionClient = wantSession ? await getSessionClient(functionName).catch(() => null) : null;
   let client;
   try {
     client = sessionClient || await ensureWalletClient();
@@ -85,9 +153,22 @@ async function chainWrite(label, functionName, args, options = {}) {
     logTxError({ wallet: account, type: label, error: 'no_client', details: logDetails });
     throw new Error('wallet client missing — reconnect AGW');
   }
+  // Loud per-tx logging so you can see at a glance which calls run silently
+  // through the session key vs which ones pop the wallet. If gameplay calls
+  // are showing 'wallet', the session-key path is broken and needs fixing.
+  console.info(`[chainWrite] ${label} (${functionName}) → ${sessionClient ? 'SESSION (silent)' : 'WALLET (popup)'}${options.requireUserPrompt ? ' [requireUserPrompt]' : ''}${wantSession && !sessionClient ? ' [session unavailable]' : ''}`);
 
   let hash;
   try {
+    // Optional paymaster sponsorship — only spread the fields if
+    // VITE_ABSTRACT_PAYMASTER is set AND the paymaster contract is
+    // deployed on the active chain. On Abstract mainnet there is no
+    // Abstract-deployed general paymaster, so until we deploy our own
+    // these fields are omitted and the user pays their own gas — the
+    // same pattern axestract uses in production.
+    const sponsorship = ABSTRACT_PAYMASTER
+      ? { paymaster: ABSTRACT_PAYMASTER, paymasterInput: GENERAL_PAYMASTER_INPUT }
+      : {};
     hash = await client.writeContract({
       address: PENGUCRUSH_ADDRESS,
       abi: penguCrushAbi,
@@ -96,10 +177,25 @@ async function chainWrite(label, functionName, args, options = {}) {
       account,
       chain: abstract,
       value: options.value || 0n,
+      ...sponsorship,
     });
   } catch (err) {
     const msg = err?.shortMessage || err?.message || String(err);
     const rejected = /reject|denied|cancel/i.test(msg);
+
+    // Auto-renewal path: only kicks in when (a) the failed write was via the
+    // session client, (b) the error looks like a session-exhausted signature,
+    // (c) the user didn't just cancel, and (d) we're not in a recursive
+    // retry already (options._retriedAfterRenew prevents loops).
+    if (sessionClient && !rejected && !options._retriedAfterRenew && looksLikeSessionExhausted(msg)) {
+      const renewed = await _renewSessionInteractive(account, label, msg).catch(() => false);
+      if (renewed) {
+        // Retry via the freshly-granted session. Mark the recursive flag so
+        // a second failure doesn't loop us back into another re-grant prompt.
+        return chainWrite(label, functionName, args, { ...options, _retriedAfterRenew: true });
+      }
+    }
+
     logTxError({ wallet: account, type: label, error: rejected ? `user_rejected: ${msg}` : `writeContract: ${msg}`, details: { ...logDetails, used: sessionClient ? 'session' : 'wallet' } });
     throw err;
   }
@@ -111,29 +207,147 @@ async function chainWrite(label, functionName, args, options = {}) {
   if (options.waitForReceipt !== false) {
     const pc = getPublicClient();
     try {
-      const receipt = await pc.waitForTransactionReceipt({ hash, confirmations: 1 });
+      // Bounded wait so a sequencer / RPC stall can't pin the level-popup
+      // Next button forever. 120 s is well past Abstract's ~2 s block time
+      // and well past a normal worst-case sequencer hiccup (audit H6).
+      const receipt = await pc.waitForTransactionReceipt({ hash, confirmations: 1, timeout: 120_000 });
       const status = receipt.status === 'success' ? 'success' : 'reverted';
       logTxResult(rowId, { status, txHash: hash, blockNumber: Number(receipt.blockNumber) });
       if (status !== 'success') throw new Error(`reverted (status=${receipt.status})`);
+      // Successful write — invalidate the chain-read cache so the next
+      // getLives / getInventory / getBestResult etc. picks up the new
+      // on-chain state instead of returning a stale cached value.
+      bustReadCache();
       return { hash, receipt, used: sessionClient ? 'session' : 'wallet' };
     } catch (err) {
       const msg = err?.shortMessage || err?.message || String(err);
-      logTxResult(rowId, { status: 'reverted', txHash: hash, error: `receipt: ${msg}` });
+      const isTimeout = /timed?\s*out|timeout|WaitForTransactionReceiptTimeoutError/i.test(msg);
+      logTxResult(rowId, { status: isTimeout ? 'timeout' : 'reverted', txHash: hash, error: `receipt: ${msg}` });
       throw err;
     }
   }
+  // Fire-and-forget path also busts — the tx is in flight, we'd rather
+  // refetch than return cached pre-write state on the next read.
+  bustReadCache();
   // Fire-and-forget — we already logged "submitted"; outcome will be visible on Abscan.
   return { hash, used: sessionClient ? 'session' : 'wallet' };
 }
 
+/// Per-method TTL for read cache. Tuned so frequently-changing state
+/// (lives, regen timer) re-fetches quickly while truly static fields
+/// (sku prices, claimed-starter-pack flag) stick around for the
+/// whole tab session. Any chainWrite success bust the whole cache
+/// (see chainWrite above), so these ceilings are upper bounds only —
+/// stale reads after a write don't happen.
+const READ_TTL_MS = {
+  claimedStarterPack:    Infinity,
+  skuPriceUsdMicros:     Infinity,
+  getCrushPass:          60_000,
+  lastWheelDay:          60_000,
+  getPlayers:            30_000,
+  getPlayerCount:        30_000,
+  getLeaderboardBatch:   30_000,
+  getBestResult:         30_000,
+  getInventory:          15_000,
+  getLives:              5_000,
+  getNextRegenIn:        5_000,
+};
+const READ_TTL_DEFAULT = 10_000;
+const READ_CACHE = new Map(); // cacheKey → { value, expiresAt }
+
+/// Stable JSON stringification that handles BigInt — viem returns
+/// BigInts in arg arrays and JSON.stringify on a BigInt throws.
+function stableArgs(args) {
+  try {
+    return JSON.stringify(args, (_, v) => typeof v === 'bigint' ? `${v}n` : v);
+  } catch (_) {
+    return Array.isArray(args) ? args.map(String).join(',') : String(args);
+  }
+}
+
 async function chainRead(functionName, args = []) {
+  const ttl = READ_TTL_MS[functionName] ?? READ_TTL_DEFAULT;
+  const key = `${functionName}:${stableArgs(args)}`;
+  const now = Date.now();
+  const cached = READ_CACHE.get(key);
+  if (cached && cached.expiresAt > now) return cached.value;
   const pc = getPublicClient();
-  return pc.readContract({
+  const value = await pc.readContract({
     address: PENGUCRUSH_ADDRESS,
     abi: penguCrushAbi,
     functionName,
     args,
   });
+  // Infinity TTL → expiresAt = Number.POSITIVE_INFINITY; never expires
+  // until manual bust (cache fully cleared on every chainWrite).
+  const expiresAt = ttl === Infinity ? Number.POSITIVE_INFINITY : now + ttl;
+  READ_CACHE.set(key, { value, expiresAt });
+  return value;
+}
+
+/**
+ * Invalidate the entire chain-read cache. Called automatically from
+ * chainWrite on success, and from agw.js on wallet switch / disconnect
+ * so a new wallet doesn't see the previous wallet's cached state.
+ */
+export function bustReadCache() {
+  READ_CACHE.clear();
+}
+
+/**
+ * Ask the user to re-grant a fresh AGW session key after the current one
+ * exhausted (fee budget hit / TTL expired / revoked). One wallet prompt —
+ * the createSession tx. Returns true on success, false if the user
+ * cancelled or the AGW client wasn't available. The caller is expected
+ * to retry the original write through the new session after this resolves.
+ *
+ * Deduped: parallel writes that all trip the exhaustion check await a
+ * single in-flight renewal instead of all popping separate prompts.
+ */
+let _renewInFlight = null;
+async function _renewSessionInteractive(walletAddr, triggeringLabel, originalErrMsg) {
+  if (_renewInFlight) return _renewInFlight;
+  _renewInFlight = (async () => {
+    try {
+      const agwClient = getAgwClient();
+      if (!agwClient) {
+        console.warn('[session-renew] no AGW client — cannot renew');
+        return false;
+      }
+      const { clearSessionForAddress, grantSession } = await import('./session-key.js');
+      // Drop the stale local blob so getSessionClient stops returning a
+      // dead client during the renewal window.
+      clearSessionForAddress(walletAddr);
+
+      // Best-effort analytics — module is optional in case of refactor.
+      try {
+        const { Events } = await import('./analytics.js');
+        Events.sessionKeyFailed?.(`renew_triggered_by_${triggeringLabel}: ${String(originalErrMsg).slice(0, 80)}`);
+      } catch (_) { /* ignore */ }
+
+      console.info('[session-renew] prompting user to renew session-key (triggered by ' + triggeringLabel + ')');
+      const r = await grantSession(agwClient);
+
+      try {
+        const { Events } = await import('./analytics.js');
+        Events.sessionKeyGranted?.(r?.sessionAddress);
+      } catch (_) { /* ignore */ }
+
+      return true;
+    } catch (err) {
+      const msg = err?.shortMessage || err?.message || String(err);
+      // User cancelled the renewal popup — fine, just don't retry.
+      if (/reject|denied|cancel/i.test(msg)) {
+        console.info('[session-renew] user declined renewal');
+      } else {
+        console.warn('[session-renew] grantSession threw:', msg);
+      }
+      return false;
+    } finally {
+      _renewInFlight = null;
+    }
+  })();
+  return _renewInFlight;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -142,6 +356,190 @@ async function chainRead(functionName, args = []) {
 
 export function startLevel(level) {
   return chainWrite('startLevel', 'startLevel', [Number(level)]);
+}
+
+// AGWAccount.batchCall(Call[]) ABI fragment — used to atomically fire
+// multiple sub-calls (claimStarterPack + startLevel) inside one popup.
+// `assertSessionKeyPolicies` in agw-client only fires when a sub-call
+// encodes a session-creation; pure gameplay batches sail through it.
+const AGW_BATCH_CALL_ABI = [{
+  type: 'function',
+  name: 'batchCall',
+  stateMutability: 'payable',
+  outputs: [],
+  inputs: [{
+    name: '_calls',
+    type: 'tuple[]',
+    internalType: 'struct Call[]',
+    components: [
+      { name: 'target',       type: 'address' },
+      { name: 'allowFailure', type: 'bool'    },
+      { name: 'value',        type: 'uint256' },
+      { name: 'callData',     type: 'bytes'   },
+    ],
+  }],
+}];
+
+/**
+ * Start a level, optionally fused with the first-time starter pack claim.
+ *
+ * - Returning player (starter pack already claimed): plain startLevel — one
+ *   popup.
+ * - Brand-new player (starter pack not yet claimed): one batched tx that
+ *   fires claimStarterPack + startLevel(level) atomically on the smart
+ *   wallet via AGWAccount.batchCall — still one popup, but the player
+ *   ends up with their starter pack inventory by the time the game
+ *   board renders.
+ *
+ * Called from the map's level-click handler (instead of plain
+ * chainStartLevel) so the cold-start flow never has to fire an explicit
+ * popup for claimStarterPack.
+ */
+export async function startLevelWithSetup(level) {
+  const { encodeFunctionData } = await import('viem');
+  const player = getAGWAddress();
+  if (!player) throw new Error('wallet not connected');
+
+  let alreadyClaimed = false;
+  try { alreadyClaimed = !!(await readStarterPackClaimed(player)); }
+  catch (err) {
+    console.warn('[startLevelWithSetup] readStarterPackClaimed failed, assuming not claimed:', err?.shortMessage || err?.message || err);
+  }
+
+  if (alreadyClaimed) {
+    console.info('[startLevelWithSetup] returning player — plain startLevel(' + level + ')');
+    return startLevel(level);
+  }
+
+  console.info('[startLevelWithSetup] cold-start — batching claimStarterPack + startLevel(' + level + ') into one popup');
+  const calls = [
+    {
+      target: PENGUCRUSH_ADDRESS,
+      allowFailure: false,
+      value: 0n,
+      callData: encodeFunctionData({ abi: penguCrushAbi, functionName: 'claimStarterPack', args: [] }),
+    },
+    {
+      target: PENGUCRUSH_ADDRESS,
+      allowFailure: false,
+      value: 0n,
+      callData: encodeFunctionData({ abi: penguCrushAbi, functionName: 'startLevel', args: [Number(level)] }),
+    },
+  ];
+
+  const walletClient = await ensureWalletClient();
+  const logDetails = { batchLen: calls.length, level: Number(level), path: 'AGWAccount.batchCall' };
+  const rowId = await logTxSubmitted({ wallet: player, type: 'startLevelWithSetup', details: logDetails });
+
+  // Optional paymaster sponsorship (matches chainWrite behavior — empty by
+  // default until VITE_ABSTRACT_PAYMASTER is set).
+  const sponsorship = ABSTRACT_PAYMASTER
+    ? { paymaster: ABSTRACT_PAYMASTER, paymasterInput: GENERAL_PAYMASTER_INPUT }
+    : {};
+
+  let hash;
+  try {
+    hash = await walletClient.writeContract({
+      address: player,
+      abi: AGW_BATCH_CALL_ABI,
+      functionName: 'batchCall',
+      args: [calls],
+      account: player,
+      chain: abstract,
+      value: 0n,
+      ...sponsorship,
+    });
+  } catch (err) {
+    const msg = err?.shortMessage || err?.message || String(err);
+    const rejected = /reject|denied|cancel/i.test(msg);
+    console.error('[startLevelWithSetup] batchCall write failed:', msg);
+    logTxResult(rowId, { status: 'error', error: rejected ? `user_rejected: ${msg}` : `batchCall: ${msg}` });
+    throw err;
+  }
+
+  try {
+    const pc = getPublicClient();
+    const receipt = await pc.waitForTransactionReceipt({ hash, confirmations: 1, timeout: 120_000 });
+    const status = receipt.status === 'success' ? 'success' : 'reverted';
+    logTxResult(rowId, { status, txHash: hash, blockNumber: Number(receipt.blockNumber) });
+    if (status !== 'success') throw new Error(`startLevelWithSetup reverted (status=${receipt.status})`);
+    // This is a write that goes through walletClient.writeContract directly
+    // (not through chainWrite, so the auto-bust there doesn't fire). Without
+    // this explicit call the cached claimedStarterPack=false (TTL=Infinity)
+    // would persist for the whole tab → next level click would batch
+    // claimStarterPack AGAIN → revert StarterPackAlreadyClaimed → the whole
+    // atomic batch fails and the player can't start any more levels.
+    bustReadCache();
+    return { hash, receipt, used: 'batch' };
+  } catch (err) {
+    const msg = err?.shortMessage || err?.message || String(err);
+    const isTimeout = /timed?\s*out|timeout|WaitForTransactionReceiptTimeoutError/i.test(msg);
+    logTxResult(rowId, { status: isTimeout ? 'timeout' : 'reverted', txHash: hash, error: `receipt: ${msg}` });
+    throw err;
+  }
+}
+
+/**
+ * Cold-start bootstrap — minimal, paymaster-sponsored.
+ *
+ * What this does:
+ *   - Claims the one-time starter pack on chain (gasless via paymaster).
+ *
+ * What this DOESN'T do (and why):
+ *   - Does NOT grant a session key. Abstract's `assertSessionKeyPolicies`
+ *     check in `agw-client/sessionValidator` requires our contract to be
+ *     registered in `SessionKeyPolicyRegistry` (`0xfD20…cC9F`). Until that
+ *     registration lands, every grantSession call throws `Status: Unset`
+ *     before even opening a popup. Trying it just produces noisy console
+ *     errors with no upside. Code is left in `session-key.js` so the
+ *     session path can be re-enabled here in one line when registration
+ *     completes — see `enableSessionGrant` switch in entry.js.
+ *   - Does NOT call startLevel. The player lands on the MAP and picks
+ *     the level themselves.
+ *
+ * Cold-start signature count today (without registration):
+ *   1. AGW Privy login popup
+ *   2. SIWE message sign popup
+ *   3. claimStarterPack popup (GASLESS via paymaster)
+ *   → map screen → one gasless popup per level transition
+ *
+ * Cold-start signature count after registration (just flip the switch
+ * in entry.js to re-enable grantSession):
+ *   1. AGW Privy login popup
+ *   2. SIWE message sign popup
+ *   3. grantSession popup (gasless, persistent — covers gameplay for 24h)
+ *   → silent gameplay (no popups for startLevel / submitLevel / etc.)
+ */
+export async function bootstrapBatch(_unusedLevel) {
+  const player = getAGWAddress();
+  if (!player) throw new Error('wallet not connected');
+  console.info('[bootstrap] start, player=', player);
+
+  let alreadyClaimed = false;
+  try {
+    alreadyClaimed = !!(await readStarterPackClaimed(player));
+  } catch (err) {
+    console.warn('[bootstrap] readStarterPackClaimed failed, assuming not claimed:', err?.shortMessage || err?.message || err);
+  }
+  if (alreadyClaimed) {
+    console.info('[bootstrap] starter pack already claimed — nothing to do');
+    return { sessionAddress: null, included: { session: false, starter: false } };
+  }
+
+  console.info('[bootstrap] claiming starter pack');
+  try {
+    await claimStarterPack();
+    console.info('[bootstrap] starter pack claimed');
+  } catch (err) {
+    const msg = err?.shortMessage || err?.message || String(err);
+    if (/already|StarterPackAlreadyClaimed/i.test(msg)) {
+      console.info('[bootstrap] starter pack was already claimed (race-tolerated)');
+    } else {
+      throw err;
+    }
+  }
+
+  return { sessionAddress: null, included: { session: false, starter: true } };
 }
 
 /**

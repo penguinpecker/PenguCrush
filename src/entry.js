@@ -1,10 +1,10 @@
 import './style.css';
 import './map.css';
-import { getAGWAddress, isSignedIn, connectAGW, signInWithAGW, getAgwClient, getWalletClient } from './agw.js';
+import { getAGWAddress, connectAGW, getWalletClient } from './agw.js';
 import * as Inventory from './inventory.js';
 import { isLevelUnlocked } from './progress.js';
 import { buyBoosterETH, buyLivesETH, claimStarterPack, ensureStarterPack } from './onchain.js';
-import { hasActiveSession, grantSession } from './session-key.js';
+import { setupStatus, hideSetupStatus } from './setup-status.js';
 import { Events, setAnalyticsUser } from './analytics.js';
 import './dev-stars.js'; // adds window.__pengu.starDev() — no UI unless enabled
 import './dev-shop.js';  // adds window.__pengu.shopDev() — align booster grid
@@ -48,8 +48,16 @@ function migrateLegacyLevelParam() {
 }
 migrateLegacyLevelParam();
 
+// "Session" here means "we know which wallet this browser tab belongs to".
+// We check ONLY the persisted address (loaded from localStorage on module
+// init), NOT the live viem walletClient — the walletClient lives in
+// module memory and resets every page navigation, so requiring it here
+// would bounce the user back to home immediately after the post-connect
+// redirect lands on /?page=map. The silent-reconnect block in boot()
+// below is responsible for re-hydrating the walletClient when address
+// is present but client is null.
 function hasSession() {
-  return !!getAGWAddress() && isSignedIn();
+  return !!getAGWAddress();
 }
 
 function showScreen(id) {
@@ -398,12 +406,8 @@ document.querySelectorAll('.shop-tag[data-item]').forEach(tagEl => {
       Events.shopBuyFail(itemType, qty, 'ETH', msg);
       console.warn('Shop purchase failed:', msg);
       if (labelEl) labelEl.textContent = 'Failed';
-      const lowBalance = /insufficient balance|insufficient funds|out of gas/i.test(msg);
-      if (!/reject|denied|cancel/i.test(msg)) {
-        alert(lowBalance
-          ? 'Your AGW wallet is out of ETH for gas on Abstract.\n\nFund your AGW address with a small amount of ETH on Abstract mainnet, then retry.'
-          : `Shop purchase failed:\n\n${msg}`);
-      }
+      const { alertFriendly } = await import('./errors.js');
+      alertFriendly(err, 'Shop purchase failed.');
     } finally {
       setTimeout(() => {
         if (labelEl && origLabel) labelEl.textContent = origLabel;
@@ -480,46 +484,35 @@ homePlayBtn?.addEventListener('click', async () => {
     }
     if (!getAGWAddress()) {
       Events.agwConnectStart();
+      setupStatus('Connecting Abstract Global Wallet…');
       try {
         await connectAGW();
         syncHomeConnectUi();
         Events.agwConnectSuccess(getAGWAddress());
       } catch (e) {
-        Events.agwConnectFail(String(e?.shortMessage || e?.message || e).slice(0, 100));
+        const msg = String(e?.shortMessage || e?.message || e).slice(0, 200);
+        Events.agwConnectFail(msg.slice(0, 100));
+        setupStatus('Wallet connect failed', { detail: msg, tone: 'error' });
+        hideSetupStatus(6000);
         throw e;
       }
     }
-    if (!isSignedIn()) {
-      try {
-        await signInWithAGW();
-        syncHomeConnectUi();
-        Events.siweSignSuccess(getAGWAddress());
-      } catch (e) {
-        Events.siweSignFail(String(e?.shortMessage || e?.message || e).slice(0, 100));
-        throw e;
-      }
-    }
+    // SIWE removed: nothing in the codebase or server stack actually reads
+    // the pengu_siwe marker — it was a local-only "logged in" flag that
+    // cost one popup per cold-start for zero security benefit. AGW
+    // connection (above) already proves wallet ownership.
     setAnalyticsUser(getAGWAddress());
-    // Pull chain state right after sign-in so the map HUD shows the truth.
-    await Inventory.hydrateFromChain().catch(() => {});
-    // One-time AGW session-key grant so in-game txs auto-execute. Failures
-    // here are non-fatal — txs will just fall back to AGW prompts.
-    if (!hasActiveSession()) {
-      const client = getAgwClient();
-      if (client) {
-        try {
-          const r = await grantSession(client);
-          Events.sessionKeyGranted(r?.sessionAddress);
-        } catch (err) {
-          Events.sessionKeyFailed(String(err?.message || err).slice(0, 100));
-        }
-      }
-    }
-    // V2.3 — claim the one-time starter pack (1 of each booster on chain).
-    // Wait for it before navigating so the map / game HUD sees the chain
-    // grant on first load (no flicker of "0 boosters" → starter pack).
-    const r = await ensureStarterPack();
-    if (r.claimed) await Inventory.hydrateFromChain().catch(() => {});
+    // Pull chain state right after connect so the map HUD shows the truth.
+    Inventory.hydrateFromChain().catch(() => {});
+
+    // No eager starter-pack claim popup. The first level-click on the map
+    // fires `startLevelWithSetup`, which atomically bundles
+    // claimStarterPack + startLevel into ONE popup via AGWAccount.batchCall
+    // for brand-new wallets. Returning players (already claimed) just fire
+    // a plain startLevel. Either way the cold-start home flow is just
+    // "Connect Wallet → Map" — a single popup.
+    setupStatus('Ready! Loading map…', { tone: 'ok' });
+    hideSetupStatus(1500);
     window.location.href = '/?page=map';
   } catch (err) {
     console.error('AGW connect/sign-in error:', err);

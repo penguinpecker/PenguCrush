@@ -26,9 +26,23 @@
       "pyth": "0x8739d5024B5143278E2b15Bd9e7C26f6CEc658F1",
       "pythEthUsdId": "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
       "pythGuardEnabled": false,
-      "abscanVerificationIds": { "proxy": 12781, "implementation_v2_0": 12780, "implementation_v2_1": 12782, "implementation_v2_2": 12783, "implementation_v2_3": "verified" },
+      "abscanVerificationIds": {
+        "proxy": 12781,
+        "implementation_v2_0": 12780,
+        "implementation_v2_1": 12782,
+        "implementation_v2_2": 12783,
+        "implementation_v2_3": "verified"
+      },
       "deployedAt": "2026-05-18T07:09:28.151Z",
       "deployedBy": "0xDdbbc73A42814c42943095cc7F51762fb038BC9A"
+    },
+    "PenguCrushPaymaster": {
+      "address": "0xE40e31e8DAD86F9b9C4B9e178CC838c500c09bB9",
+      "target": "0x06aCb91c46aD1359825560B19A9556118Aeb1896",
+      "owner": "0xDdbbc73A42814c42943095cc7F51762fb038BC9A",
+      "deployTx": "0x6c3f8b9a7dddb617e722df2493b66059ee45c3b80af64df029b2356df1ee08e8",
+      "deployedAt": "2026-05-21T20:31:21.628Z",
+      "fundedEth": "0.005"
     }
   }
 }

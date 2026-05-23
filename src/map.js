@@ -200,22 +200,12 @@ export function initMap() {
   Events.mapView();
   setAnalyticsUser(getWallet());
 
-  // V2.3 — auto-claim the one-time starter pack on every map load. The chain
-  // already enforces one-per-wallet (StarterPackAlreadyClaimed), so this is
-  // safe to fire whenever; the read-check below skips when it's already done.
-  // This catches users who signed in before V2.3 shipped and would otherwise
-  // never trigger the home-page first-connect flow.
-  (async () => {
-    const w = getWallet();
-    if (!w) return;
-    try {
-      const already = await readStarterPackClaimed(w);
-      if (!already) {
-        await claimStarterPack();
-        await Inventory.hydrateFromChain().catch(() => {});
-      }
-    } catch (_) { /* non-fatal */ }
-  })();
+  // Starter pack claim is now handled lazily inside startLevelWithSetup
+  // (batched with the first startLevel call into one popup). Previously
+  // this block fired claimStarterPack() from a non-gesture async chain
+  // on EVERY map mount — which was both a ghost popup attempt (no user
+  // gesture, so Privy throws "Failed to initialize request") AND
+  // redundant with the batched flow. Removed entirely.
 
   const stage = document.getElementById('mapStage');
   const nodesContainer = document.getElementById('mapNodes');
@@ -352,16 +342,6 @@ export function initMap() {
     agwBtn.disabled = true;
     try {
       await connectAGW();
-      agwBtn.textContent = 'Sign in…';
-      try {
-        await signInWithAGW();
-      } catch (sigErr) {
-        console.warn('AGW sign-in rejected:', sigErr);
-        disconnectAGW();
-        updateAgwBtn();
-        alert('Signature required to sign in. Please try again.');
-        return;
-      }
       updateAgwBtn();
       loadProgress(); // refresh map with wallet data
     } catch (err) {
@@ -543,10 +523,14 @@ export function initMap() {
     popupPlayBtn.classList.add('pop-play--disabled');
     if (origLabel) popupPlayBtn.textContent = 'Confirming…';
     try {
-      const { startLevel: chainStartLevel } = await import('./onchain.js');
-      const result = await chainStartLevel(currentPopupLevel.id);
-      // Defense in depth: chainWrite already throws on revert, but guard
-      // against a future code path that resolves without an actual receipt.
+      // startLevelWithSetup: returning players get a plain startLevel tx;
+      // brand-new players (starter pack not yet claimed) get a SINGLE
+      // batched tx that fires claimStarterPack + startLevel atomically.
+      // Either way the player only sees one popup at this step.
+      const { startLevelWithSetup } = await import('./onchain.js');
+      const result = await startLevelWithSetup(currentPopupLevel.id);
+      // Defense in depth: throws on revert already, but guard against a
+      // future code path that resolves without an actual receipt.
       if (!result?.hash || !/^0x[0-9a-fA-F]+$/.test(result.hash)) {
         throw new Error(`startLevel returned no tx hash (got ${JSON.stringify(result)})`);
       }
@@ -554,18 +538,11 @@ export function initMap() {
       await Inventory.hydrateFromChain().catch(() => {});
       window.__pengu.goToLevel(currentPopupLevel.id);
     } catch (err) {
-      const msg = String(err?.shortMessage || err?.message || err).slice(0, 240);
-      console.warn('startLevel failed:', msg);
-      const lowBalance = /insufficient balance|insufficient funds|out of gas/i.test(msg);
-      const noLives = /NoLives|no lives|0x[0-9a-f]{0,8}.*[Ll]ives/.test(msg);
-      if (!/reject|denied|cancel/i.test(msg)) {
-        alert(lowBalance
-          ? 'Your AGW wallet is out of ETH for gas on Abstract.\n\nFund your AGW address with a small amount of ETH on Abstract mainnet, then retry.'
-          : noLives
-          ? 'No lives left. Wait for regen or buy more from the shop.'
-          : `Could not start the level on chain:\n\n${msg}\n\nNo life was consumed — try again.`);
-      }
-      if (noLives || /NoLives/i.test(msg)) {
+      console.warn('startLevel failed:', err?.shortMessage || err?.message || err);
+      const { alertFriendly, friendlyError } = await import('./errors.js');
+      const { cta } = friendlyError(err);
+      alertFriendly(err, 'Could not start this level on chain.');
+      if (cta === 'lives') {
         await Inventory.hydrateFromChain().catch(() => {});
         renderLivesHud();
       }
@@ -782,24 +759,16 @@ export function initMap() {
       const msg = String(err?.shortMessage || err?.message || err).slice(0, 300);
       console.warn('Wheel spin failed:', msg);
       Events.wheelSpinFail(msg);
-      const lowBalance = /insufficient balance|insufficient funds|out of gas/i.test(msg);
-      const alreadySpun = /already spun|WheelAlreadySpun|409/i.test(msg);
-      if (alreadySpun) {
+      const { friendlyError, alertFriendly } = await import('./errors.js');
+      const { user: friendly } = friendlyError(err);
+      if (/already spun|wheelalreadyspun|409/i.test(msg)) {
         Inventory.markDailySpun();
       }
       if (dailyResult) {
-        dailyResult.textContent = lowBalance
-          ? 'Spin failed: your AGW wallet has no ETH for gas. Fund it on Abstract mainnet and retry.'
-          : `Spin failed: ${msg.slice(0, 140)}`;
+        dailyResult.textContent = friendly;
         dailyResult.hidden = false;
       }
-      if (!/reject|denied|cancel/i.test(msg)) {
-        alert(lowBalance
-          ? 'Your AGW wallet is out of ETH for gas on Abstract.\n\nFund your AGW address with a small amount of ETH on Abstract mainnet, then retry the spin.'
-          : alreadySpun
-          ? 'You already spun the wheel today. Come back tomorrow!'
-          : `Daily wheel spin failed:\n\n${msg}`);
-      }
+      alertFriendly(err, 'Daily wheel spin failed.');
     } finally {
       dailySpinning = false;
       refreshSpinButtonState();
@@ -1129,12 +1098,8 @@ export function initMap() {
     } catch (err) {
       const msg = String(err?.shortMessage || err?.message || err).slice(0, 200);
       Events.passBuyFail(msg);
-      const lowBalance = /insufficient balance|insufficient funds|out of gas/i.test(msg);
-      if (!/reject|denied|cancel/i.test(msg)) {
-        alert(lowBalance
-          ? 'Your AGW wallet is out of ETH for gas on Abstract.\n\nFund your AGW address with a small amount of ETH on Abstract mainnet, then retry.'
-          : 'Pass purchase failed: ' + msg);
-      }
+      const { alertFriendly } = await import('./errors.js');
+      alertFriendly(err, 'Pass purchase failed.');
     } finally {
       crushPassBuyBtn.textContent = origText;
       crushPassBuyBtn.disabled = false;
