@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { createGLTFLoader } from './gltf-loader.js';
-import { getLevel, hasLevel } from './levels.js';
+import { getLevel, hasLevel, getObjectiveChip } from './levels.js';
 import { getWallet, ensureWallet, saveLevelResult } from './supabase.js';
 import * as Inventory from './inventory.js';
 import { startLevel as chainStartLevel, submitLevel as chainSubmitLevel, submitAndStartNext as chainSubmitAndStartNext, sku as nameToSku } from './onchain.js';
@@ -116,6 +116,17 @@ const objective = { ...CONFIG.objective };
 let tilesCleared = {};
 let blockersDestroyed = {};
 let totalTilesCleared = 0;
+/** HUD display count — lags behind tilesCleared while collect FX fly in. */
+let goalDisplayCount = 0;
+const goalIconBakeCache = {};
+const OBJECTIVE_TILE_COLORS = {
+  fish: 0xff7043,
+  popsicle: 0x7cb342,
+  ice: 0x4fc3f7,
+  frostice: 0xe0f0ff,
+  shrimp: 0xff5544,
+  crab: 0xff8844,
+};
 
 // Game timing
 const gameStartTime = performance.now();
@@ -124,6 +135,7 @@ const gameStartTime = performance.now();
 let turnCount = 0;
 const fallerConfig = CONFIG.blockers.find(b => b.type === 'faller');
 let fallerDropsPenalized = 0;
+let fallerDropCycles = 0;
 
 // Set background based on era
 if (CONFIG.bg) {
@@ -795,8 +807,7 @@ async function animRowBoosterFx(row) {
     const startDelay = (distFromCenter / Math.max(centerCol, 1)) * sweepDur * 0.48;
 
     board[row][c] = null;
-    tilesCleared[tile.type] = (tilesCleared[tile.type] || 0) + 1;
-    totalTilesCleared++;
+    recordTileCleared(tile.type, tile.mesh.position.clone());
     particles(tile.mesh.position.clone(), 0x00bfff);
 
     const captured = tile;
@@ -917,8 +928,7 @@ async function animColBoosterFx(col) {
     const startDelay = (distFromCenter / Math.max(centerRow, 1)) * sweepDur * 0.48;
 
     board[r][col] = null;
-    tilesCleared[tile.type] = (tilesCleared[tile.type] || 0) + 1;
-    totalTilesCleared++;
+    recordTileCleared(tile.type, tile.mesh.position.clone());
     particles(tile.mesh.position.clone(), 0x00ced1);
 
     const captured = tile;
@@ -1344,11 +1354,11 @@ async function removeMatches(matched) {
     const [r, c] = k.split(',').map(Number);
     if (board[r][c]) {
       const tileType = board[r][c].type;
-      particles(board[r][c].mesh.position.clone(), cols[tileType] || 0xfff);
+      const wp = board[r][c].mesh.position.clone();
+      particles(wp, cols[tileType] || 0xfff);
       ps.push(animDestroy(board[r][c].mesh));
 
-      tilesCleared[tileType] = (tilesCleared[tileType] || 0) + 1;
-      totalTilesCleared++;
+      recordTileCleared(tileType, wp);
 
       // Check adjacent cells for frozen tiles to unfreeze
       for (const [dr, dc] of [[0,1],[0,-1],[1,0],[-1,0]]) {
@@ -1531,6 +1541,7 @@ async function processFallers() {
   if (!fallerConfig) return;
   turnCount++;
   if (turnCount % fallerConfig.interval !== 0) return;
+  fallerDropCycles++;
   spawnFaller();
   await delay(200);
   await dropFallers();
@@ -1549,7 +1560,23 @@ async function resolveLevelStateAfterBoardSettled() {
   }
 }
 
-function checkObjective() {
+function meetsScoreTarget() {
+  return score >= CONFIG.targetScore;
+}
+
+function countRemainingBreakableBlockers() {
+  let n = 0;
+  for (let r = 0; r < GRID; r++) {
+    for (let c = 0; c < GRID; c++) {
+      const t = board[r]?.[c];
+      if (!t || t.isWall || t.isFaller) continue;
+      if (t.frozen || (t.iceLayer || 0) > 0) n++;
+    }
+  }
+  return n;
+}
+
+function meetsPrimaryObjective() {
   const obj = CONFIG.objective;
   switch (obj.type) {
     case 'score':
@@ -1560,17 +1587,318 @@ function checkObjective() {
     case 'breakBlocker':
       return (blockersDestroyed[obj.blockerType] || 0) >= obj.count;
     case 'breakAll':
-      // Check no blockers remain on board (placeholder — blockers not placed yet)
-      return score >= CONFIG.targetScore;
+      return countRemainingBreakableBlockers() === 0;
     case 'clearPercent': {
       const total = GRID * GRID;
       return totalTilesCleared >= Math.ceil(total * obj.percent / 100);
     }
-    case 'combo':
-      return score >= obj.scoreTarget;
+    case 'combo': {
+      if (obj.blockerType != null && obj.blockerCount != null) {
+        if ((blockersDestroyed[obj.blockerType] || 0) < obj.blockerCount) return false;
+      }
+      if (obj.surviveDrops != null && fallerDropCycles < obj.surviveDrops) return false;
+      return true;
+    }
     default:
-      return score >= CONFIG.targetScore;
+      return true;
   }
+}
+
+function checkObjective() {
+  return meetsPrimaryObjective() && meetsScoreTarget();
+}
+
+function countsForObjectiveTile(tileType) {
+  const obj = CONFIG.objective;
+  if (obj?.type !== 'clearTile') return false;
+  return obj.tileType === 'any' || obj.tileType === tileType;
+}
+
+function shouldAnimateObjectiveCollect(tileType) {
+  return countsForObjectiveTile(tileType) && !!getObjectiveChip(CONFIG);
+}
+
+function recordTileCleared(tileType, worldPos = null) {
+  tilesCleared[tileType] = (tilesCleared[tileType] || 0) + 1;
+  totalTilesCleared++;
+  if (shouldAnimateObjectiveCollect(tileType)) {
+    spawnObjectiveCollectFx(worldPos, tileType);
+  } else if (countsForObjectiveTile(tileType)) {
+    goalDisplayCount = getActualObjectiveTileCount();
+    syncGoalHud();
+    const gc = document.getElementById('goalCanvas');
+    if (gc) drawHUDPanel(gc);
+  }
+}
+
+function getActualObjectiveTileCount() {
+  const obj = CONFIG.objective;
+  if (obj?.type !== 'clearTile') return goalDisplayCount;
+  return obj.tileType === 'any'
+    ? totalTilesCleared
+    : (tilesCleared[obj.tileType] || 0);
+}
+
+function syncGoalDisplayToActual() {
+  goalDisplayCount = getActualObjectiveTileCount();
+}
+
+function worldToScreen(worldPos) {
+  const v = worldPos.clone().project(camera);
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: rect.left + (v.x * 0.5 + 0.5) * rect.width,
+    y: rect.top + (-v.y * 0.5 + 0.5) * rect.height,
+  };
+}
+
+function getGoalHudTargetScreenPoint() {
+  const gc = document.getElementById('goalCanvas');
+  if (!gc) return { x: window.innerWidth * 0.5, y: 48 };
+  const rect = gc.getBoundingClientRect();
+  const box = getGoalPanelImageRect(gc);
+  const sx = rect.width / gc.width;
+  const sy = rect.height / gc.height;
+  return {
+    x: rect.left + (box.x + box.w * 0.68) * sx,
+    y: rect.top + goalPanelValueY(box) * sy,
+  };
+}
+
+let goalFlyStaggerMs = 0;
+
+function spawnObjectiveCollectFx(worldPos, tileType) {
+  const layer = document.getElementById('goalFlyLayer');
+  const color = OBJECTIVE_TILE_COLORS[tileType] || 0xff9040;
+  const hex = `#${color.toString(16).padStart(6, '0')}`;
+
+  const finish = () => {
+    goalDisplayCount = Math.min(getActualObjectiveTileCount(), goalDisplayCount + 1);
+    const gc = document.getElementById('goalCanvas');
+    if (gc) {
+      gc._goalCountPulseUntil = performance.now() + 320;
+      syncGoalHud();
+      drawHUDPanel(gc);
+    }
+  };
+
+  if (!layer || !worldPos) {
+    finish();
+    return;
+  }
+
+  const delay = goalFlyStaggerMs;
+  goalFlyStaggerMs += 70;
+  setTimeout(() => {
+    goalFlyStaggerMs = Math.max(0, goalFlyStaggerMs - 70);
+
+    const from = worldToScreen(worldPos);
+    const to = getGoalHudTargetScreenPoint();
+    const spark = document.createElement('div');
+    spark.className = 'goal-fly-spark';
+    spark.style.boxShadow = `0 0 10px ${hex}, 0 0 22px ${hex}88`;
+    spark.style.background = `radial-gradient(circle, #fff 0%, ${hex} 42%, rgba(255,112,67,0) 72%)`;
+    layer.appendChild(spark);
+
+    const dur = 520;
+    const t0 = performance.now();
+    (function tick(now) {
+      const p = Math.min((now - t0) / dur, 1);
+      const e = 1 - Math.pow(1 - p, 2.4);
+      const x = from.x + (to.x - from.x) * e;
+      const y = from.y + (to.y - from.y) * e - Math.sin(p * Math.PI) * 36;
+      spark.style.left = `${x}px`;
+      spark.style.top = `${y}px`;
+      spark.style.opacity = p < 0.08 ? p / 0.08 : p > 0.88 ? (1 - p) / 0.12 : 1;
+      spark.style.transform = `translate(-50%, -50%) scale(${0.55 + p * 0.65})`;
+
+      if (p > 0.12 && p < 0.88 && Math.random() < 0.45) {
+        const trail = document.createElement('div');
+        trail.className = 'goal-fly-spark--trail';
+        trail.style.left = `${x}px`;
+        trail.style.top = `${y}px`;
+        trail.style.opacity = '0.7';
+        layer.appendChild(trail);
+        setTimeout(() => trail.remove(), 180);
+      }
+
+      if (p < 1) requestAnimationFrame(tick);
+      else {
+        spark.remove();
+        finish();
+      }
+    })(t0);
+  }, delay);
+}
+
+async function bakeObjectiveTileIcon(tileType) {
+  if (goalIconBakeCache[tileType]) return goalIconBakeCache[tileType];
+  if (!glbCache[tileType]) return null;
+
+  const offCanvas = document.createElement('canvas');
+  offCanvas.width = 128;
+  offCanvas.height = 128;
+
+  const pr = new THREE.WebGLRenderer({ canvas: offCanvas, antialias: true, alpha: true });
+  pr.setSize(128, 128);
+  pr.setClearColor(0x000000, 0);
+  pr.toneMapping = THREE.ACESFilmicToneMapping;
+  pr.toneMappingExposure = 1.4;
+
+  const ps = new THREE.Scene();
+  ps.add(new THREE.AmbientLight(0xd0ecff, 1.2));
+  const kl = new THREE.DirectionalLight(0xffffff, 1.4);
+  kl.position.set(4, 6, 12);
+  ps.add(kl);
+  ps.add(new THREE.DirectionalLight(0x80d0ff, 0.45).translateX(-4));
+
+  const tileMesh = INNER_TYPES.has(tileType)
+    ? createInsideIceTile(tileType)
+    : (() => {
+        const g = new THREE.Group();
+        const clone = glbCache[tileType].clone();
+        clone.traverse(ch => { if (ch.isMesh && ch.material) ch.material = ch.material.clone(); });
+        const fix = TYPE_FIX[tileType] || { rx: 0, ry: 0, rz: 0, scale: 0.85 };
+        const pivot = new THREE.Group();
+        pivot.add(clone);
+        pivot.rotation.set(fix.rx, fix.ry, fix.rz);
+        const box = new THREE.Box3().setFromObject(pivot);
+        const sz = new THREE.Vector3(); box.getSize(sz);
+        const max = Math.max(sz.x, sz.y, sz.z);
+        if (max > 0) pivot.scale.multiplyScalar((CELL * fix.scale) / max);
+        const nb = new THREE.Box3().setFromObject(pivot);
+        const ct = new THREE.Vector3(); nb.getCenter(ct);
+        pivot.position.sub(ct);
+        g.add(pivot);
+        return g;
+      })();
+
+  ps.add(tileMesh);
+  const box = new THREE.Box3().setFromObject(tileMesh);
+  const sz = new THREE.Vector3(); box.getSize(sz);
+  const maxDim = Math.max(sz.x, sz.y, sz.z);
+  tileMesh.scale.multiplyScalar(1.65 / maxDim);
+  const nb = new THREE.Box3().setFromObject(tileMesh);
+  const ct = new THREE.Vector3(); nb.getCenter(ct);
+  tileMesh.position.sub(ct);
+
+  const finalBox = new THREE.Box3().setFromObject(tileMesh);
+  const finalSz = new THREE.Vector3(); finalBox.getSize(finalSz);
+  const pad = 1.15;
+  const half = Math.max(finalSz.x, finalSz.y, finalSz.z) * pad / 2;
+  const pc = new THREE.OrthographicCamera(-half, half, half, -half, 0.1, 100);
+  pc.position.set(0, 0, 20);
+  pc.lookAt(0, 0, 0);
+  pr.render(ps, pc);
+  pr.dispose();
+
+  const img = new Image();
+  img.src = offCanvas.toDataURL();
+  await img.decode();
+  goalIconBakeCache[tileType] = img;
+  return img;
+}
+
+async function ensureGoalTileIcon(goalCanvas, tileType) {
+  if (!goalCanvas || !tileType) return;
+  if (goalCanvas._goalIconKey === tileType && goalCanvas._goalIcon?.complete) return;
+  const img = await bakeObjectiveTileIcon(tileType);
+  if (!img) return;
+  goalCanvas._goalIconKey = tileType;
+  goalCanvas._goalIcon = img;
+  drawHUDPanel(goalCanvas);
+}
+
+function getGoalHudDisplayCurrent(data) {
+  const obj = CONFIG.objective;
+  if (obj?.type === 'clearTile') return goalDisplayCount;
+  return data.current;
+}
+
+function getObjectiveProgressValues() {
+  const obj = CONFIG.objective;
+  const chip = getObjectiveChip(CONFIG);
+  if (!chip) return null;
+
+  let current = 0;
+  switch (obj.type) {
+    case 'clearTile':
+      current = obj.tileType === 'any'
+        ? totalTilesCleared
+        : (tilesCleared[obj.tileType] || 0);
+      break;
+    case 'breakBlocker':
+      current = blockersDestroyed[obj.blockerType] || 0;
+      break;
+    case 'breakAll':
+      current = countRemainingBreakableBlockers();
+      return { chip, current, target: null, invert: true };
+    case 'clearPercent': {
+      const need = Math.ceil(GRID * GRID * obj.percent / 100);
+      current = totalTilesCleared;
+      return { chip, current, target: need, invert: false };
+    }
+    case 'combo':
+      if (obj.blockerType != null && obj.blockerCount != null) {
+        current = blockersDestroyed[obj.blockerType] || 0;
+      } else if (obj.surviveDrops != null) {
+        current = fallerDropCycles;
+      }
+      break;
+    default:
+      return null;
+  }
+  return { chip, current, target: chip.target, invert: false };
+}
+
+function syncGoalHud() {
+  const panel = document.getElementById('goalHudPanel');
+  const labelEl = document.getElementById('goalHudLabel');
+  const goalValEl = document.getElementById('goalVal');
+  const goalCanvas = document.getElementById('goalCanvas');
+  const data = getObjectiveProgressValues();
+  if (!panel || !data) {
+    if (panel) panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+  if (labelEl) labelEl.textContent = data.chip.label;
+  if (goalValEl) {
+    if (data.invert) {
+      goalValEl.textContent = data.current === 0 ? '✓' : `${data.current} left`;
+    } else {
+      const cur = Math.min(getGoalHudDisplayCurrent(data), data.target ?? data.current);
+      goalValEl.textContent = `${cur}/${data.target ?? cur}`;
+    }
+  }
+  const obj = CONFIG.objective;
+  if (goalCanvas && obj?.type === 'clearTile' && ALL_GLB_PATHS[obj.tileType]) {
+    ensureGoalTileIcon(goalCanvas, obj.tileType);
+  } else if (goalCanvas && data.chip.icon) {
+    if (goalCanvas._goalIconSrc !== data.chip.icon) {
+      goalCanvas._goalIconSrc = data.chip.icon;
+      const img = new Image();
+      img.onload = () => {
+        goalCanvas._goalIcon = img;
+        drawHUDPanel(goalCanvas);
+      };
+      img.src = data.chip.icon;
+    }
+  }
+}
+
+function updateHUD() {
+  document.getElementById('scoreVal').textContent = score.toLocaleString();
+  const targetEl = document.getElementById('targetScoreVal');
+  if (targetEl) targetEl.textContent = CONFIG.targetScore.toLocaleString();
+  document.getElementById('movesVal').textContent = moves;
+  syncGoalHud();
+  const sc = document.getElementById('scoreCanvas');
+  const mc = document.getElementById('movesCanvas');
+  const gc = document.getElementById('goalCanvas');
+  if (sc) drawHUDPanel(sc);
+  if (gc && !document.getElementById('goalHudPanel')?.hidden) drawHUDPanel(gc);
+  if (mc) drawHUDPanel(mc);
 }
 
 function getStars() {
@@ -1592,6 +1920,7 @@ let pendingJournal = null;
 
 function showLevelPopup(won) {
   gameOver = true;
+  syncGoalDisplayToActual();
   // Fire analytics first so we have a clean snapshot before any UI mutation
   const movesUsedNow = CONFIG.moves - moves;
   const durationMsNow = Math.round(performance.now() - gameStartTime);
@@ -1889,8 +2218,8 @@ async function useBoosterHammer(row, col) {
   } else {
     const mesh = tile.mesh;
     const ttype = tile.type;
-    tilesCleared[ttype] = (tilesCleared[ttype] || 0) + 1;
-    totalTilesCleared++;
+    const wp = mesh.position.clone();
+    recordTileCleared(ttype, wp);
     board[row][col] = null;
     await animHammerHitCandy(mesh, wp);
     await delay(100);
@@ -1913,8 +2242,7 @@ async function useBoosterColorBomb(row, col) {
     const t = board[r][c];
     if (!t || t.isWall || t.frozen || t.type !== targetType) continue;
     targets.push({ r, c, mesh: t.mesh });
-    tilesCleared[t.type] = (tilesCleared[t.type] || 0) + 1;
-    totalTilesCleared++;
+    recordTileCleared(t.type, t.mesh.position.clone());
     board[r][c] = null;
   }
 
@@ -2435,16 +2763,8 @@ canvas.addEventListener('contextmenu', e => {
 });
 
 // ═══════════════════════════════════════════════════════════════
-//  HUD
+//  HUD — updateHUD defined above with syncGoalHud
 // ═══════════════════════════════════════════════════════════════
-function updateHUD() {
-  document.getElementById('scoreVal').textContent = score;
-  document.getElementById('movesVal').textContent = moves;
-  const sc = document.getElementById('scoreCanvas');
-  const mc = document.getElementById('movesCanvas');
-  if (sc) drawHUDPanel(sc);
-  if (mc) drawHUDPanel(mc);
-}
 
 function showMsg(html, dur = 1500) {
   const el = document.getElementById('msg');
@@ -2471,6 +2791,8 @@ function animate() {
   }
   if (_highlightRowActive) rowHighlightMat.opacity = 0.16 + Math.sin(clk * 5) * 0.09;
   if (_highlightColActive) colHighlightMat.opacity = 0.16 + Math.sin(clk * 5) * 0.09;
+  const gc = document.getElementById('goalCanvas');
+  if (gc?._ready && performance.now() < (gc._goalCountPulseUntil || 0)) drawHUDPanel(gc);
   renderer.render(scene, camera);
 }
 
@@ -2511,72 +2833,71 @@ window.addEventListener('keydown', (e) => {
 //  INIT
 // ═══════════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════
-//  3D HUD PANELS
+//  3D HUD PANELS — score/moves GLB; goal uses PNG + CSS label
 // ═══════════════════════════════════════════════════════════════
+const GOAL_PANEL_PNG = '/assets/hud/objective-panel.png';
+
+async function bakeHudPanelGlb(glbPath) {
+  const offCanvas = document.createElement('canvas');
+  offCanvas.width = 640;
+  offCanvas.height = 350;
+
+  const pr = new THREE.WebGLRenderer({ canvas: offCanvas, antialias: true, alpha: true });
+  pr.setSize(640, 350);
+  pr.setClearColor(0x000000, 0);
+  pr.toneMapping = THREE.ACESFilmicToneMapping;
+  pr.toneMappingExposure = 1.5;
+
+  const ps = new THREE.Scene();
+  ps.add(new THREE.AmbientLight(0xffffff, 1.5));
+  const pl = new THREE.DirectionalLight(0xffffff, 1.2);
+  pl.position.set(0, 2, 10); ps.add(pl);
+
+  const model = await loadGLB(glbPath);
+  const rots = [
+    [0, 0, 0],
+    [-Math.PI / 2, 0, 0],
+    [0, -Math.PI / 2, 0],
+  ];
+  let best = rots[0], bestArea = 0;
+  for (const r of rots) {
+    model.rotation.set(r[0], r[1], r[2]);
+    const b = new THREE.Box3().setFromObject(model);
+    const s = new THREE.Vector3(); b.getSize(s);
+    if (s.x * s.y > bestArea) { bestArea = s.x * s.y; best = r; }
+  }
+  model.rotation.set(best[0], best[1], best[2]);
+
+  const box = new THREE.Box3().setFromObject(model);
+  const sz = new THREE.Vector3(); box.getSize(sz);
+  model.scale.multiplyScalar(5 / Math.max(sz.x, sz.y));
+  const nb = new THREE.Box3().setFromObject(model);
+  const ct = new THREE.Vector3(); nb.getCenter(ct);
+  model.position.sub(ct);
+  ps.add(model);
+
+  const finalBox = new THREE.Box3().setFromObject(model);
+  const finalSz = new THREE.Vector3(); finalBox.getSize(finalSz);
+  const pad = 1.1;
+  const halfW = finalSz.x * pad / 2;
+  const halfH = finalSz.y * pad / 2;
+  const aspect = 640 / 350;
+  const camH = Math.max(halfH, halfW / aspect);
+  const pc = new THREE.OrthographicCamera(-camH * aspect, camH * aspect, camH, -camH, 0.1, 100);
+  pc.position.set(0, 0, 20); pc.lookAt(0, 0, 0);
+  pr.render(ps, pc);
+  pr.dispose();
+  return offCanvas;
+}
+
 async function loadHUDPanel(canvasId, glbPath) {
   try {
-    const offCanvas = document.createElement('canvas');
-    offCanvas.width = 640;
-    offCanvas.height = 350;
-
-    const pr = new THREE.WebGLRenderer({ canvas: offCanvas, antialias: true, alpha: true });
-    pr.setSize(640, 350);
-    pr.setClearColor(0x000000, 0);
-    pr.toneMapping = THREE.ACESFilmicToneMapping;
-    pr.toneMappingExposure = 1.5;
-
-    const ps = new THREE.Scene();
-    ps.add(new THREE.AmbientLight(0xffffff, 1.5));
-    const pl = new THREE.DirectionalLight(0xffffff, 1.2);
-    pl.position.set(0, 2, 10); ps.add(pl);
-
-    const model = await loadGLB(glbPath);
-    const box0 = new THREE.Box3().setFromObject(model);
-    const sz0 = new THREE.Vector3(); box0.getSize(sz0);
-    console.log(`HUD ${glbPath}: ${sz0.x.toFixed(2)} x ${sz0.y.toFixed(2)} x ${sz0.z.toFixed(2)}`);
-
-    // Auto-detect best rotation: try 3 orientations, pick widest front face
-    const rots = [
-      [0, 0, 0],
-      [-Math.PI/2, 0, 0],
-      [0, -Math.PI/2, 0],
-    ];
-    let best = rots[0], bestArea = 0;
-    for (const r of rots) {
-      model.rotation.set(r[0], r[1], r[2]);
-      const b = new THREE.Box3().setFromObject(model);
-      const s = new THREE.Vector3(); b.getSize(s);
-      if (s.x * s.y > bestArea) { bestArea = s.x * s.y; best = r; }
-    }
-    model.rotation.set(best[0], best[1], best[2]);
-
-    const box = new THREE.Box3().setFromObject(model);
-    const sz = new THREE.Vector3(); box.getSize(sz);
-    model.scale.multiplyScalar(5 / Math.max(sz.x, sz.y));
-    const nb = new THREE.Box3().setFromObject(model);
-    const ct = new THREE.Vector3(); nb.getCenter(ct);
-    model.position.sub(ct);
-    ps.add(model);
-
-    // Tight camera that fits model exactly
-    const finalBox = new THREE.Box3().setFromObject(model);
-    const finalSz = new THREE.Vector3(); finalBox.getSize(finalSz);
-    const pad = 1.1;
-    const halfW = finalSz.x * pad / 2;
-    const halfH = finalSz.y * pad / 2;
-    const aspect = 640 / 350;
-    const camH = Math.max(halfH, halfW / aspect);
-    const pc = new THREE.OrthographicCamera(-camH*aspect, camH*aspect, camH, -camH, 0.1, 100);
-    pc.position.set(0, 0, 20); pc.lookAt(0, 0, 0);
-    pr.render(ps, pc);
-
-    // Convert to 2D image
+    const offCanvas = await bakeHudPanelGlb(glbPath);
     const panelImg = new Image();
     panelImg.src = offCanvas.toDataURL();
-    pr.dispose();
 
-    // Store reference for updateHUD to redraw text onto
     const cvs = document.getElementById(canvasId);
+    if (!cvs) return;
     cvs.width = 640;
     cvs.height = 280;
     cvs._panelImg = panelImg;
@@ -2588,29 +2909,128 @@ async function loadHUDPanel(canvasId, glbPath) {
     };
 
     console.log(`✓ HUD ${canvasId} rendered as 2D`);
-  } catch(e) { console.warn(`HUD ${canvasId} failed:`, e); }
+  } catch (e) { console.warn(`HUD ${canvasId} failed:`, e); }
+}
+
+async function loadGoalHUDPanel() {
+  try {
+    const panelImg = new Image();
+    panelImg.src = GOAL_PANEL_PNG;
+    await panelImg.decode();
+
+    const cvs = document.getElementById('goalCanvas');
+    if (!cvs) return;
+    cvs.width = 640;
+    cvs.height = 280;
+    cvs._panelImg = panelImg;
+    cvs._ready = true;
+    drawHUDPanel(cvs);
+    console.log('✓ HUD goalCanvas loaded from PNG');
+  } catch (e) { console.warn('HUD goalCanvas failed:', e); }
+}
+
+function glbPanelValueY(cvs) {
+  return cvs.height * 0.54;
+}
+
+function goalPanelValueY(box) {
+  return box.y + box.h * 0.54;
+}
+
+function getGoalPanelImageRect(cvs) {
+  const rect = cvs.getBoundingClientRect();
+  const scale = rect.width > 0 ? cvs.width / rect.width : 1;
+  const topMargin = 20 * scale;
+  const w = cvs.width * 0.8;
+  const h = cvs.height * 0.8;
+  const x = (cvs.width - w) / 2;
+  const y = topMargin;
+  return { x, y, w, h };
+}
+
+function goalIconDrawSize(cvs, iconSize) {
+  const rect = cvs.getBoundingClientRect();
+  if (!rect.width || !rect.height) return { w: iconSize, h: iconSize };
+  const sx = rect.width / cvs.width;
+  const sy = rect.height / cvs.height;
+  // Compensate for non-uniform canvas CSS scaling so the icon appears square on screen.
+  return { w: iconSize * (sy / sx), h: iconSize };
 }
 
 function drawHUDPanel(cvs) {
   if (!cvs._ready) return;
   const ctx = cvs.getContext('2d');
   ctx.clearRect(0, 0, cvs.width, cvs.height);
-  ctx.drawImage(cvs._panelImg, 0, 0, cvs.width, cvs.height);
 
-  // Draw the number value
-  const valueEl = cvs.id === 'scoreCanvas'
+  const isScore = cvs.id === 'scoreCanvas';
+  const isGoal = cvs.id === 'goalCanvas';
+  const goalImg = isGoal ? getGoalPanelImageRect(cvs) : null;
+
+  if (goalImg) {
+    ctx.drawImage(cvs._panelImg, goalImg.x, goalImg.y, goalImg.w, goalImg.h);
+  } else {
+    ctx.drawImage(cvs._panelImg, 0, 0, cvs.width, cvs.height);
+  }
+  const valueEl = isScore
     ? document.getElementById('scoreVal')
+    : isGoal
+    ? document.getElementById('goalVal')
     : document.getElementById('movesVal');
-  const text = valueEl?.textContent || '0';
+  const targetEl = isScore ? document.getElementById('targetScoreVal') : null;
+  const current = valueEl?.textContent || '0';
+  const target = targetEl?.textContent || '';
 
-  ctx.font = 'bold 72px Fredoka, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
   ctx.fillStyle = '#ffffff';
   ctx.shadowColor = 'rgba(0,30,60,0.6)';
   ctx.shadowBlur = 8;
   ctx.shadowOffsetY = 3;
-  ctx.fillText(text, cvs.width / 2, cvs.height * 0.62);
+  ctx.textBaseline = 'middle';
+
+  if (isScore && target) {
+    const line = `${current} / ${target}`;
+    const digits = line.replace(/[^0-9]/g, '').length;
+    const fontSize = digits > 9 ? 42 : digits > 7 ? 48 : 54;
+    ctx.font = `bold ${fontSize}px Fredoka, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText(line, cvs.width / 2, glbPanelValueY(cvs));
+  } else if (isGoal) {
+    const text = current;
+    const icon = cvs._goalIcon;
+    const box = goalImg;
+    const cy = goalPanelValueY(box);
+    const iconSize = Math.round(box.h * 0.30);
+    const iconDraw = icon?.complete ? goalIconDrawSize(cvs, iconSize) : { w: iconSize, h: iconSize };
+    const pulsing = performance.now() < (cvs._goalCountPulseUntil || 0);
+    let fontSize = pulsing ? 52 : 48;
+    ctx.font = `bold ${fontSize}px Fredoka, sans-serif`;
+    let textW = ctx.measureText(text).width;
+    const gap = 10;
+    let totalW = textW + (icon?.complete ? iconDraw.w + gap : 0);
+    while (totalW > box.w * 0.82 && fontSize > 30) {
+      fontSize -= 2;
+      ctx.font = `bold ${fontSize}px Fredoka, sans-serif`;
+      textW = ctx.measureText(text).width;
+      totalW = textW + (icon?.complete ? iconDraw.w + gap : 0);
+    }
+    const cx = box.x + box.w / 2;
+    if (pulsing) {
+      ctx.shadowBlur = 14;
+      ctx.shadowColor = 'rgba(255, 160, 80, 0.85)';
+    }
+    if (icon?.complete) {
+      const startX = cx - totalW / 2;
+      ctx.drawImage(icon, startX, cy - iconDraw.h / 2, iconDraw.w, iconDraw.h);
+      ctx.textAlign = 'left';
+      ctx.fillText(text, startX + iconDraw.w + gap, cy);
+    } else {
+      ctx.textAlign = 'center';
+      ctx.fillText(text, cx, cy);
+    }
+  } else {
+    ctx.font = 'bold 62px Fredoka, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(current, cvs.width / 2, glbPanelValueY(cvs));
+  }
   ctx.shadowBlur = 0;
 }
 
@@ -2625,8 +3045,12 @@ async function init() {
   await ensureHammerSwingModel();
   await loadGridFrame();
   await loadHUDPanel('scoreCanvas', '/assets/hud/score-panel.glb');
+  if (getObjectiveChip(CONFIG)) await loadGoalHUDPanel();
   await loadHUDPanel('movesCanvas', '/assets/hud/moves-panel.glb');
   await preCacheBoosterCursors();
+
+  const targetEl = document.getElementById('targetScoreVal');
+  if (targetEl) targetEl.textContent = CONFIG.targetScore.toLocaleString();
 
   updateHUD();
   setupBoosterUI();

@@ -580,20 +580,84 @@ body[data-screen="game"] {
 
 .hud {
   display: flex;
-  gap: 30px;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: clamp(10px, 2.5vw, 24px);
   margin-bottom: 16px;
+  max-width: min(720px, 96vw);
 }
 
 .hud-panel {
   position: relative;
-  width: 220px;
-  height: 120px;
+  width: clamp(160px, 22vw, 220px);
+  height: clamp(88px, 12vw, 120px);
+  flex: 0 1 auto;
+}
+
+.hud-panel--goal[hidden] {
+  display: none !important;
+}
+
+.hud-panel--goal .hud-panel__label {
+  position: absolute;
+  top: calc(20px + 2%);
+  left: 0;
+  right: 0;
+  z-index: 2;
+  text-align: center;
+  font-family: 'Fredoka', sans-serif;
+  font-weight: 800;
+  font-size: clamp(14px, 3.2vw, 21px);
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: #ffffff;
+  -webkit-text-stroke: 2.5px #0a1e38;
+  paint-order: stroke fill;
+  text-shadow: 0 2px 3px rgba(0, 30, 60, 0.45);
+  pointer-events: none;
+  user-select: none;
 }
 
 .hud-canvas {
   width: 100%;
   height: 100%;
   display: block;
+}
+
+.goal-fly-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 80;
+  overflow: hidden;
+}
+
+.goal-fly-spark {
+  position: fixed;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle, #fff 0%, #ffb070 40%, rgba(255, 112, 67, 0) 72%);
+  box-shadow: 0 0 10px #ff9040, 0 0 22px rgba(255, 112, 67, 0.75);
+  opacity: 0;
+}
+
+.goal-fly-spark--trail {
+  position: fixed;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(255, 200, 120, 0.85);
+  box-shadow: 0 0 8px rgba(255, 140, 60, 0.8);
+  opacity: 0;
+}
+
+@keyframes goal-count-pop {
+  0% { transform: scale(1); filter: brightness(1); }
+  45% { transform: scale(1.18); filter: brightness(1.35); }
+  100% { transform: scale(1); filter: brightness(1); }
 }
 
 .game-wrapper {
@@ -2001,9 +2065,14 @@ body:not([data-screen="game"]) .shard-hud { display: none; }
   }
 
   .hud-panel {
-    width: clamp(112px, 34vw, 150px);
+    width: clamp(100px, 30vw, 140px);
     height: auto;
     aspect-ratio: 11 / 6;
+  }
+
+  .hud-panel--goal .hud-panel__label {
+    font-size: clamp(11px, 3.4vw, 15px);
+    -webkit-text-stroke-width: 2px;
   }
 
   .game-wrapper {

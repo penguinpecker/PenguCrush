@@ -15,7 +15,7 @@
 import { getAGWAddress } from './agw.js';
 import { supabase } from './supabase.js';
 import {
-  readInventory, readLives, readCrushPass, sku as nameToSku,
+  readInventory, readLives, readCrushPass, readLastWheelDay, sku as nameToSku,
 } from './onchain.js';
 
 const LS_KEY = 'pengucrush_inventory_v1';
@@ -274,6 +274,18 @@ export function nextSpinAvailableIn() {
     new Date().getUTCDate() + 1
   );
   return Math.max(0, next - now);
+}
+
+/** Record that the daily wheel was spun (chain already credited rewards). */
+export function markDailySpun(rewardText = '') {
+  const s = getInventory();
+  s.lastDailySpin = todayUTC();
+  if (rewardText) {
+    s.dailySpinHistory.push({ date: todayUTC(), reward: rewardText, at: new Date().toISOString() });
+    if (s.dailySpinHistory.length > 60) s.dailySpinHistory = s.dailySpinHistory.slice(-60);
+  }
+  saveInventory(s);
+  dispatchInventoryChange();
 }
 
 export function hasCrushPass() {
@@ -686,7 +698,6 @@ export async function hydrateFromChain() {
       // catches ~95% of these cases without making the HUD flash.
       await new Promise(r => setTimeout(r, 400));
       [inv, lives, pass] = await _readChainTriple(addr);
-      if (!inv && !lives && !pass) return;
     }
     const s = getInventory();
     let changed = false;
@@ -739,6 +750,14 @@ export async function hydrateFromChain() {
       }
       if ((s.crushPassStreakWeeks || 0) !== pass.streakWeeks) {
         s.crushPassStreakWeeks = pass.streakWeeks;
+        changed = true;
+      }
+    }
+    const todayChainDay = Math.floor(Date.now() / 86400000);
+    const lastWheelDay = await readLastWheelDay(addr).catch(() => null);
+    if (lastWheelDay === todayChainDay) {
+      if (s.lastDailySpin !== todayUTC()) {
+        s.lastDailySpin = todayUTC();
         changed = true;
       }
     }

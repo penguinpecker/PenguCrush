@@ -368,6 +368,113 @@ const LEVELS = [
 
 ];
 
+const TILE_LABELS = {
+  ice: 'Ice',
+  fish: 'Fish',
+  popsicle: 'Popsicle',
+  frostice: 'Frost Ice',
+  shrimp: 'Shrimp',
+  crab: 'Crab',
+};
+
+const BLOCKER_LABELS = {
+  frozen: 'Frozen',
+  ice: 'Ice Block',
+};
+
+const OBJECTIVE_ICONS = {
+  tile: '/assets/ui/objectives/tile.svg',
+  frozen: '/assets/ui/objectives/frozen.svg',
+  ice: '/assets/ui/objectives/ice.svg',
+};
+
+/** Chip metadata for map / in-game objective containers. */
+export function getObjectiveChip(cfg) {
+  const obj = cfg?.objective;
+  if (!obj || obj.type === 'score') return null;
+  switch (obj.type) {
+    case 'clearTile': {
+      const tileType = obj.tileType || 'any';
+      return {
+        icon: OBJECTIVE_ICONS.tile,
+        label: tileType === 'any' ? 'Tiles' : (TILE_LABELS[tileType] || tileType),
+        target: obj.count,
+      };
+    }
+    case 'breakBlocker':
+      return {
+        icon: obj.blockerType === 'frozen' ? OBJECTIVE_ICONS.frozen : OBJECTIVE_ICONS.ice,
+        label: BLOCKER_LABELS[obj.blockerType] || obj.blockerType,
+        target: obj.count,
+      };
+    case 'breakAll':
+      return {
+        icon: OBJECTIVE_ICONS.frozen,
+        label: 'Blockers',
+        target: null,
+      };
+    case 'clearPercent':
+      return {
+        icon: OBJECTIVE_ICONS.tile,
+        label: 'Tiles',
+        target: Math.ceil((cfg.grid || 8) ** 2 * obj.percent / 100),
+      };
+    case 'combo': {
+      if (obj.blockerType != null && obj.blockerCount != null) {
+        return {
+          icon: obj.blockerType === 'frozen' ? OBJECTIVE_ICONS.frozen : OBJECTIVE_ICONS.ice,
+          label: BLOCKER_LABELS[obj.blockerType] || obj.blockerType,
+          target: obj.blockerCount,
+        };
+      }
+      if (obj.surviveDrops != null) {
+        return {
+          icon: OBJECTIVE_ICONS.ice,
+          label: 'Drops',
+          target: obj.surviveDrops,
+        };
+      }
+      return null;
+    }
+    default:
+      return null;
+  }
+}
+
+/** Human-readable primary objective (excluding score gate). */
+export function formatLevelObjective(cfg) {
+  const obj = cfg?.objective;
+  if (!obj) return '';
+  switch (obj.type) {
+    case 'score':
+      return '';
+    case 'clearTile': {
+      if (obj.tileType === 'any') return `Clear ${obj.count} tiles`;
+      const label = TILE_LABELS[obj.tileType] || obj.tileType;
+      return `Clear ${obj.count} ${label}`;
+    }
+    case 'breakBlocker': {
+      const label = BLOCKER_LABELS[obj.blockerType] || obj.blockerType;
+      return `Break ${obj.count} ${label}`;
+    }
+    case 'breakAll':
+      return 'Break all blockers';
+    case 'clearPercent':
+      return `Clear ${obj.percent}% of tiles`;
+    case 'combo': {
+      const parts = [];
+      if (obj.blockerType && obj.blockerCount != null) {
+        const label = BLOCKER_LABELS[obj.blockerType] || obj.blockerType;
+        parts.push(`Break ${obj.blockerCount} ${label}`);
+      }
+      if (obj.surviveDrops != null) parts.push(`Survive ${obj.surviveDrops} faller drops`);
+      return parts.join(' · ') || '';
+    }
+    default:
+      return '';
+  }
+}
+
 export function getLevel(n) {
   return LEVELS.find(l => l.level === n) || LEVELS[0];
 }

@@ -472,9 +472,9 @@ homePlayBtn?.addEventListener('click', async () => {
   Events.playClicked();
   try {
     if (hasSession()) {
-      // Already signed in — refresh chain state in background, then navigate.
+      // Already signed in — refresh chain state before navigating.
       setAnalyticsUser(getAGWAddress());
-      Inventory.hydrateFromChain().catch(() => {});
+      await Inventory.hydrateFromChain().catch(() => {});
       window.location.href = '/?page=map';
       return;
     }
@@ -501,7 +501,7 @@ homePlayBtn?.addEventListener('click', async () => {
     }
     setAnalyticsUser(getAGWAddress());
     // Pull chain state right after sign-in so the map HUD shows the truth.
-    Inventory.hydrateFromChain().catch(() => {});
+    await Inventory.hydrateFromChain().catch(() => {});
     // One-time AGW session-key grant so in-game txs auto-execute. Failures
     // here are non-fatal — txs will just fall back to AGW prompts.
     if (!hasActiveSession()) {

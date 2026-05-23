@@ -565,6 +565,10 @@ export function initMap() {
           ? 'No lives left. Wait for regen or buy more from the shop.'
           : `Could not start the level on chain:\n\n${msg}\n\nNo life was consumed — try again.`);
       }
+      if (noLives || /NoLives/i.test(msg)) {
+        await Inventory.hydrateFromChain().catch(() => {});
+        renderLivesHud();
+      }
       popupPlayBtn.disabled = false;
       popupPlayBtn.classList.remove('pop-play--disabled');
       if (origLabel) popupPlayBtn.textContent = origLabel;
@@ -667,7 +671,13 @@ export function initMap() {
     const can = Inventory.canSpinDaily();
     dailySpinBtn.disabled = !can || dailySpinning;
     dailySpinBtn.textContent = can ? 'SPIN' : 'COME BACK TOMORROW';
-    if (!can && dailyResult && !dailySpinning) {
+    dailyOpen?.classList.toggle('daily-wheel-btn--used', !can);
+    if (can) {
+      if (dailyResult && !dailySpinning) {
+        dailyResult.textContent = '';
+        dailyResult.hidden = true;
+      }
+    } else if (dailyResult && !dailySpinning) {
       const wait = Inventory.nextSpinAvailableIn();
       const last = Inventory.getInventory().dailySpinHistory.slice(-1)[0];
       dailyResult.textContent = last
@@ -761,9 +771,10 @@ export function initMap() {
 
       // ── 4) Pull fresh balances + show reward ──
       await Inventory.hydrateFromChain().catch(() => {});
+      const rewardText = DAILY_REWARDS[slot] || 'a reward';
+      Inventory.markDailySpun(rewardText);
       Events.wheelSpinComplete(r.hash);
       if (dailyResult) {
-        const rewardText = DAILY_REWARDS[slot] || 'a reward';
         dailyResult.textContent = `You won: ${rewardText}!`;
         dailyResult.hidden = false;
       }
@@ -772,6 +783,10 @@ export function initMap() {
       console.warn('Wheel spin failed:', msg);
       Events.wheelSpinFail(msg);
       const lowBalance = /insufficient balance|insufficient funds|out of gas/i.test(msg);
+      const alreadySpun = /already spun|WheelAlreadySpun|409/i.test(msg);
+      if (alreadySpun) {
+        Inventory.markDailySpun();
+      }
       if (dailyResult) {
         dailyResult.textContent = lowBalance
           ? 'Spin failed: your AGW wallet has no ETH for gas. Fund it on Abstract mainnet and retry.'
@@ -781,6 +796,8 @@ export function initMap() {
       if (!/reject|denied|cancel/i.test(msg)) {
         alert(lowBalance
           ? 'Your AGW wallet is out of ETH for gas on Abstract.\n\nFund your AGW address with a small amount of ETH on Abstract mainnet, then retry the spin.'
+          : alreadySpun
+          ? 'You already spun the wheel today. Come back tomorrow!'
           : `Daily wheel spin failed:\n\n${msg}`);
       }
     } finally {
@@ -1289,6 +1306,8 @@ export function initMap() {
     if (inventoryOverlay?.classList.contains('active')) renderInventoryGrid();
     if (crushPassOverlay?.classList.contains('active')) renderCrushPassTimer();
     refreshCrushPassChrome();
+    refreshSpinButtonState();
+    renderLivesHud();
   });
 
   document.addEventListener('keydown', e => {
@@ -1323,6 +1342,12 @@ export function initMap() {
 
   hydrateProgressFromChain(nodes, nodesContainer, openPopup);
   syncFromSupabase(nodes, nodesContainer, openPopup);
+
+  void (async () => {
+    await Inventory.hydrateFromChain().catch(() => {});
+    renderLivesHud();
+    refreshSpinButtonState();
+  })();
 
   // DEV TOOLS
   let dragging = null;

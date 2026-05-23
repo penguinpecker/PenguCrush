@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "make-hud-panel": "node scripts/make-hud-panel.mjs"
   },
   "dependencies": {
     "@abstract-foundation/agw-client": "^1.12.0",
@@ -16,9 +17,12 @@
     "viem": "^2.47.12"
   },
   "devDependencies": {
+    "@gltf-transform/core": "^4.3.0",
+    "@gltf-transform/extensions": "^4.3.0",
     "@matterlabs/hardhat-zksync": "^1.6.2",
     "@openzeppelin/contracts": "^5.6.1",
     "@openzeppelin/contracts-upgradeable": "^5.6.1",
+    "draco3d": "^1.5.7",
     "ethers": "^6.16.0",
     "puppeteer": "^24.41.0",
     "ts-node": "^10.9.2",

@@ -307,8 +307,10 @@
             <img class="pop-star" data-index="2" src="/assets/ui/star-empty.png" />
           </div>
           <div class="pop-objectives">
-            <span class="pop-obj-score">Score <strong id="popupTarget">3,000</strong> points</span>
-            <span class="pop-obj-moves"><strong id="popupMoves">30</strong> Moves</span>
+            <div class="pop-objectives__row pop-objectives__row--main">
+              <span class="pop-obj-score">Score <strong id="popupTarget">3,000</strong> points</span>
+              <span class="pop-obj-moves"><strong id="popupMoves">30</strong> Moves</span>
+            </div>
           </div>
           <div class="pop-best">Best Score: <span id="popupBest">—</span> 🏆</div>
           <div class="pop-shards" id="popupShards" aria-label="Shards collected"></div>
@@ -332,15 +334,22 @@
         <div class="hud-panel">
           <canvas id="scoreCanvas" class="hud-canvas"></canvas>
         </div>
+        <div class="hud-panel hud-panel--goal" id="goalHudPanel" hidden>
+          <span class="hud-panel__label" id="goalHudLabel">Fish</span>
+          <canvas id="goalCanvas" class="hud-canvas"></canvas>
+        </div>
         <div class="hud-panel">
           <canvas id="movesCanvas" class="hud-canvas"></canvas>
         </div>
       </div>
       <span id="scoreVal" style="display:none">0</span>
+      <span id="targetScoreVal" style="display:none">0</span>
+      <span id="goalVal" style="display:none">0/10</span>
       <span id="movesVal" style="display:none">30</span>
       <div class="game-wrapper">
         <canvas id="gameCanvas"></canvas>
       </div>
+      <div id="goalFlyLayer" class="goal-fly-layer" aria-hidden="true"></div>
       <div class="booster-bar" id="boosterBar"></div>
       <div class="shard-hud" id="shardHud" aria-label="Shard collection"></div>
     </div>
