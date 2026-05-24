@@ -1248,6 +1248,113 @@
   line-height: 1.4;
 }
 
+.confirm-card--wallet {
+  width: min(400px, 92vw);
+  text-align: left;
+}
+
+.wallet-dialog {
+  margin: 0 0 14px;
+  padding: 14px 14px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.wallet-dialog__row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.wallet-dialog__row:last-of-type {
+  margin-bottom: 0;
+}
+
+.wallet-dialog__label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #3a6a8a;
+}
+
+.wallet-dialog__addr-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.wallet-dialog__addr {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(8, 24, 48, 0.06);
+  border: 1px solid rgba(8, 40, 80, 0.1);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: clamp(10px, 1.35vw, 12px);
+  font-weight: 600;
+  color: #0a3a5a;
+  word-break: break-all;
+  line-height: 1.35;
+}
+
+.wallet-dialog__copy {
+  flex-shrink: 0;
+  align-self: stretch;
+  font-family: 'Fredoka', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  background: linear-gradient(180deg, #7ee0ff, #3cb8e8);
+  color: #083a52;
+  cursor: pointer;
+  box-shadow: 0 2px 0 #2498c8, 0 4px 10px rgba(0, 60, 100, 0.18);
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.wallet-dialog__copy:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+}
+
+.wallet-dialog__copy:active {
+  transform: translateY(1px);
+}
+
+.wallet-dialog__balance {
+  font-size: clamp(16px, 2vw, 20px);
+  font-weight: 800;
+  color: #0a3a5a;
+}
+
+.wallet-dialog__hint {
+  margin: 10px 0 0;
+  font-size: clamp(11px, 1.4vw, 13px);
+  font-weight: 500;
+  color: #3a6888;
+  line-height: 1.35;
+}
+
+.confirm-card--wallet .confirm-title {
+  text-align: center;
+  margin-bottom: 14px;
+}
+
+.confirm-card--wallet .confirm-msg {
+  text-align: center;
+}
+
+.confirm-card--wallet .confirm-actions {
+  justify-content: center;
+}
+
 .confirm-actions {
   display: flex;
   gap: 12px;

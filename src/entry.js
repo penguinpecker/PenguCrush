@@ -277,14 +277,17 @@ function shortAddr(addr) {
 }
 
 function buildRow(rank, wallet, xp) {
+  const viewer = getAGWAddress()?.toLowerCase();
+  const isYou = !!(viewer && typeof wallet === 'string' && wallet.toLowerCase() === viewer);
   const cls = rank === 1 ? 'lb-row--gold' : rank === 2 ? 'lb-row--silver' : rank === 3 ? 'lb-row--bronze' : '';
   // Build via createElement + textContent so wallet text can never be parsed
   // as HTML, even if Supabase rows are later modified by a malicious party.
   const row = document.createElement('div');
-  row.className = 'lb-row' + (cls ? ' ' + cls : '');
+  row.className = 'lb-row' + (cls ? ' ' + cls : '') + (isYou ? ' lb-row--you' : '');
+  if (isYou) row.dataset.you = 'true';
   const rankEl = document.createElement('div'); rankEl.className = 'lb-rank';    rankEl.textContent = String(rank);
   const peng   = document.createElement('div'); peng.className   = 'lb-penguin'; peng.textContent   = '🐧';
-  const addrEl = document.createElement('div'); addrEl.className = 'lb-addr';    addrEl.textContent = shortAddr(wallet);
+  const addrEl = document.createElement('div'); addrEl.className = 'lb-addr';    addrEl.textContent = isYou ? 'You' : shortAddr(wallet);
   const xpEl   = document.createElement('div'); xpEl.className   = 'lb-xp';      xpEl.textContent   = `${Number(xp || 0).toLocaleString()} XP`;
   row.append(rankEl, peng, addrEl, xpEl);
   return row;
@@ -328,6 +331,8 @@ async function loadLeaderboard() {
       if (i < mid) leftCol.appendChild(row);
       else rightCol.appendChild(row);
     }
+    const youRow = leftCol.querySelector('[data-you]') || rightCol.querySelector('[data-you]');
+    youRow?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     lbDataLoaded = true;
     Events.leaderboardLoadSuccess(data.length);
   } catch (err) {

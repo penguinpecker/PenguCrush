@@ -1301,6 +1301,34 @@ body[data-screen="game"] {
   border-color: rgba(180, 120, 60, 0.65);
 }
 
+.lb-row--you {
+  background: linear-gradient(
+    90deg,
+    rgba(120, 230, 255, 0.58),
+    rgba(190, 248, 255, 0.52)
+  );
+  border-color: rgba(30, 170, 220, 0.95);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    0 0 0 2px rgba(70, 205, 255, 0.5),
+    0 0 14px 3px rgba(50, 195, 255, 0.38);
+}
+
+.lb-row--gold.lb-row--you,
+.lb-row--silver.lb-row--you,
+.lb-row--bronze.lb-row--you {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    0 0 0 2px rgba(70, 205, 255, 0.55),
+    0 0 14px 3px rgba(50, 195, 255, 0.42);
+}
+
+.lb-row--you .lb-addr {
+  color: #046088;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
 .lb-rank {
   width: clamp(20px, 3vw, 32px);
   height: clamp(20px, 3vw, 32px);

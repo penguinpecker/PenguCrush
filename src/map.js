@@ -4,6 +4,7 @@ import * as Inventory from './inventory.js';
 import { renderShardSlots, SHARDS } from './shards.js';
 import { buyCrushPassETH, spinDailyWheel as chainSpinWheel, claimStarterPack, readStarterPackClaimed, PENGUCRUSH_ADDRESS } from './onchain.js';
 import { getPublicClient } from './agw.js';
+import { formatEther } from 'viem';
 import penguCrushAbiJson from '../contracts/PenguCrushABI.json';
 import { Events, setAnalyticsUser } from './analytics.js';
 
@@ -303,39 +304,101 @@ export function initMap() {
   }
   updateAgwBtn();
 
-  // ── Disconnect confirm dialog ────────────────────────
+  // ── Wallet dialog (balance, copy address, disconnect) ──
   const disconnectOverlay = document.getElementById('disconnectConfirm');
   const disconnectCancelBtn = document.getElementById('disconnectCancel');
   const disconnectOkBtn = document.getElementById('disconnectOk');
+  const walletDialogAddress = document.getElementById('walletDialogAddress');
+  const walletDialogBalance = document.getElementById('walletDialogBalance');
+  const walletDialogCopy = document.getElementById('walletDialogCopy');
 
-  function openDisconnectConfirm() {
+  function formatEthBalance(wei) {
+    const eth = formatEther(wei);
+    const n = Number(eth);
+    if (!Number.isFinite(n)) return `${eth} ETH`;
+    if (n === 0) return '0 ETH';
+    if (n < 0.0001) return '<0.0001 ETH';
+    return `${n.toLocaleString(undefined, { maximumFractionDigits: 4 })} ETH`;
+  }
+
+  async function copyWalletAddress(addr) {
+    if (!addr) return false;
+    try {
+      await navigator.clipboard.writeText(addr);
+      return true;
+    } catch (_) {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = addr;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        return ok;
+      } catch (_) {
+        return false;
+      }
+    }
+  }
+
+  function openWalletDialog() {
     disconnectOverlay?.classList.add('active');
     disconnectOverlay?.setAttribute('aria-hidden', 'false');
   }
-  function closeDisconnectConfirm() {
+  function closeWalletDialog() {
     disconnectOverlay?.classList.remove('active');
     disconnectOverlay?.setAttribute('aria-hidden', 'true');
+    if (walletDialogCopy) walletDialogCopy.textContent = 'Copy';
   }
 
-  disconnectCancelBtn?.addEventListener('click', closeDisconnectConfirm);
+  async function refreshWalletDialog() {
+    const addr = getWallet();
+    if (!addr) return;
+    if (walletDialogAddress) walletDialogAddress.textContent = addr;
+    if (walletDialogBalance) walletDialogBalance.textContent = 'Loading…';
+    openWalletDialog();
+    try {
+      const bal = await getPublicClient().getBalance({ address: addr });
+      if (walletDialogBalance) walletDialogBalance.textContent = formatEthBalance(bal);
+    } catch (err) {
+      console.warn('[wallet] balance fetch failed:', err?.message || err);
+      if (walletDialogBalance) walletDialogBalance.textContent = 'Unavailable';
+    }
+  }
+
+  disconnectCancelBtn?.addEventListener('click', closeWalletDialog);
   disconnectOverlay?.addEventListener('click', e => {
-    if (e.target === disconnectOverlay) closeDisconnectConfirm();
+    if (e.target === disconnectOverlay) closeWalletDialog();
+  });
+  walletDialogCopy?.addEventListener('click', async () => {
+    const addr = getWallet();
+    const ok = await copyWalletAddress(addr);
+    if (!walletDialogCopy) return;
+    walletDialogCopy.textContent = ok ? 'Copied!' : 'Copy failed';
+    if (ok) {
+      window.setTimeout(() => {
+        if (walletDialogCopy.textContent === 'Copied!') walletDialogCopy.textContent = 'Copy';
+      }, 1600);
+    }
   });
   disconnectOkBtn?.addEventListener('click', () => {
     Events.walletDisconnected();
     disconnectAGW();
-    closeDisconnectConfirm();
+    closeWalletDialog();
     window.location.href = '/';
   });
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && disconnectOverlay?.classList.contains('active')) {
-      closeDisconnectConfirm();
+      closeWalletDialog();
     }
   });
 
   agwBtn.addEventListener('click', async () => {
     if (getWallet()) {
-      openDisconnectConfirm();
+      refreshWalletDialog();
       return;
     }
     agwBtn.textContent = 'Connecting…';
