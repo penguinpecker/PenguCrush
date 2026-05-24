@@ -407,8 +407,13 @@ export function getMaxLivesHard() {
 /// ice fills the remainder up to 5 if the player has frozen lives. Frozen
 /// can stack on chain past 5 (bonus from pass) but never grows the row.
 const HUD_TOTAL_SLOTS = 5;
+/** First N slots are regular lives; slots 4–5 need Crush Pass. */
+const REGULAR_HUD_SLOTS = 3;
 export function getLivesHudSlotCount() {
   return HUD_TOTAL_SLOTS;
+}
+export function getRegularLivesHudSlots() {
+  return REGULAR_HUD_SLOTS;
 }
 
 /** Snapshot after applying regen. Persists if regen added lives. */

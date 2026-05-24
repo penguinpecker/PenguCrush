@@ -374,14 +374,11 @@ export function initMap() {
   function renderLivesHud() {
     const { lives, frozenLives } = Inventory.getLives();
     const livesMax = Inventory.getMaxLives();
-    // V2.7 — exactly 5 slots. Slot fill order:
-    //   1..lives           pink filled
-    //   lives+1..lives+frozen (clamped to 5)  ice filled
-    //   rest               empty (ice icon if pass active, regular icon if not)
     const hudSlots = Inventory.getLivesHudSlotCount();
+    const regularSlots = Inventory.getRegularLivesHudSlots();
     const regularEnd = Math.min(hudSlots, lives);
-    const iceEnd    = Math.min(hudSlots, lives + frozenLives);
-    const visibleTotal = iceEnd;
+    const iceEnd = Math.min(hudSlots, lives + frozenLives);
+    const visibleTotal = Math.min(hudSlots, lives + frozenLives);
 
     const countEl = document.getElementById('livesCount');
     const rowEl = document.getElementById('livesHearts');
@@ -393,21 +390,14 @@ export function initMap() {
       rowEl.innerHTML = '';
       const hasPass = Inventory.hasCrushPass();
       for (let slot = 1; slot <= hudSlots; slot++) {
-        const isRegularFilled = slot <= regularEnd;
-        const isIceFilled = !isRegularFilled && slot <= iceEnd;
-        const filled = isRegularFilled || isIceFilled;
-        // Empty slot is an "ice slot" (greyed/locked styling) only if the
-        // pass is active AND we're past the regular zone; otherwise it's
-        // a plain empty regular slot.
-        const isIceSlot = isIceFilled || (!filled && hasPass && slot > lives);
-        const isLocked = !filled && isIceSlot && !hasPass;
+        const isPassSlot = slot > regularSlots;
 
-        if (isLocked) {
-          // Show a greyed-out heart with a lock badge; tooltip on hover
+        // Slots 4–5: locked for non–pass holders (empty + lock + tooltip).
+        if (isPassSlot && !hasPass) {
           const wrap = document.createElement('div');
           wrap.className = 'lives-hud__heart lives-hud__heart--locked';
-          wrap.title = 'Unlock with Weekly Pass';
-          wrap.setAttribute('data-tooltip', 'Unlock with Weekly Pass');
+          wrap.title = 'Buy pass to unlock';
+          wrap.setAttribute('data-tooltip', 'Buy pass to unlock');
           const heartImg = document.createElement('img');
           heartImg.className = 'lives-hud__heart--locked-img';
           heartImg.src = LIFE_HEART_EMPTY;
@@ -415,20 +405,26 @@ export function initMap() {
           heartImg.alt = '';
           wrap.appendChild(heartImg);
           rowEl.appendChild(wrap);
-        } else {
-          const img = document.createElement('img');
-          img.className = 'lives-hud__heart';
-          img.draggable = false;
-          img.alt = '';
-          if (!filled) {
-            img.src = LIFE_HEART_EMPTY;
-          } else if (isIceSlot || slot > lives) {
-            img.src = LIFE_HEART_ICE;
-          } else {
-            img.src = LIFE_HEART_FULL;
-          }
-          rowEl.appendChild(img);
+          continue;
         }
+
+        const isRegularFilled = slot <= regularEnd;
+        const isIceFilled = !isRegularFilled && slot <= iceEnd;
+        const filled = isRegularFilled || isIceFilled;
+        const isIceSlot = isIceFilled || (isPassSlot && !filled);
+
+        const img = document.createElement('img');
+        img.className = 'lives-hud__heart';
+        img.draggable = false;
+        img.alt = '';
+        if (!filled) {
+          img.src = LIFE_HEART_EMPTY;
+        } else if (isIceSlot || slot > lives) {
+          img.src = LIFE_HEART_ICE;
+        } else {
+          img.src = LIFE_HEART_FULL;
+        }
+        rowEl.appendChild(img);
       }
     }
 
