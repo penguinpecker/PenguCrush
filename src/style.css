@@ -1546,6 +1546,12 @@ body[data-screen="game"] {
   pointer-events: none;
 }
 
+.shop-slot__qty--label {
+  font-size: 1.35cqw;
+  padding: 0.28cqw 0.55cqw;
+  white-space: nowrap;
+}
+
 /* Price tag (pill-shaped box, placed anywhere on the art, fully independent) */
 .shop-tag {
   position: absolute;
@@ -2258,6 +2264,10 @@ body:not([data-screen="game"]) .shard-hud { display: none; }
 
   .shop-slot__qty {
     font-size: clamp(8px, 2.1cqw, 15px);
+  }
+
+  .shop-slot__qty--label {
+    font-size: clamp(6px, 1.45cqw, 11px);
   }
 
   .nav-bar {
