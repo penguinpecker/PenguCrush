@@ -1172,6 +1172,9 @@ contract PenguCrushV2 is
         WheelSlot memory s = wheelConfig[roll.slotIndex];
         if (!s.enabled) revert WheelSlotInvalid();
 
+        bytes32 prizeSku = s.sku;
+        uint32 prizeAmount = s.amount;
+
         // Apply prize
         if (s.kind == WheelPrizeKind.TryAgain || s.kind == WheelPrizeKind.None) {
             // nothing
@@ -1180,8 +1183,13 @@ contract PenguCrushV2 is
             currencyBalance[msg.sender][s.sku] = nb;
             emit CurrencyChanged(msg.sender, s.sku, int128(uint128(uint32(s.amount))), nb);
         } else if (s.kind == WheelPrizeKind.Booster) {
-            // s.sku may be a random pool alias — resolve if so
-            bytes32 actualSku = _resolveSkuOrPool(s.sku, uint256(keccak256(abi.encodePacked(roll.nonce, msg.sender))));
+            bytes32 actualSku;
+            if (s.sku == keccak256("pool.dailyboost")) {
+                actualSku = _resolveDailyPool(s.sku, today);
+            } else {
+                actualSku = _resolveSkuOrPool(s.sku, uint256(keccak256(abi.encodePacked(roll.nonce, msg.sender))));
+            }
+            prizeSku = actualSku;
             ItemConfig memory cfg = items[actualSku];
             if (cfg.kind == ItemKind.Booster && cfg.enabled) {
                 uint32 nb = boosterBalance[msg.sender][actualSku] + s.amount;
@@ -1190,18 +1198,28 @@ contract PenguCrushV2 is
                 emit BoosterGranted(msg.sender, actualSku, s.amount, nb);
             }
         } else if (s.kind == WheelPrizeKind.Shard) {
-            ItemConfig memory cfg = items[s.sku];
+            bytes32 actualSku = _resolveSkuOrPool(
+                s.sku, uint256(keccak256(abi.encodePacked(roll.nonce, msg.sender, roll.slotIndex)))
+            );
+            prizeSku = actualSku;
+            ItemConfig memory cfg = items[actualSku];
             if (cfg.kind == ItemKind.Shard && cfg.enabled) {
-                uint32 nb = shardBalance[msg.sender][s.sku] + s.amount;
+                uint32 nb = shardBalance[msg.sender][actualSku] + s.amount;
                 if (cfg.maxBalance != 0 && nb > cfg.maxBalance) nb = cfg.maxBalance;
-                shardBalance[msg.sender][s.sku] = nb;
-                emit ShardGranted(msg.sender, s.sku, s.amount, nb);
+                shardBalance[msg.sender][actualSku] = nb;
+                emit ShardGranted(msg.sender, actualSku, s.amount, nb);
             }
         } else if (s.kind == WheelPrizeKind.Lives) {
             _grantRegularLives(msg.sender, uint8(s.amount));
         }
 
-        emit DailySpin(msg.sender, today, roll.slotIndex, s.kind, s.sku, s.amount);
+        emit DailySpin(msg.sender, today, roll.slotIndex, s.kind, prizeSku, prizeAmount);
+    }
+
+    function _resolveDailyPool(bytes32 alias_, uint64 dayUtc) internal view returns (bytes32) {
+        bytes32[] memory pool = randomPools[alias_];
+        if (pool.length == 0) return alias_;
+        return pool[uint256(keccak256(abi.encodePacked(dayUtc))) % pool.length];
     }
 
     function _resolveSkuOrPool(bytes32 skuOrAlias, uint256 seed) internal view returns (bytes32) {
@@ -1364,7 +1382,7 @@ contract PenguCrushV2 is
         // Lives metadata (balances handled in lifeAccount struct, not boosterBalance)
         _seedItem("life.regular", ItemKind.Lives, MAX_REGULAR_LIVES, 0, 0);
         _seedItem("life.frozen",  ItemKind.Lives, MAX_FROZEN_LIVES,  0, 0);
-        // Random pool: ice boost = any booster
+        // Random pool: ice boost = any booster (legacy wheel alias)
         bytes32[] memory pool = new bytes32[](5);
         pool[0] = keccak256("booster.row");
         pool[1] = keccak256("booster.col");
@@ -1374,6 +1392,18 @@ contract PenguCrushV2 is
         bytes32 alias_ = keccak256("pool.iceboost");
         randomPools[alias_] = pool;
         emit RandomPoolSet(alias_, pool);
+        // Daily wheel: one booster type per UTC day (same for all players)
+        bytes32 dailyAlias = keccak256("pool.dailyboost");
+        randomPools[dailyAlias] = pool;
+        emit RandomPoolSet(dailyAlias, pool);
+        // Random shard pool for wheel
+        bytes32[] memory shardPool = new bytes32[](3);
+        shardPool[0] = keccak256("shard.necklace");
+        shardPool[1] = keccak256("shard.crown");
+        shardPool[2] = keccak256("shard.plooshie");
+        bytes32 shardAlias = keccak256("pool.shards");
+        randomPools[shardAlias] = shardPool;
+        emit RandomPoolSet(shardAlias, shardPool);
     }
 
     function _seedItem(string memory name, ItemKind kind, uint32 maxBal, uint8 rarity, uint16 rate) internal {
@@ -1387,12 +1417,12 @@ contract PenguCrushV2 is
 
     function _seedInitialWheel() internal {
         WheelSlot[6] memory s = [
-            WheelSlot({kind: WheelPrizeKind.Currency, sku: keccak256("currency.gems"),  amount:   5, weight: 2000, enabled: true}),
-            WheelSlot({kind: WheelPrizeKind.TryAgain, sku: bytes32(0),                  amount:   0, weight: 2000, enabled: true}),
-            WheelSlot({kind: WheelPrizeKind.Currency, sku: keccak256("currency.xp"),    amount: 100, weight: 2000, enabled: true}),
-            WheelSlot({kind: WheelPrizeKind.Currency, sku: keccak256("currency.coins"), amount:  50, weight: 1500, enabled: true}),
-            WheelSlot({kind: WheelPrizeKind.Booster,  sku: keccak256("pool.iceboost"),  amount:   1, weight: 1500, enabled: true}),
-            WheelSlot({kind: WheelPrizeKind.Currency, sku: keccak256("currency.xp"),    amount: 250, weight: 1000, enabled: true})
+            WheelSlot({kind: WheelPrizeKind.TryAgain, sku: bytes32(0),                     amount:   0, weight: 3500, enabled: true}),
+            WheelSlot({kind: WheelPrizeKind.Currency, sku: keccak256("currency.xp"),       amount: 100, weight: 3500, enabled: true}),
+            WheelSlot({kind: WheelPrizeKind.Currency, sku: keccak256("currency.xp"),       amount: 250, weight:  800, enabled: true}),
+            WheelSlot({kind: WheelPrizeKind.Booster,  sku: keccak256("pool.dailyboost"),   amount:   1, weight: 1000, enabled: true}),
+            WheelSlot({kind: WheelPrizeKind.Lives,    sku: keccak256("life.regular"),      amount:   1, weight: 1000, enabled: true}),
+            WheelSlot({kind: WheelPrizeKind.Shard,    sku: keccak256("pool.shards"),       amount:   1, weight:  200, enabled: true})
         ];
         wheelSlotCount = 6;
         for (uint8 i = 0; i < 6; i++) {

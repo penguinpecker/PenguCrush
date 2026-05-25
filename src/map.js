@@ -3,6 +3,10 @@ import { getWallet, fetchPlayerProgress, buildMapProgress, connectAGW, disconnec
 import * as Inventory from './inventory.js';
 import { renderShardSlots, SHARDS } from './shards.js';
 import { buyCrushPassETH, spinDailyWheel as chainSpinWheel, claimStarterPack, readStarterPackClaimed, PENGUCRUSH_ADDRESS } from './onchain.js';
+import {
+  getDailyWheelSliceLabels,
+  decodeDailySpinFromReceipt,
+} from './wheel.js';
 import { getPublicClient } from './agw.js';
 import { formatEther } from 'viem';
 import penguCrushAbiJson from '../contracts/PenguCrushABI.json';
@@ -621,27 +625,16 @@ export function initMap() {
 
   const DAILY_SEGMENTS = 6;
   const DAILY_SEGMENT_DEG = 360 / DAILY_SEGMENTS;
-  /** Art has spokes at 12 o’clock; segment centers on bitmap are at 30° + i×60°. Base spin aligns slice 0 under pointer. */
+  /** Art spokes at 12 o’clock; segment centers at 30° + i×60°. Base spin aligns slice 0 under pointer. */
   const DAILY_BASE_ROTATION_DEG = -30;
-  /**
-   * Index i = slice i (same as --i / data-slice). Clockwise from top, first slice center is ~30° on bitmap →
-   * matches art order: 5 Gems, Try Again, 100 XP, 50 Coins, Ice Boost, 250 XP.
-   */
-  const DAILY_REWARDS = ['5 Gems', 'Try Again', '100 XP', '50 Coins', 'Ice Boost', '250 XP'];
 
-  function formatDailyWheelResult(rewardText, effect) {
-    const mult = effect.wheelMultiplier || 1;
-    const passTag = mult > 1 ? ' (2× Crush Pass)' : '';
-    if (effect.type === 'gems') return `You won: ${effect.amount} Gems${passTag}`;
-    if (effect.type === 'coins') return `You won: ${effect.amount} Coins${passTag}`;
-    if (effect.type === 'xp') return `You won: ${effect.amount} XP${passTag}`;
-    if (effect.type === 'booster' && effect.boosterGrants?.length) {
-      const tally = {};
-      for (const id of effect.boosterGrants) tally[id] = (tally[id] || 0) + 1;
-      const parts = Object.entries(tally).map(([id, n]) => `${n}× ${id}`);
-      return `You won: Ice Boost → ${parts.join(', ')}${passTag}`;
-    }
-    return `You won: ${rewardText}${passTag}`;
+  function refreshWheelSliceLabels() {
+    const labels = getDailyWheelSliceLabels();
+    document.querySelectorAll('.daily-wheel-slice[data-slice]').forEach((el) => {
+      const i = Number(el.dataset.slice);
+      const label = el.querySelector('.daily-wheel-slice__label');
+      if (label && Number.isInteger(i) && labels[i]) label.textContent = labels[i];
+    });
   }
 
   function normDeg360(d) {
@@ -669,11 +662,7 @@ export function initMap() {
     return bestK;
   }
 
-  document.querySelectorAll('.daily-wheel-slice[data-slice]').forEach(el => {
-    const i = Number(el.dataset.slice);
-    const label = el.querySelector('.daily-wheel-slice__label');
-    if (label && Number.isInteger(i) && DAILY_REWARDS[i]) label.textContent = DAILY_REWARDS[i];
-  });
+  refreshWheelSliceLabels();
 
   let dailyWheelRotation = DAILY_BASE_ROTATION_DEG;
   let dailySpinning = false;
@@ -685,6 +674,7 @@ export function initMap() {
   function openDailyWheel() {
     dailyOverlay?.classList.add('active');
     dailyOverlay?.setAttribute('aria-hidden', 'false');
+    refreshWheelSliceLabels();
   }
 
   function closeDailyWheel() {
@@ -753,21 +743,13 @@ export function initMap() {
     });
   }
 
-  /// Pull the slotIndex emitted in the DailySpin event from the receipt. The
-  /// server-signed roll already contained this; reading the on-chain event
-  /// guarantees we display whatever the chain actually credited.
+  /// Pull slotIndex from DailySpin event (falls back to legacy data parse).
   function readSlotIndexFromReceipt(receipt) {
+    const spin = decodeDailySpinFromReceipt(receipt, PENGUCRUSH_ADDRESS);
+    if (spin) return spin.slotIndex;
     const logs = receipt?.logs || [];
-    // DailySpin(address indexed player, uint64 day, uint8 slotIndex, ...)
-    // topic[0] = event sig keccak. Easier path: ABI decode via viem if available;
-    // fallback to parsing the first non-indexed uint64 + uint8 in data.
     try {
-      const sig = '0x';
       for (const log of logs) {
-        if (!log.topics || log.topics.length === 0) continue;
-        // The event has 1 indexed param (player) so non-indexed is in data.
-        // data is abi.encode(uint64 day, uint8 slotIndex, uint8 kind, bytes32 sku, uint32 amount)
-        // We want slotIndex at offset 32..64 (second 32-byte word).
         if (log.data && log.data.length >= 2 + 64 * 2) {
           const second = log.data.slice(2 + 64, 2 + 128);
           const v = parseInt(second.slice(-2), 16);
@@ -776,6 +758,15 @@ export function initMap() {
       }
     } catch (_) {}
     return null;
+  }
+
+  function readPrizeFromReceipt(receipt) {
+    const spin = decodeDailySpinFromReceipt(receipt, PENGUCRUSH_ADDRESS);
+    if (spin?.prizeText) return spin.prizeText;
+    const slot = readSlotIndexFromReceipt(receipt);
+    if (slot == null) return null;
+    const labels = getDailyWheelSliceLabels();
+    return labels[slot] || null;
   }
 
   async function spinDailyWheel() {
@@ -807,11 +798,13 @@ export function initMap() {
 
       // ── 4) Pull fresh balances + show reward ──
       await Inventory.hydrateFromChain().catch(() => {});
-      const rewardText = DAILY_REWARDS[slot] || 'a reward';
+      const rewardText = readPrizeFromReceipt(r.receipt) || getDailyWheelSliceLabels()[slot] || 'a reward';
       Inventory.markDailySpun(rewardText);
       Events.wheelSpinComplete(r.hash);
       if (dailyResult) {
-        dailyResult.textContent = `You won: ${rewardText}!`;
+        dailyResult.textContent = rewardText === 'Try Again'
+          ? 'Try again tomorrow!'
+          : `You won: ${rewardText}!`;
         dailyResult.hidden = false;
       }
     } catch (err) {
