@@ -57,6 +57,32 @@ const MAX_BIG_COMBOS         = 100;
 const MAX_FALLER_PENALTIES   = 100;
 const MAX_DURATION_MS        = 60 * 60 * 1000;
 
+/** Min % of base move budget left for 2★ / 3★ via the efficiency path (matches src/levels.js). */
+const MOVE_STAR_2_PCT = 0.15;
+const MOVE_STAR_3_PCT = 0.30;
+
+function movesRemainingForStars(movesUsed: number, baseBudget: number): number {
+  return Math.max(0, baseBudget - Math.min(movesUsed, baseBudget));
+}
+
+function computeStars(score: number, movesUsed: number, level: number): number {
+  const t = LEVEL_STARS[level];
+  const budget = LEVEL_MOVES[level];
+
+  const scoreStars =
+    score >= t[2] ? 3 :
+    score >= t[1] ? 2 :
+    score >= t[0] ? 1 : 0;
+
+  const pct = budget > 0 ? movesRemainingForStars(movesUsed, budget) / budget : 0;
+  const moveStars =
+    pct >= MOVE_STAR_3_PCT ? 3 :
+    pct >= MOVE_STAR_2_PCT ? 2 :
+    1;
+
+  return Math.max(scoreStars, moveStars);
+}
+
 function encodeJournal(j: any): `0x${string}` {
   // Must match exactly the Solidity ABI encoding of LevelJournal:
   // (uint16, uint32, uint8, uint16, bool, uint32, bytes32[], bytes32[], uint16, uint16)
@@ -112,9 +138,8 @@ Deno.serve(async (req) => {
       return json({ error: 'bad fallerPenalties' }, 400);
     }
 
-    // Deterministic stars check — recompute from score vs per-level thresholds.
-    const t = LEVEL_STARS[level];
-    const expectedStars = score >= t[2] ? 3 : score >= t[1] ? 2 : score >= t[0] ? 1 : 0;
+    // Deterministic stars check — hybrid score + moves-remaining (matches src/levels.js).
+    const expectedStars = j.completed ? computeStars(score, movesUsed, level) : 0;
     if (j.completed) {
       if (stars !== expectedStars) return json({ error: `stars mismatch (claimed ${stars}, computed ${expectedStars})` }, 400);
     } else {

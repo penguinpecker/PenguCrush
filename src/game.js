@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { createGLTFLoader } from './gltf-loader.js';
-import { getLevel, hasLevel, getObjectiveChip } from './levels.js';
+import { getLevel, hasLevel, getObjectiveChip, computeStars, movesRemainingForStars } from './levels.js';
 import { getWallet, ensureWallet, saveLevelResult } from './supabase.js';
 import * as Inventory from './inventory.js';
 import { startLevel as chainStartLevel, submitLevel as chainSubmitLevel, submitAndStartNext as chainSubmitAndStartNext, sku as nameToSku } from './onchain.js';
@@ -1929,12 +1929,16 @@ function updateHUD() {
   if (mc) drawHUDPanel(mc);
 }
 
+function getTotalMoveBudget() {
+  return CONFIG.moves + TRAITS.bonusMoves;
+}
+
+function getMovesUsed() {
+  return getTotalMoveBudget() - moves;
+}
+
 function getStars() {
-  const [s1, s2, s3] = CONFIG.stars;
-  if (score >= s3) return 3;
-  if (score >= s2) return 2;
-  if (score >= s1) return 1;
-  return 0;
+  return computeStars(score, getMovesUsed(), CONFIG);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1950,7 +1954,7 @@ function showLevelPopup(won) {
   gameOver = true;
   syncGoalDisplayToActual();
   // Fire analytics first so we have a clean snapshot before any UI mutation
-  const movesUsedNow = CONFIG.moves - moves;
+  const movesUsedNow = getMovesUsed();
   const durationMsNow = Math.round(performance.now() - gameStartTime);
   const starsNow = won ? getStars() : 0;
   if (won) Events.levelWin(levelNum, score, starsNow, movesUsedNow, durationMsNow);
@@ -1986,7 +1990,10 @@ function showLevelPopup(won) {
     }
 
     scoreEl.textContent = score.toLocaleString();
-    objEl.textContent = `${stars} star${stars !== 1 ? 's' : ''} earned`;
+    const savedMoves = movesRemainingForStars(movesUsedNow, CONFIG.moves);
+    objEl.textContent = savedMoves > 0
+      ? `${stars} star${stars !== 1 ? 's' : ''} · ${savedMoves} move${savedMoves !== 1 ? 's' : ''} saved`
+      : `${stars} star${stars !== 1 ? 's' : ''} earned`;
     nextBtn.classList.remove('hidden');
     const canNext = hasLevel(levelNum + 1);
     nextBtn.disabled = !canNext;
@@ -2022,7 +2029,7 @@ function showLevelPopup(won) {
 
   // Save to Supabase (async, non-blocking)
   const wallet = getWallet();
-  const movesUsed = CONFIG.moves - moves;
+  const movesUsed = getMovesUsed();
   if (wallet) {
     saveLevelResult({
       wallet,
@@ -2181,7 +2188,7 @@ async function handleSwap(r1, c1, r2, c2) {
     // cross-device resume. On-chain checkpoint removed: rejecting it didn't
     // block gameplay anyway, so it was a meaningless prompt for non-session
     // wallets.
-    const movesUsed = CONFIG.moves - moves;
+    const movesUsed = getMovesUsed();
     if (movesUsed > 0 && movesUsed % 5 === 0) {
       try {
         const snapshotObj = {

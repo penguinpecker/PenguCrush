@@ -487,4 +487,41 @@ export function getLevelCount() {
   return LEVELS.length;
 }
 
+/** Min % of base move budget left for 2★ / 3★ via the efficiency path. */
+export const MOVE_STAR_2_PCT = 0.15;
+export const MOVE_STAR_3_PCT = 0.30;
+
+/**
+ * Base-budget moves saved at win — crown bonus moves don't inflate this.
+ * @param {number} movesUsed total moves consumed (base + shard bonus)
+ * @param {number} baseBudget level's CONFIG.moves
+ */
+export function movesRemainingForStars(movesUsed, baseBudget) {
+  return Math.max(0, baseBudget - Math.min(movesUsed, baseBudget));
+}
+
+/**
+ * Hybrid stars: best of score thresholds or moves-remaining efficiency.
+ * @param {number} score
+ * @param {number} movesUsed total moves consumed this run
+ * @param {{ moves: number, stars: [number, number, number] }} cfg level config
+ */
+export function computeStars(score, movesUsed, cfg) {
+  const [s1, s2, s3] = cfg.stars;
+  const budget = cfg.moves;
+
+  const scoreStars =
+    score >= s3 ? 3 :
+    score >= s2 ? 2 :
+    score >= s1 ? 1 : 0;
+
+  const pct = budget > 0 ? movesRemainingForStars(movesUsed, budget) / budget : 0;
+  const moveStars =
+    pct >= MOVE_STAR_3_PCT ? 3 :
+    pct >= MOVE_STAR_2_PCT ? 2 :
+    1;
+
+  return Math.max(scoreStars, moveStars);
+}
+
 export default LEVELS;
