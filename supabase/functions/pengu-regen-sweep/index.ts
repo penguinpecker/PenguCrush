@@ -7,9 +7,9 @@
 // pg_cron is configured to send it; ad-hoc curls without the header get 401.
 // Closes audit finding H4 (unauthenticated public sweep → relayer-gas burn).
 
-import { createPublicClient, createWalletClient, http } from 'npm:viem@^2.47.12';
-import { privateKeyToAccount } from 'npm:viem@^2.47.12/accounts';
-import { abstract } from 'npm:viem@^2.47.12/chains';
+import { createPublicClient, createWalletClient, http } from 'npm:viem@2.47.12';
+import { privateKeyToAccount } from 'npm:viem@2.47.12/accounts';
+import { abstract } from 'npm:viem@2.47.12/chains';
 import { getRelayerKey, getCronSecret, constantTimeEqual } from './_shared/vault.ts';
 
 const CORS = {

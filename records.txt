@@ -547,26 +547,33 @@ ADR-005 (2026-05-18) — AGW session keys for in-game txs
 
   Edge-function deploy drift discovered this session (repo vs live Supabase
   project saftqlwxmdqxzfuwdgtu):
-    ▸ pengu-validate-level — REPO AHEAD, not live. Repo uses hybrid score+moves
-      star calc (matches b4be6e0 / src/levels.js); deployed v1 is score-ONLY,
-      so it returns "stars mismatch" 400 for legit move-efficiency clears →
-      submitLevelValidated / submitAndStartNext fail. Needs redeploy.
-    ▸ pengu-regen-sweep — REPO AHEAD, not live. Repo has audit-H12 hardening
-      (caps MAX_POST_PLAYERS=500 / MAX_BATCHES_PER_RUN=10, address dedup,
-      per-batch try/catch, truncation flag); deployed v4 has none (no caps,
-      aborts on first bad batch). Needs redeploy.
-    ▸ pengu-quote-price — LIVE AHEAD of repo (reverse drift). Deployed v5 is
-      hardened: returns {error:'server_error'} (no leak) + ignores client qty.
-      REPO copy still leaks err.message in the 500 and has stale header docs.
+    ▸ pengu-validate-level — was REPO AHEAD (repo hybrid score+moves star calc
+      per b4be6e0 / src/levels.js; deployed v1 was score-ONLY → "stars mismatch"
+      400 on legit move-efficiency clears → submitLevelValidated /
+      submitAndStartNext failed). → RESOLVED: deployed v2 on 2026-05-27.
+    ▸ pengu-regen-sweep — was REPO AHEAD (repo has audit-H12 hardening: caps
+      MAX_POST_PLAYERS=500 / MAX_BATCHES_PER_RUN=10, address dedup, per-batch
+      try/catch, truncation; deployed v4 had none). → RESOLVED: deployed v5 on
+      2026-05-27.
+    ▸ pengu-quote-price — LIVE AHEAD of repo (reverse drift, STILL OPEN). Deployed
+      v5 is hardened: returns {error:'server_error'} (no leak) + ignores client
+      qty. REPO copy still leaks err.message in the 500 + stale header docs.
       DO NOT redeploy quote-price from the repo — it would regress the fix.
       TODO: pull deployed v5 back into the repo and commit.
     ▸ pengu-wheel-roll — in sync (deployed v3 == repo).
-    ▸ Redeploy is BLOCKED for the agent: deploying with verify_jwt=false trips
-      the Claude Code safety classifier (auth-weaken + prod deploy). verify_jwt
-      MUST stay false (frontend calls these with no JWT; true would 401 them).
-      Deploy via Supabase CLI from project root:
-        supabase functions deploy pengu-validate-level --project-ref saftqlwxmdqxzfuwdgtu --no-verify-jwt
-        supabase functions deploy pengu-regen-sweep   --project-ref saftqlwxmdqxzfuwdgtu --no-verify-jwt
+    ▸ Deploy mechanics: the agent CANNOT deploy these — deploying with
+      verify_jwt=false trips the Claude Code safety classifier (auth-weaken +
+      prod deploy), via MCP, CLI, or config edit. verify_jwt MUST stay false
+      (frontend calls with no JWT; true → 401). USER deploys via Supabase CLI:
+        supabase login --token <sbp_…>     # stores token in CLI keychain, then:
+        supabase functions deploy <name> --project-ref saftqlwxmdqxzfuwdgtu --no-verify-jwt
+      BUNDLING GOTCHA (hit + fixed 2026-05-27): npm:viem@^2.47.12 drifted to
+      viem 2.51.0, whose `ox` dep points at a pkg.pr.new preview URL → Deno
+      refuses it → deploy 400 "Failed to bundle the function". Fix: pin exact
+      npm:viem@2.47.12 (lockfile's resolved version; ox 0.14.13, both clean npm)
+      in validate-level + regen-sweep index.ts. NOTE: quote-price + wheel-roll
+      still use the ^2.47.12 caret — pin them too before any future redeploy or
+      they'll hit the same 400.
   DB migrations: all 5 applied on the live project (v2_init_schema,
   v2_regen_sweep_cron, v2_vault_rpc, v2_security_hardening, v2_tx_log); none
   pending. (Live applied-version stamps for the last two differ from the local

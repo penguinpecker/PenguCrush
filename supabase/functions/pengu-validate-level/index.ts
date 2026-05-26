@@ -5,9 +5,9 @@
 //
 // POST { player, journal } → { signature, journalHash, validator }
 
-import { privateKeyToAccount } from 'npm:viem@^2.47.12/accounts';
-import { abstract } from 'npm:viem@^2.47.12/chains';
-import { encodeAbiParameters, keccak256, parseAbiParameters } from 'npm:viem@^2.47.12';
+import { privateKeyToAccount } from 'npm:viem@2.47.12/accounts';
+import { abstract } from 'npm:viem@2.47.12/chains';
+import { encodeAbiParameters, keccak256, parseAbiParameters } from 'npm:viem@2.47.12';
 import { getValidatorKey } from './_shared/vault.ts';
 
 const CORS = {
