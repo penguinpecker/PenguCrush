@@ -555,11 +555,11 @@ ADR-005 (2026-05-18) — AGW session keys for in-game txs
       MAX_POST_PLAYERS=500 / MAX_BATCHES_PER_RUN=10, address dedup, per-batch
       try/catch, truncation; deployed v4 had none). → RESOLVED: deployed v5 on
       2026-05-27.
-    ▸ pengu-quote-price — LIVE AHEAD of repo (reverse drift, STILL OPEN). Deployed
-      v5 is hardened: returns {error:'server_error'} (no leak) + ignores client
-      qty. REPO copy still leaks err.message in the 500 + stale header docs.
-      DO NOT redeploy quote-price from the repo — it would regress the fix.
-      TODO: pull deployed v5 back into the repo and commit.
+    ▸ pengu-quote-price — was LIVE AHEAD of repo (reverse drift). Deployed v5 is
+      hardened: returns {error:'server_error'} (no leak) + ignores client qty.
+      → RESOLVED 2026-05-27: reconciled repo index.ts to match live v5 (catch now
+      returns 'server_error', header aligned, dup inline comment removed). Repo
+      == live; safe to redeploy. NOT redeployed (live already == this).
     ▸ pengu-wheel-roll — in sync (deployed v3 == repo).
     ▸ Deploy mechanics: the agent CANNOT deploy these — deploying with
       verify_jwt=false trips the Claude Code safety classifier (auth-weaken +
@@ -571,9 +571,10 @@ ADR-005 (2026-05-18) — AGW session keys for in-game txs
       viem 2.51.0, whose `ox` dep points at a pkg.pr.new preview URL → Deno
       refuses it → deploy 400 "Failed to bundle the function". Fix: pin exact
       npm:viem@2.47.12 (lockfile's resolved version; ox 0.14.13, both clean npm)
-      in validate-level + regen-sweep index.ts. NOTE: quote-price + wheel-roll
-      still use the ^2.47.12 caret — pin them too before any future redeploy or
-      they'll hit the same 400.
+      in validate-level + regen-sweep index.ts. → 2026-05-27: also pinned
+      quote-price (eip712.ts) + wheel-roll (index.ts) to npm:viem@2.47.12 — all
+      four functions now pinned, no caret drift left. (quote-price + wheel-roll
+      not redeployed; repo-only, live still on caret but unchanged & working.)
   DB migrations: all 5 applied on the live project (v2_init_schema,
   v2_regen_sweep_cron, v2_vault_rpc, v2_security_hardening, v2_tx_log); none
   pending. (Live applied-version stamps for the last two differ from the local

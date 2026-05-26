@@ -3,9 +3,9 @@
 // Vault via the `public.get_vault_secret` security-definer RPC (service_role
 // only). Cached in module memory after first read.
 
-import { privateKeyToAccount } from 'npm:viem@^2.47.12/accounts';
-import { abstract } from 'npm:viem@^2.47.12/chains';
-import { keccak256, stringToBytes } from 'npm:viem@^2.47.12';
+import { privateKeyToAccount } from 'npm:viem@2.47.12/accounts';
+import { abstract } from 'npm:viem@2.47.12/chains';
+import { keccak256, stringToBytes } from 'npm:viem@2.47.12';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 export const PENGUCRUSH_ADDRESS = '0x06aCb91c46aD1359825560B19A9556118Aeb1896' as const;

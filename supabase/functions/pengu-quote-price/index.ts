@@ -1,6 +1,8 @@
 // Edge function: pengu-quote-price
 // Signs an EIP-712 ShopQuote that PenguCrushV2 verifies during shop purchases.
-// POST { buyer, skuName, qty, currency } → { quote, signature, ttlSec }
+// POST { buyer, skuName, currency } → { quote, signature, ttlSec }
+// Server is the source of truth for bundle size + price. Any qty in the
+// request body is ignored — clients buy exactly one bundle per click.
 
 import { signShopQuote, sku, randomNonce, getEthUsdPrice, usdMicrosToWei, SKU_BUNDLES, EthUsdUnavailable, type ShopQuote } from './_shared/eip712.ts';
 
@@ -24,8 +26,6 @@ Deno.serve(async (req) => {
     if (!bundle) return json({ error: 'unknown sku' }, 400);
     if (!['ETH', 'USDC'].includes(currency)) return json({ error: 'bad currency' }, 400);
 
-    // Server is the source of truth for bundle size + price. Ignore any
-    // qty in the request body — clients buy exactly one bundle per click.
     const qty = bundle.size;
     const totalUsdMicros = bundle.priceMicros;
     let amount: bigint;
@@ -56,7 +56,7 @@ Deno.serve(async (req) => {
     return json({ quote, signature, ttlSec: QUOTE_TTL_SEC });
   } catch (err) {
     console.error('pengu-quote-price error:', err);
-    return json({ error: (err as Error).message || String(err) }, 500);
+    return json({ error: 'server_error' }, 500);
   }
 });
 
