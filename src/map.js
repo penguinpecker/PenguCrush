@@ -1,4 +1,4 @@
-import { getLevel, getLevelCount } from './levels.js';
+import { getLevel, getLevelCount, getObjectiveChip, formatLevelObjective } from './levels.js';
 import { getWallet, fetchPlayerProgress, buildMapProgress, connectAGW, disconnectAGW, shortAddress, hasInjectedWallet, signInWithAGW, isSignedIn } from './supabase.js';
 import * as Inventory from './inventory.js';
 import { renderShardSlots, SHARDS } from './shards.js';
@@ -532,6 +532,26 @@ export function initMap() {
   setInterval(renderLivesHud, 1000);
   renderLivesHud();
 
+  function renderPopupObjective(cfg) {
+    const row = document.getElementById('popupObjectiveRow');
+    if (!row) return;
+    const chip = getObjectiveChip(cfg);
+    if (!chip) {
+      row.hidden = true;
+      row.innerHTML = '';
+      return;
+    }
+    const text = formatLevelObjective(cfg)
+      || (chip.target != null ? `${chip.label} · 0/${chip.target}` : chip.label);
+    row.hidden = false;
+    row.innerHTML = `
+      <div class="pop-goal-chip">
+        <img class="pop-goal-chip__icon" src="${chip.icon}" alt="" draggable="false" />
+        <span class="pop-goal-chip__progress">${text}</span>
+      </div>
+    `;
+  }
+
   function openPopup(lv) {
     Events.levelPopupOpen(lv.id);
     currentPopupLevel = lv;
@@ -551,6 +571,7 @@ export function initMap() {
     });
     document.getElementById('popupTarget').textContent = cfg.targetScore.toLocaleString();
     document.getElementById('popupMoves').textContent = cfg.moves;
+    renderPopupObjective(cfg);
     document.getElementById('popupBest').textContent = lv.best > 0 ? lv.best.toLocaleString() : '\u2014';
     // Show shards earned FROM THIS LEVEL specifically (cumulative across
     // past runs of this level). Lifetime totals across every level live in
