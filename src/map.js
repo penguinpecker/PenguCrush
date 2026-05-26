@@ -10,7 +10,7 @@ import {
 import { getPublicClient } from './agw.js';
 import { formatEther } from 'viem';
 import penguCrushAbiJson from '../contracts/PenguCrushABI.json';
-import { Events, setAnalyticsUser } from './analytics.js';
+import { renderLivesHud } from './lives-hud.js';
 
 /** Map inventory grid: 5 boosters + 3 shards = 4×2 */
 const INVENTORY_MAP_SLOTS = [
@@ -426,92 +426,8 @@ export function initMap() {
   let currentPopupLevel = null;
   const popupPlayBtn = document.getElementById('popupPlay');
 
-  const LIFE_HEART_FULL = '/assets/ui/lives/heart-full.png';
-  const LIFE_HEART_ICE = '/assets/ui/lives/heart-ice.png';
-  const LIFE_HEART_EMPTY = '/assets/ui/lives/heart-empty.png';
-
-  function formatNextLifeCountdown(ms) {
-    const totalSec = Math.max(0, Math.floor(ms / 1000));
-    const h = Math.floor(totalSec / 3600);
-    const m = Math.floor((totalSec % 3600) / 60);
-    const sec = totalSec % 60;
-    return `${h}h ${m}m ${sec}s`;
-  }
-
-  function renderLivesHud() {
-    const { lives, frozenLives } = Inventory.getLives();
-    const livesMax = Inventory.getMaxLives();
-    const hudSlots = Inventory.getLivesHudSlotCount();
-    const regularSlots = Inventory.getRegularLivesHudSlots();
-    const regularEnd = Math.min(hudSlots, lives);
-    const iceEnd = Math.min(hudSlots, lives + frozenLives);
-    const visibleTotal = Math.min(hudSlots, lives + frozenLives);
-
-    const countEl = document.getElementById('livesCount');
-    const rowEl = document.getElementById('livesHearts');
-    const regenEl = document.getElementById('livesRegen');
-
-    if (countEl) countEl.textContent = String(visibleTotal);
-
-    if (rowEl) {
-      rowEl.innerHTML = '';
-      const hasPass = Inventory.hasCrushPass();
-      for (let slot = 1; slot <= hudSlots; slot++) {
-        const isPassSlot = slot > regularSlots;
-
-        // Slots 4–5: locked for non–pass holders (empty + lock + tooltip).
-        if (isPassSlot && !hasPass) {
-          const wrap = document.createElement('div');
-          wrap.className = 'lives-hud__heart lives-hud__heart--locked';
-          wrap.title = 'Buy pass to unlock';
-          wrap.setAttribute('data-tooltip', 'Buy pass to unlock');
-          const heartImg = document.createElement('img');
-          heartImg.className = 'lives-hud__heart--locked-img';
-          heartImg.src = LIFE_HEART_EMPTY;
-          heartImg.draggable = false;
-          heartImg.alt = '';
-          wrap.appendChild(heartImg);
-          rowEl.appendChild(wrap);
-          continue;
-        }
-
-        const isRegularFilled = slot <= regularEnd;
-        const isIceFilled = !isRegularFilled && slot <= iceEnd;
-        const filled = isRegularFilled || isIceFilled;
-        const isIceSlot = isIceFilled || (isPassSlot && !filled);
-
-        const img = document.createElement('img');
-        img.className = 'lives-hud__heart';
-        img.draggable = false;
-        img.alt = '';
-        if (!filled) {
-          img.src = LIFE_HEART_EMPTY;
-        } else if (isIceSlot || slot > lives) {
-          img.src = LIFE_HEART_ICE;
-        } else {
-          img.src = LIFE_HEART_FULL;
-        }
-        rowEl.appendChild(img);
-      }
-    }
-
-    if (regenEl) {
-      if (lives >= livesMax) regenEl.textContent = 'Full!';
-      else {
-        const ms = Inventory.nextLifeRegenIn();
-        regenEl.textContent =
-          ms <= 0
-            ? 'Next life soon…'
-            : `Next life in: ${formatNextLifeCountdown(ms)}`;
-      }
-    }
-
-    if (popupPlayBtn) {
-      const inactive = visibleTotal <= 0;
-      popupPlayBtn.disabled = inactive;
-      popupPlayBtn.classList.toggle('pop-play--disabled', inactive);
-    }
-
+  function renderMapLivesHud() {
+    renderLivesHud({ playBtn: popupPlayBtn });
     refreshCrushPassChrome();
   }
 
@@ -521,7 +437,7 @@ export function initMap() {
     document.getElementById('livesHud')?.classList.toggle('lives-hud--pass', on);
   }
 
-  window.addEventListener('pengu:inventory', renderLivesHud);
+  window.addEventListener('pengu:inventory', renderMapLivesHud);
 
   const livesBuyBtn = document.getElementById('livesBuyBtn');
   livesBuyBtn?.addEventListener('click', e => {
@@ -529,8 +445,8 @@ export function initMap() {
     document.getElementById('shopOverlay')?.classList.add('active');
   });
 
-  setInterval(renderLivesHud, 1000);
-  renderLivesHud();
+  setInterval(renderMapLivesHud, 1000);
+  renderMapLivesHud();
 
   function renderPopupObjective(cfg) {
     const row = document.getElementById('popupObjectiveRow');
@@ -581,7 +497,7 @@ export function initMap() {
       variant: 'card',
     });
     overlay.classList.add('active');
-    renderLivesHud();
+    renderMapLivesHud();
   }
 
   function closePopup() { overlay.classList.remove('active'); currentPopupLevel = null; }
@@ -628,7 +544,7 @@ export function initMap() {
       alertFriendly(err, 'Could not start this level on chain.');
       if (cta === 'lives') {
         await Inventory.hydrateFromChain().catch(() => {});
-        renderLivesHud();
+        renderMapLivesHud();
       }
       popupPlayBtn.disabled = false;
       popupPlayBtn.classList.remove('pop-play--disabled');
@@ -1345,7 +1261,7 @@ export function initMap() {
     if (crushPassOverlay?.classList.contains('active')) renderCrushPassTimer();
     refreshCrushPassChrome();
     refreshSpinButtonState();
-    renderLivesHud();
+    renderMapLivesHud();
   });
 
   document.addEventListener('keydown', e => {
@@ -1383,7 +1299,7 @@ export function initMap() {
 
   void (async () => {
     await Inventory.hydrateFromChain().catch(() => {});
-    renderLivesHud();
+    renderMapLivesHud();
     refreshSpinButtonState();
   })();
 

@@ -829,6 +829,50 @@ body[data-screen="game"] {
   display: flex;
 }
 
+/* Lives HUD on end-game dialog — same top-left placement as map screen */
+.level-popup-overlay .lives-hud--end-popup {
+  position: fixed;
+  left: max(6px, env(safe-area-inset-left));
+  top: max(6px, env(safe-area-inset-top));
+  z-index: 210;
+  pointer-events: none;
+}
+
+.level-popup-overlay .lives-hud--end-popup .lives-hud__inner {
+  pointer-events: auto;
+}
+
+@keyframes lives-hud-shake {
+  0%, 100% { transform: translateX(0); }
+  15% { transform: translateX(-8px); }
+  30% { transform: translateX(8px); }
+  45% { transform: translateX(-6px); }
+  60% { transform: translateX(6px); }
+  75% { transform: translateX(-3px); }
+  90% { transform: translateX(3px); }
+}
+
+.lives-hud--shake {
+  animation: lives-hud-shake 0.55s ease-in-out;
+}
+
+@keyframes level-popup-btn-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+
+.level-popup-btn--shake {
+  animation: level-popup-btn-shake 0.45s ease-in-out;
+}
+
+.level-popup-btn--no-lives {
+  cursor: not-allowed;
+  filter: saturate(0.75) brightness(0.92);
+}
+
 /* Frame art 2912×1440 → lock layout so % positions + inner UI scale together on all screens */
 .level-popup {
   position: relative;
@@ -1066,6 +1110,17 @@ body[data-screen="game"] {
 .level-popup-btn--next.disabled:hover {
   transform: none;
   filter: grayscale(0.25) brightness(0.95);
+}
+
+.level-popup-btn.disabled:not(:disabled) {
+  opacity: 0.55;
+  cursor: not-allowed;
+  filter: grayscale(0.2) brightness(0.95);
+}
+
+.level-popup-btn.disabled:not(:disabled):hover {
+  transform: none;
+  filter: grayscale(0.2) brightness(0.95);
 }
 
 /* ═══════════════════════════════════════════════════════════════

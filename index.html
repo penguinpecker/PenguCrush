@@ -384,6 +384,21 @@
 
     <!-- Level Complete / Fail Popup -->
     <div class="level-popup-overlay" id="levelPopup">
+      <div class="lives-hud lives-hud--end-popup" id="levelPopupLivesHud" aria-label="Lives">
+        <img class="lives-hud__bg" src="/assets/ui/lives/lives-container.png" draggable="false" alt="" />
+        <div class="lives-hud__inner">
+          <div class="lives-hud__badge">
+            <span class="lives-hud__badge-count" id="levelPopupLivesCount">0</span>
+          </div>
+          <div class="lives-hud__mid">
+            <div class="lives-hud__hearts" id="levelPopupLivesHearts"></div>
+            <div class="lives-hud__regen" id="levelPopupLivesRegen" aria-live="polite">Full!</div>
+          </div>
+          <button type="button" class="lives-hud__plus" id="levelPopupLivesBuyBtn" aria-label="Get more lives">
+            <img src="/assets/ui/lives/plus-button.png" draggable="false" alt="" />
+          </button>
+        </div>
+      </div>
       <div class="level-popup">
         <img src="/assets/ui/level-popup-frame.png" class="level-popup-bg" draggable="false" />
         <div class="level-popup-content">

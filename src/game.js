@@ -7,6 +7,7 @@ import { startLevel as chainStartLevel, submitLevel as chainSubmitLevel, submitA
 import { rollShardsForMatch, renderShardSlots, computeTraits } from './shards.js';
 import { saveSnapshot as saveMidGameSnapshot, loadSnapshot as loadMidGameSnapshot, clearSnapshot as clearMidGameSnapshot } from './mid-game.js';
 import { Events } from './analytics.js';
+import { renderLivesHud, canSpendLife, shakeLivesHud, shakeElement } from './lives-hud.js';
 
 // ─── Per-level journal accumulated during play, submitted on-chain at end ────
 const journal = {
@@ -1949,6 +1950,65 @@ function getStars() {
 /// as ONE atomic tx (submit + next-startLevel together) — no more racing
 /// auto-submit on popup open and a fresh wallet prompt on Next.
 let pendingJournal = null;
+let _endPopupWon = false;
+let _popupLivesInterval = null;
+
+const END_POPUP_LIVES = {
+  rootId: 'levelPopupLivesHud',
+  countId: 'levelPopupLivesCount',
+  heartsId: 'levelPopupLivesHearts',
+  regenId: 'levelPopupLivesRegen',
+};
+
+function refreshEndPopupLives() {
+  renderLivesHud(END_POPUP_LIVES);
+}
+
+function clearEndPopupLivesInterval() {
+  if (_popupLivesInterval) {
+    clearInterval(_popupLivesInterval);
+    _popupLivesInterval = null;
+  }
+}
+
+function updateEndPopupActionStates(won) {
+  const replayBtn = document.getElementById('levelPopupReplay');
+  const nextBtn = document.getElementById('levelPopupNext');
+  const hasLife = canSpendLife();
+  const canNextLevel = won && hasLevel(levelNum + 1);
+  const blockedNoLives = !hasLife;
+  const blockedNoLevel = won && !hasLevel(levelNum + 1);
+
+  if (replayBtn) {
+    replayBtn.classList.toggle('disabled', blockedNoLives);
+    replayBtn.classList.toggle('level-popup-btn--no-lives', blockedNoLives);
+    replayBtn.title = blockedNoLives ? 'No lives left — wait or get more' : '';
+  }
+
+  if (nextBtn) {
+    if (!won) {
+      nextBtn.classList.add('hidden');
+      nextBtn.disabled = true;
+      nextBtn.classList.remove('disabled', 'level-popup-btn--no-lives');
+      nextBtn.title = '';
+    } else {
+      nextBtn.classList.remove('hidden');
+      nextBtn.disabled = blockedNoLevel;
+      nextBtn.classList.toggle('disabled', blockedNoLevel || blockedNoLives);
+      nextBtn.classList.toggle('level-popup-btn--no-lives', blockedNoLives && canNextLevel);
+      if (blockedNoLevel) nextBtn.title = 'No more levels';
+      else if (blockedNoLives) nextBtn.title = 'No lives left — wait or get more';
+      else nextBtn.title = '';
+    }
+  }
+
+  return { hasLife, canNextLevel, blockedNoLives };
+}
+
+function flashNoLivesFeedback(...btns) {
+  shakeLivesHud(END_POPUP_LIVES.rootId);
+  btns.forEach(shakeElement);
+}
 
 function showLevelPopup(won) {
   gameOver = true;
@@ -1995,9 +2055,7 @@ function showLevelPopup(won) {
       ? `${stars} star${stars !== 1 ? 's' : ''} · ${savedMoves} move${savedMoves !== 1 ? 's' : ''} saved`
       : `${stars} star${stars !== 1 ? 's' : ''} earned`;
     nextBtn.classList.remove('hidden');
-    const canNext = hasLevel(levelNum + 1);
-    nextBtn.disabled = !canNext;
-    nextBtn.classList.toggle('disabled', !canNext);
+    updateEndPopupActionStates(true);
   } else {
     title.innerHTML = 'Out of<br>Moves!';
     title.classList.add('fail');
@@ -2012,11 +2070,22 @@ function showLevelPopup(won) {
     }
 
     scoreEl.textContent = score.toLocaleString();
-    objEl.textContent = 'Try again!';
-    nextBtn.classList.add('hidden');
-    nextBtn.disabled = false;
-    nextBtn.classList.remove('disabled');
+    objEl.textContent = canSpendLife() ? 'Try again!' : 'Try again! · No lives left';
+    updateEndPopupActionStates(false);
   }
+
+  _endPopupWon = won;
+  clearEndPopupLivesInterval();
+  Inventory.hydrateFromChain()
+    .catch(() => {})
+    .finally(() => {
+      refreshEndPopupLives();
+      const state = updateEndPopupActionStates(won);
+      _popupLivesInterval = setInterval(refreshEndPopupLives, 1000);
+      if (state.blockedNoLives && (won ? state.canNextLevel : true)) {
+        setTimeout(() => shakeLivesHud(END_POPUP_LIVES.rootId), 450);
+      }
+    });
 
   // Save to localStorage (immediate fallback)
   const progress = JSON.parse(localStorage.getItem('pengucrush_progress') || '{}');
@@ -2088,7 +2157,11 @@ function setupLevelPopupButtons() {
   /// another is mid-tx.
   function setBusy(busy) {
     _levelEndBusy = busy;
-    [mapBtn, replayBtn, nextBtn].forEach(b => { if (b) b.disabled = busy; });
+    if (busy) {
+      [mapBtn, replayBtn, nextBtn].forEach(b => { if (b) b.disabled = true; });
+      return;
+    }
+    updateEndPopupActionStates(_endPopupWon);
   }
 
   /// Common error path shared by all three popup buttons.
@@ -2121,6 +2194,10 @@ function setupLevelPopupButtons() {
   /// Replay button — fused submit + start same level (1 atomic tx).
   replayBtn.addEventListener('click', async (e) => {
     if (_levelEndBusy) return;
+    if (!canSpendLife()) {
+      flashNoLivesFeedback(replayBtn);
+      return;
+    }
     const btn = e.currentTarget;
     const orig = btn.textContent;
     setBusy(true);
@@ -2150,6 +2227,10 @@ function setupLevelPopupButtons() {
   nextBtn.addEventListener('click', async (e) => {
     if (_levelEndBusy) return;
     if (!hasLevel(levelNum + 1)) return;
+    if (!canSpendLife()) {
+      flashNoLivesFeedback(nextBtn);
+      return;
+    }
     const btn = e.currentTarget;
     const orig = btn.textContent;
     setBusy(true);
@@ -2174,6 +2255,17 @@ function setupLevelPopupButtons() {
     }
   });
 }
+
+document.getElementById('levelPopupLivesBuyBtn')?.addEventListener('click', e => {
+  e.stopPropagation();
+  document.getElementById('shopOverlay')?.classList.add('active');
+});
+
+window.addEventListener('pengu:inventory', () => {
+  if (!document.getElementById('levelPopup')?.classList.contains('active')) return;
+  refreshEndPopupLives();
+  updateEndPopupActionStates(_endPopupWon);
+});
 
 async function handleSwap(r1, c1, r2, c2) {
   if (animating || gameOver) return; animating = true;
