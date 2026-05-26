@@ -529,6 +529,55 @@ ADR-005 (2026-05-18) — AGW session keys for in-game txs
   ▸ No DB change required — wheel state is fully on-chain (lastWheelDay),
       tx logging uses existing pengu_tx_log, spin analytics go to gtag not DB.
 
+  Commits pulled this session (e2b454d..e8e1b19, all by LazyDevPro) + ours
+  (times IST, +05:30):
+    2026-05-24 01:54  24202f3  fixed level 4 bug + added objective + more (16f,+988/-110)
+    2026-05-24 01:57  7020138  merge origin/main
+    2026-05-24 12:50  4397d4f  fixed lives count (2f)
+    2026-05-24 13:06  9df7210  LEADERBOARD fix (5f,+232)
+    2026-05-25 13:07  e42379d  daily wheel updated — contract wheel logic + wheel.js/map.js (4f,+286)
+    2026-05-25 13:11  f27d6b7  lives count fix (2f)
+    2026-05-26 14:36  b4be6e0  new star-ratings calc — hybrid score+moves (3f,+82) ← drives validate-level drift below
+    2026-05-26 14:50  27e2e11  level extra (2f)
+    2026-05-26 14:57  e8e1b19  lives HUD on end-game page (5f,+314)
+    2026-05-27 00:12  12870cd  fix(wheel): ship V2.8 on-chain + record go-live (this session)
+  These are all FRONTEND/contract-source; frontend auto-deploys from main via
+  Vercel, so the wheel UI / lives-HUD / levels / star-calc are live. Backend
+  (contract/edge/DB) had to be reconciled by hand — see below.
+
+  Edge-function deploy drift discovered this session (repo vs live Supabase
+  project saftqlwxmdqxzfuwdgtu):
+    ▸ pengu-validate-level — REPO AHEAD, not live. Repo uses hybrid score+moves
+      star calc (matches b4be6e0 / src/levels.js); deployed v1 is score-ONLY,
+      so it returns "stars mismatch" 400 for legit move-efficiency clears →
+      submitLevelValidated / submitAndStartNext fail. Needs redeploy.
+    ▸ pengu-regen-sweep — REPO AHEAD, not live. Repo has audit-H12 hardening
+      (caps MAX_POST_PLAYERS=500 / MAX_BATCHES_PER_RUN=10, address dedup,
+      per-batch try/catch, truncation flag); deployed v4 has none (no caps,
+      aborts on first bad batch). Needs redeploy.
+    ▸ pengu-quote-price — LIVE AHEAD of repo (reverse drift). Deployed v5 is
+      hardened: returns {error:'server_error'} (no leak) + ignores client qty.
+      REPO copy still leaks err.message in the 500 and has stale header docs.
+      DO NOT redeploy quote-price from the repo — it would regress the fix.
+      TODO: pull deployed v5 back into the repo and commit.
+    ▸ pengu-wheel-roll — in sync (deployed v3 == repo).
+    ▸ Redeploy is BLOCKED for the agent: deploying with verify_jwt=false trips
+      the Claude Code safety classifier (auth-weaken + prod deploy). verify_jwt
+      MUST stay false (frontend calls these with no JWT; true would 401 them).
+      Deploy via Supabase CLI from project root:
+        supabase functions deploy pengu-validate-level --project-ref saftqlwxmdqxzfuwdgtu --no-verify-jwt
+        supabase functions deploy pengu-regen-sweep   --project-ref saftqlwxmdqxzfuwdgtu --no-verify-jwt
+  DB migrations: all 5 applied on the live project (v2_init_schema,
+  v2_regen_sweep_cron, v2_vault_rpc, v2_security_hardening, v2_tx_log); none
+  pending. (Live applied-version stamps for the last two differ from the local
+  filename stamps — cosmetic; names + count match.)
+
+  Latent (in BOTH repo and live, not a deploy gap): pengu-regen-sweep filters
+  eligibility on `regular < 3`, but REGEN_CAP_REGULAR is now 5 (V2.7). Cron
+  under-sweeps players sitting at 3–4 regenerating toward 5 — they still get
+  virtual regen on next getLives/claimRegen, so not broken, just under-swept.
+  Fix in code (→ `< 5`) when convenient.
+
 ═══════════════════════════════════════════════════════════════════════════════
 3. ISSUES & FIXES (failed + successful)
 ═══════════════════════════════════════════════════════════════════════════════
