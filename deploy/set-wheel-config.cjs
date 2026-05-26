@@ -3,7 +3,8 @@
 //
 //   npx hardhat deploy-zksync --script set-wheel-config.cjs --network abstractMainnet
 //
-const { Wallet, Provider, Contract, utils } = require("zksync-ethers");
+const { Wallet, Provider, Contract } = require("zksync-ethers");
+const { ethers } = require("ethers");
 const { vars } = require("hardhat/config");
 
 const DEPLOYER_PK = process.env.DEPLOYER_PRIVATE_KEY || vars.get("DEPLOYER_PRIVATE_KEY");
@@ -13,7 +14,7 @@ const PROXY = process.env.PENGUCRUSH_PROXY || "0x06aCb91c46aD1359825560B19A95561
 const KIND = { Currency: 1, Booster: 2, Shard: 3, Lives: 4, TryAgain: 5 };
 
 function sku(name) {
-  return utils.id(name);
+  return ethers.id(name);
 }
 
 const BOOSTERS = [
@@ -31,7 +32,7 @@ const SHARDS = [
 ];
 
 const WHEEL_SLOTS = [
-  { kind: KIND.TryAgain, sku: utils.hexZeroPad("0x00", 32), amount: 0, weight: 3500, enabled: true },
+  { kind: KIND.TryAgain, sku: ethers.ZeroHash, amount: 0, weight: 3500, enabled: true },
   { kind: KIND.Currency, sku: sku("currency.xp"), amount: 100, weight: 3500, enabled: true },
   { kind: KIND.Currency, sku: sku("currency.xp"), amount: 250, weight: 800, enabled: true },
   { kind: KIND.Booster, sku: sku("pool.dailyboost"), amount: 1, weight: 1000, enabled: true },

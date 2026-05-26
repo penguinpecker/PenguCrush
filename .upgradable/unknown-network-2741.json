@@ -4808,13 +4808,13 @@
           {
             "contract": "PenguCrushV2",
             "label": "bestResults",
-            "type": "t_mapping(t_address,t_mapping(t_uint16,t_struct(LevelResult)9612_storage))",
+            "type": "t_mapping(t_address,t_mapping(t_uint16,t_struct(LevelResult)10060_storage))",
             "src": "contracts/PenguCrushV2.sol:222"
           },
           {
             "contract": "PenguCrushV2",
             "label": "playerStats",
-            "type": "t_mapping(t_address,t_struct(PlayerStats)9629_storage)",
+            "type": "t_mapping(t_address,t_struct(PlayerStats)10077_storage)",
             "src": "contracts/PenguCrushV2.sol:225"
           },
           {
@@ -4844,7 +4844,7 @@
           {
             "contract": "PenguCrushV2",
             "label": "items",
-            "type": "t_mapping(t_bytes32,t_struct(ItemConfig)9601_storage)",
+            "type": "t_mapping(t_bytes32,t_struct(ItemConfig)10049_storage)",
             "src": "contracts/PenguCrushV2.sol:232"
           },
           {
@@ -4880,13 +4880,13 @@
           {
             "contract": "PenguCrushV2",
             "label": "lifeAccount",
-            "type": "t_mapping(t_address,t_struct(LifeAccount)9636_storage)",
+            "type": "t_mapping(t_address,t_struct(LifeAccount)10084_storage)",
             "src": "contracts/PenguCrushV2.sol:246"
           },
           {
             "contract": "PenguCrushV2",
             "label": "crushPass",
-            "type": "t_mapping(t_address,t_struct(CrushPass)9643_storage)",
+            "type": "t_mapping(t_address,t_struct(CrushPass)10091_storage)",
             "src": "contracts/PenguCrushV2.sol:246"
           },
           {
@@ -4898,7 +4898,7 @@
           {
             "contract": "PenguCrushV2",
             "label": "wheelConfig",
-            "type": "t_mapping(t_uint8,t_struct(WheelSlot)9655_storage)",
+            "type": "t_mapping(t_uint8,t_struct(WheelSlot)10103_storage)",
             "src": "contracts/PenguCrushV2.sol:251"
           },
           {
@@ -5044,19 +5044,19 @@
           "t_uint256": {
             "label": "uint256"
           },
-          "t_mapping(t_address,t_mapping(t_uint16,t_struct(LevelResult)9612_storage))": {
+          "t_mapping(t_address,t_mapping(t_uint16,t_struct(LevelResult)10060_storage))": {
             "label": "mapping(address => mapping(uint16 => struct PenguCrushV2.LevelResult))"
           },
           "t_address": {
             "label": "address"
           },
-          "t_mapping(t_uint16,t_struct(LevelResult)9612_storage)": {
+          "t_mapping(t_uint16,t_struct(LevelResult)10060_storage)": {
             "label": "mapping(uint16 => struct PenguCrushV2.LevelResult)"
           },
           "t_uint16": {
             "label": "uint16"
           },
-          "t_struct(LevelResult)9612_storage": {
+          "t_struct(LevelResult)10060_storage": {
             "label": "struct PenguCrushV2.LevelResult",
             "members": [
               {
@@ -5090,10 +5090,10 @@
           "t_uint64": {
             "label": "uint64"
           },
-          "t_mapping(t_address,t_struct(PlayerStats)9629_storage)": {
+          "t_mapping(t_address,t_struct(PlayerStats)10077_storage)": {
             "label": "mapping(address => struct PenguCrushV2.PlayerStats)"
           },
-          "t_struct(PlayerStats)9629_storage": {
+          "t_struct(PlayerStats)10077_storage": {
             "label": "struct PenguCrushV2.PlayerStats",
             "members": [
               {
@@ -5145,18 +5145,18 @@
           "t_bool": {
             "label": "bool"
           },
-          "t_mapping(t_bytes32,t_struct(ItemConfig)9601_storage)": {
+          "t_mapping(t_bytes32,t_struct(ItemConfig)10049_storage)": {
             "label": "mapping(bytes32 => struct PenguCrushV2.ItemConfig)"
           },
           "t_bytes32": {
             "label": "bytes32"
           },
-          "t_struct(ItemConfig)9601_storage": {
+          "t_struct(ItemConfig)10049_storage": {
             "label": "struct PenguCrushV2.ItemConfig",
             "members": [
               {
                 "label": "kind",
-                "type": "t_enum(ItemKind)9579"
+                "type": "t_enum(ItemKind)10027"
               },
               {
                 "label": "enabled",
@@ -5176,7 +5176,7 @@
               }
             ]
           },
-          "t_enum(ItemKind)9579": {
+          "t_enum(ItemKind)10027": {
             "label": "enum PenguCrushV2.ItemKind",
             "members": [
               "None",
@@ -5204,10 +5204,10 @@
           "t_mapping(t_bytes32,t_uint64)": {
             "label": "mapping(bytes32 => uint64)"
           },
-          "t_mapping(t_address,t_struct(LifeAccount)9636_storage)": {
+          "t_mapping(t_address,t_struct(LifeAccount)10084_storage)": {
             "label": "mapping(address => struct PenguCrushV2.LifeAccount)"
           },
-          "t_struct(LifeAccount)9636_storage": {
+          "t_struct(LifeAccount)10084_storage": {
             "label": "struct PenguCrushV2.LifeAccount",
             "members": [
               {
@@ -5224,10 +5224,10 @@
               }
             ]
           },
-          "t_mapping(t_address,t_struct(CrushPass)9643_storage)": {
+          "t_mapping(t_address,t_struct(CrushPass)10091_storage)": {
             "label": "mapping(address => struct PenguCrushV2.CrushPass)"
           },
-          "t_struct(CrushPass)9643_storage": {
+          "t_struct(CrushPass)10091_storage": {
             "label": "struct PenguCrushV2.CrushPass",
             "members": [
               {
@@ -5244,15 +5244,15 @@
               }
             ]
           },
-          "t_mapping(t_uint8,t_struct(WheelSlot)9655_storage)": {
+          "t_mapping(t_uint8,t_struct(WheelSlot)10103_storage)": {
             "label": "mapping(uint8 => struct PenguCrushV2.WheelSlot)"
           },
-          "t_struct(WheelSlot)9655_storage": {
+          "t_struct(WheelSlot)10103_storage": {
             "label": "struct PenguCrushV2.WheelSlot",
             "members": [
               {
                 "label": "kind",
-                "type": "t_enum(WheelPrizeKind)9586"
+                "type": "t_enum(WheelPrizeKind)10034"
               },
               {
                 "label": "sku",
@@ -5272,7 +5272,587 @@
               }
             ]
           },
-          "t_enum(WheelPrizeKind)9586": {
+          "t_enum(WheelPrizeKind)10034": {
+            "label": "enum PenguCrushV2.WheelPrizeKind",
+            "members": [
+              "None",
+              "Currency",
+              "Booster",
+              "Shard",
+              "Lives",
+              "TryAgain"
+            ]
+          },
+          "t_mapping(t_address,t_uint64)": {
+            "label": "mapping(address => uint64)"
+          },
+          "t_contract(IERC20)1744": {
+            "label": "contract IERC20"
+          },
+          "t_mapping(t_uint256,t_bool)": {
+            "label": "mapping(uint256 => bool)"
+          },
+          "t_mapping(t_address,t_mapping(t_uint16,t_uint64))": {
+            "label": "mapping(address => mapping(uint16 => uint64))"
+          },
+          "t_mapping(t_uint16,t_uint64)": {
+            "label": "mapping(uint16 => uint64)"
+          },
+          "t_array(t_uint256)36_storage": {
+            "label": "uint256[36]"
+          },
+          "t_string_storage": {
+            "label": "string"
+          }
+        },
+        "namespaces": {
+          "erc7201:openzeppelin.storage.EIP712": [
+            {
+              "contract": "EIP712Upgradeable",
+              "label": "_hashedName",
+              "type": "t_bytes32",
+              "src": "@openzeppelin/contracts-upgradeable/utils/cryptography/EIP712Upgradeable.sol:37"
+            },
+            {
+              "contract": "EIP712Upgradeable",
+              "label": "_hashedVersion",
+              "type": "t_bytes32",
+              "src": "@openzeppelin/contracts-upgradeable/utils/cryptography/EIP712Upgradeable.sol:38"
+            },
+            {
+              "contract": "EIP712Upgradeable",
+              "label": "_name",
+              "type": "t_string_storage",
+              "src": "@openzeppelin/contracts-upgradeable/utils/cryptography/EIP712Upgradeable.sol:40"
+            },
+            {
+              "contract": "EIP712Upgradeable",
+              "label": "_version",
+              "type": "t_string_storage",
+              "src": "@openzeppelin/contracts-upgradeable/utils/cryptography/EIP712Upgradeable.sol:41"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Pausable": [
+            {
+              "contract": "PausableUpgradeable",
+              "label": "_paused",
+              "type": "t_bool",
+              "src": "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol:21"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Ownable2Step": [
+            {
+              "contract": "Ownable2StepUpgradeable",
+              "label": "_pendingOwner",
+              "type": "t_address",
+              "src": "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol:29"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Ownable": [
+            {
+              "contract": "OwnableUpgradeable",
+              "label": "_owner",
+              "type": "t_address",
+              "src": "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol:24"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Initializable": [
+            {
+              "contract": "Initializable",
+              "label": "_initialized",
+              "type": "t_uint64",
+              "src": "@openzeppelin/contracts/proxy/utils/Initializable.sol:69"
+            },
+            {
+              "contract": "Initializable",
+              "label": "_initializing",
+              "type": "t_bool",
+              "src": "@openzeppelin/contracts/proxy/utils/Initializable.sol:73"
+            }
+          ]
+        }
+      }
+    },
+    "5a6e8c5b5f5b447d47cc17a81010c364bf8c3a2022e19fe5c10e5c7df2715631": {
+      "address": "0xA863504ff6285E820025728A3FC64E5EA00b3439",
+      "txHash": "0xeac7f71df3b635e48f999c9f9eb868f3d35103a48644a20d7642e95df48abd8b",
+      "layout": {
+        "solcVersion": "0.8.26",
+        "storage": [
+          {
+            "contract": "PenguCrushV2",
+            "label": "_reentryStatus",
+            "type": "t_uint256",
+            "src": "contracts/PenguCrushV2.sol:66"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "bestResults",
+            "type": "t_mapping(t_address,t_mapping(t_uint16,t_struct(LevelResult)10060_storage))",
+            "src": "contracts/PenguCrushV2.sol:222"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "playerStats",
+            "type": "t_mapping(t_address,t_struct(PlayerStats)10077_storage)",
+            "src": "contracts/PenguCrushV2.sol:225"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "attempts",
+            "type": "t_mapping(t_address,t_mapping(t_uint16,t_uint32))",
+            "src": "contracts/PenguCrushV2.sol:226"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "players",
+            "type": "t_array(t_address)dyn_storage",
+            "src": "contracts/PenguCrushV2.sol:228"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "isRegistered",
+            "type": "t_mapping(t_address,t_bool)",
+            "src": "contracts/PenguCrushV2.sol:229"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "maxLevel",
+            "type": "t_uint16",
+            "src": "contracts/PenguCrushV2.sol:230"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "items",
+            "type": "t_mapping(t_bytes32,t_struct(ItemConfig)10049_storage)",
+            "src": "contracts/PenguCrushV2.sol:232"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "itemSkus",
+            "type": "t_array(t_bytes32)dyn_storage",
+            "src": "contracts/PenguCrushV2.sol:235"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "randomPools",
+            "type": "t_mapping(t_bytes32,t_array(t_bytes32)dyn_storage)",
+            "src": "contracts/PenguCrushV2.sol:238"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "boosterBalance",
+            "type": "t_mapping(t_address,t_mapping(t_bytes32,t_uint32))",
+            "src": "contracts/PenguCrushV2.sol:239"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "shardBalance",
+            "type": "t_mapping(t_address,t_mapping(t_bytes32,t_uint32))",
+            "src": "contracts/PenguCrushV2.sol:242"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "currencyBalance",
+            "type": "t_mapping(t_address,t_mapping(t_bytes32,t_uint64))",
+            "src": "contracts/PenguCrushV2.sol:243"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "lifeAccount",
+            "type": "t_mapping(t_address,t_struct(LifeAccount)10084_storage)",
+            "src": "contracts/PenguCrushV2.sol:246"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "crushPass",
+            "type": "t_mapping(t_address,t_struct(CrushPass)10091_storage)",
+            "src": "contracts/PenguCrushV2.sol:246"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "crushPassPriceUsdMicros",
+            "type": "t_uint64",
+            "src": "contracts/PenguCrushV2.sol:248"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "wheelConfig",
+            "type": "t_mapping(t_uint8,t_struct(WheelSlot)10103_storage)",
+            "src": "contracts/PenguCrushV2.sol:251"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "wheelSlotCount",
+            "type": "t_uint8",
+            "src": "contracts/PenguCrushV2.sol:252"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "lastWheelDay",
+            "type": "t_mapping(t_address,t_uint64)",
+            "src": "contracts/PenguCrushV2.sol:252"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "skuPriceUsdMicros",
+            "type": "t_mapping(t_bytes32,t_uint64)",
+            "src": "contracts/PenguCrushV2.sol:255"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "treasury",
+            "type": "t_address",
+            "src": "contracts/PenguCrushV2.sol:255"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "priceRelayer",
+            "type": "t_address",
+            "src": "contracts/PenguCrushV2.sol:256"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "wheelRelayer",
+            "type": "t_address",
+            "src": "contracts/PenguCrushV2.sol:256"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "usdc",
+            "type": "t_contract(IERC20)1744",
+            "src": "contracts/PenguCrushV2.sol:257"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "shopPaused",
+            "type": "t_bool",
+            "src": "contracts/PenguCrushV2.sol:257"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "gameplayPaused",
+            "type": "t_bool",
+            "src": "contracts/PenguCrushV2.sol:258"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "usedNonces",
+            "type": "t_mapping(t_uint256,t_bool)",
+            "src": "contracts/PenguCrushV2.sol:259"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "pyth",
+            "type": "t_address",
+            "src": "contracts/PenguCrushV2.sol:260"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "pythEthUsdId",
+            "type": "t_bytes32",
+            "src": "contracts/PenguCrushV2.sol:261"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "pythGuardEnabled",
+            "type": "t_bool",
+            "src": "contracts/PenguCrushV2.sol:263"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "authorizedSubmitters",
+            "type": "t_mapping(t_address,t_bool)",
+            "src": "contracts/PenguCrushV2.sol:265"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "passBoostersEach",
+            "type": "t_uint8",
+            "src": "contracts/PenguCrushV2.sol:266"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "passFrozenLivesGrant",
+            "type": "t_uint8",
+            "src": "contracts/PenguCrushV2.sol:267"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "passShardBonusBps",
+            "type": "t_uint16",
+            "src": "contracts/PenguCrushV2.sol:270"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "passDurationSeconds",
+            "type": "t_uint32",
+            "src": "contracts/PenguCrushV2.sol:271"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "levelStartedAt",
+            "type": "t_mapping(t_address,t_mapping(t_uint16,t_uint64))",
+            "src": "contracts/PenguCrushV2.sol:281"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "usedWheelNonces",
+            "type": "t_mapping(t_uint256,t_bool)",
+            "src": "contracts/PenguCrushV2.sol:287"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "validatorRelayer",
+            "type": "t_address",
+            "src": "contracts/PenguCrushV2.sol:299"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "claimedStarterPack",
+            "type": "t_mapping(t_address,t_bool)",
+            "src": "contracts/PenguCrushV2.sol:303"
+          },
+          {
+            "contract": "PenguCrushV2",
+            "label": "__gap",
+            "type": "t_array(t_uint256)36_storage",
+            "src": "contracts/PenguCrushV2.sol:304"
+          }
+        ],
+        "types": {
+          "t_uint256": {
+            "label": "uint256"
+          },
+          "t_mapping(t_address,t_mapping(t_uint16,t_struct(LevelResult)10060_storage))": {
+            "label": "mapping(address => mapping(uint16 => struct PenguCrushV2.LevelResult))"
+          },
+          "t_address": {
+            "label": "address"
+          },
+          "t_mapping(t_uint16,t_struct(LevelResult)10060_storage)": {
+            "label": "mapping(uint16 => struct PenguCrushV2.LevelResult)"
+          },
+          "t_uint16": {
+            "label": "uint16"
+          },
+          "t_struct(LevelResult)10060_storage": {
+            "label": "struct PenguCrushV2.LevelResult",
+            "members": [
+              {
+                "label": "level",
+                "type": "t_uint16"
+              },
+              {
+                "label": "score",
+                "type": "t_uint32"
+              },
+              {
+                "label": "stars",
+                "type": "t_uint8"
+              },
+              {
+                "label": "movesUsed",
+                "type": "t_uint16"
+              },
+              {
+                "label": "timestamp",
+                "type": "t_uint64"
+              }
+            ]
+          },
+          "t_uint32": {
+            "label": "uint32"
+          },
+          "t_uint8": {
+            "label": "uint8"
+          },
+          "t_uint64": {
+            "label": "uint64"
+          },
+          "t_mapping(t_address,t_struct(PlayerStats)10077_storage)": {
+            "label": "mapping(address => struct PenguCrushV2.PlayerStats)"
+          },
+          "t_struct(PlayerStats)10077_storage": {
+            "label": "struct PenguCrushV2.PlayerStats",
+            "members": [
+              {
+                "label": "highestLevel",
+                "type": "t_uint16"
+              },
+              {
+                "label": "totalScore",
+                "type": "t_uint32"
+              },
+              {
+                "label": "totalStars",
+                "type": "t_uint16"
+              },
+              {
+                "label": "gamesPlayed",
+                "type": "t_uint32"
+              },
+              {
+                "label": "gamesWon",
+                "type": "t_uint32"
+              },
+              {
+                "label": "gamesFailed",
+                "type": "t_uint32"
+              },
+              {
+                "label": "firstPlayedAt",
+                "type": "t_uint64"
+              },
+              {
+                "label": "lastPlayedAt",
+                "type": "t_uint64"
+              }
+            ]
+          },
+          "t_mapping(t_address,t_mapping(t_uint16,t_uint32))": {
+            "label": "mapping(address => mapping(uint16 => uint32))"
+          },
+          "t_mapping(t_uint16,t_uint32)": {
+            "label": "mapping(uint16 => uint32)"
+          },
+          "t_array(t_address)dyn_storage": {
+            "label": "address[]"
+          },
+          "t_mapping(t_address,t_bool)": {
+            "label": "mapping(address => bool)"
+          },
+          "t_bool": {
+            "label": "bool"
+          },
+          "t_mapping(t_bytes32,t_struct(ItemConfig)10049_storage)": {
+            "label": "mapping(bytes32 => struct PenguCrushV2.ItemConfig)"
+          },
+          "t_bytes32": {
+            "label": "bytes32"
+          },
+          "t_struct(ItemConfig)10049_storage": {
+            "label": "struct PenguCrushV2.ItemConfig",
+            "members": [
+              {
+                "label": "kind",
+                "type": "t_enum(ItemKind)10027"
+              },
+              {
+                "label": "enabled",
+                "type": "t_bool"
+              },
+              {
+                "label": "maxBalance",
+                "type": "t_uint32"
+              },
+              {
+                "label": "rarity",
+                "type": "t_uint8"
+              },
+              {
+                "label": "mintRateBps",
+                "type": "t_uint16"
+              }
+            ]
+          },
+          "t_enum(ItemKind)10027": {
+            "label": "enum PenguCrushV2.ItemKind",
+            "members": [
+              "None",
+              "Booster",
+              "Shard",
+              "Currency",
+              "Lives"
+            ]
+          },
+          "t_array(t_bytes32)dyn_storage": {
+            "label": "bytes32[]"
+          },
+          "t_mapping(t_bytes32,t_array(t_bytes32)dyn_storage)": {
+            "label": "mapping(bytes32 => bytes32[])"
+          },
+          "t_mapping(t_address,t_mapping(t_bytes32,t_uint32))": {
+            "label": "mapping(address => mapping(bytes32 => uint32))"
+          },
+          "t_mapping(t_bytes32,t_uint32)": {
+            "label": "mapping(bytes32 => uint32)"
+          },
+          "t_mapping(t_address,t_mapping(t_bytes32,t_uint64))": {
+            "label": "mapping(address => mapping(bytes32 => uint64))"
+          },
+          "t_mapping(t_bytes32,t_uint64)": {
+            "label": "mapping(bytes32 => uint64)"
+          },
+          "t_mapping(t_address,t_struct(LifeAccount)10084_storage)": {
+            "label": "mapping(address => struct PenguCrushV2.LifeAccount)"
+          },
+          "t_struct(LifeAccount)10084_storage": {
+            "label": "struct PenguCrushV2.LifeAccount",
+            "members": [
+              {
+                "label": "regular",
+                "type": "t_uint8"
+              },
+              {
+                "label": "frozen",
+                "type": "t_uint8"
+              },
+              {
+                "label": "lastConsumedAt",
+                "type": "t_uint64"
+              }
+            ]
+          },
+          "t_mapping(t_address,t_struct(CrushPass)10091_storage)": {
+            "label": "mapping(address => struct PenguCrushV2.CrushPass)"
+          },
+          "t_struct(CrushPass)10091_storage": {
+            "label": "struct PenguCrushV2.CrushPass",
+            "members": [
+              {
+                "label": "expiresAt",
+                "type": "t_uint64"
+              },
+              {
+                "label": "streakWeeks",
+                "type": "t_uint16"
+              },
+              {
+                "label": "lastPurchaseWeekMonday",
+                "type": "t_uint64"
+              }
+            ]
+          },
+          "t_mapping(t_uint8,t_struct(WheelSlot)10103_storage)": {
+            "label": "mapping(uint8 => struct PenguCrushV2.WheelSlot)"
+          },
+          "t_struct(WheelSlot)10103_storage": {
+            "label": "struct PenguCrushV2.WheelSlot",
+            "members": [
+              {
+                "label": "kind",
+                "type": "t_enum(WheelPrizeKind)10034"
+              },
+              {
+                "label": "sku",
+                "type": "t_bytes32"
+              },
+              {
+                "label": "amount",
+                "type": "t_uint32"
+              },
+              {
+                "label": "weight",
+                "type": "t_uint16"
+              },
+              {
+                "label": "enabled",
+                "type": "t_bool"
+              }
+            ]
+          },
+          "t_enum(WheelPrizeKind)10034": {
             "label": "enum PenguCrushV2.WheelPrizeKind",
             "members": [
               "None",

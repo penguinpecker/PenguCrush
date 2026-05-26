@@ -2,15 +2,26 @@
   "abstractMainnet": {
     "PenguCrushV2": {
       "proxy": "0x06aCb91c46aD1359825560B19A9556118Aeb1896",
-      "implementation": "0x04da971C7483E43A52a2dd0892f6E658b20eCCff",
+      "implementation": "0xA863504ff6285E820025728A3FC64E5EA00b3439",
       "previousImplementations": [
         "0xa742dd48E82B970770A557f89f062769B5A764B9",
         "0xe45A09e7B5816a16f6DA0cAd18c265DBFa174B91",
-        "0x0dB9cB1Aa682f50EaF1b6820f39210336c834f01"
+        "0x0dB9cB1Aa682f50EaF1b6820f39210336c834f01",
+        "0x04da971C7483E43A52a2dd0892f6E658b20eCCff",
+        "0x4F82066ae2924B1EAd467A22C79FD1606718193E",
+        "0x6CFBa38Da6F03C4ED8b3b9fbE9C6a3Dba8735887"
       ],
       "v2_1_upgradeTx": "0xf70ba8abef3c39bab5be1ab10d86d49f49c49f42dd93bb03377113f477cea4d0",
       "v2_2_upgradeTx": "0x75e3819b867b801fc37977bd2c467dffad33d74d7f2c48d827d937174d8a6ea9",
       "v2_3_upgradeTx": "0xb3325a332636e8f55466e57c7f90f49a7d70a2f1b29234ffcc163e2a4d8f263f",
+      "dailyWheelGoLive": {
+        "date": "2026-05-27",
+        "implementation": "0xA863504ff6285E820025728A3FC64E5EA00b3439",
+        "upgradeTx": "0xd202e594790e27ee7bbd75e73f2f4edd2c3e451638b5d1e0f732416c96802cc7",
+        "setWheelConfigTx": "0xa0c2064d6c8e1a755e27e8eee667b9c18398509bf204c57ae61c8726324ad7c6",
+        "firstPaidSpinTx": "0x251812afd8a1ebb5569187ecd71dbcff3b898fa5b7aa751ef834c35c38f7306d",
+        "note": "Upgrade adds _resolveDailyPool + dailyboost/shards resolution + emits resolved prize in DailySpin. set-wheel-config.cjs pushed pool.dailyboost (5 boosters), pool.shards (3 shards) via setRandomPool, and the 6-slot table via batchSetWheel (seed funcs only run at initialize, not on upgrade). First real spin landed slot 1 = 100 XP."
+      },
       "validatorRelayer": "0xeF95BD4e26109D7B8933CEc500C7358d8E91CF31",
       "validatorRelayerSetTx": "0x38c8c6876f274f4643842524f46ec9c88d55c6b468202b5acb0302f2290b18d5",
       "owner": "0xDdbbc73A42814c42943095cc7F51762fb038BC9A",

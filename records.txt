@@ -27,7 +27,14 @@ Contracts (LEGACY — will be deprecated by v2):
 
 Contracts (V2 — current, on Abstract mainnet chainId 2741):
   PenguCrushV2 UUPS proxy      0x06aCb91c46aD1359825560B19A9556118Aeb1896
-  PenguCrushV2 impl (V2.7)     0x4F82066ae2924B1EAd467A22C79FD1606718193E
+  ~~PenguCrushV2 impl (V2.7)   0x4F82066ae2924B1EAd467A22C79FD1606718193E~~
+  PenguCrushV2 impl (V2.8)     0xA863504ff6285E820025728A3FC64E5EA00b3439
+                               (daily-wheel go-live, 2026-05-27 — adds
+                                _resolveDailyPool + dailyboost/shards resolve.
+                                upgradeTx 0xd202e594…02cc7. NOTE intermediate
+                                impls 0x4F82066 (V2.7, 05-18) and 0x6CFBa38D
+                                (lives-seed fix, 05-19) were live in between;
+                                records had drifted — this is the current one.)
   PenguCrushPaymaster (parked) 0xE40e31e8DAD86F9b9C4B9e178CC838c500c09bB9
                                (deployed 2026-05-22; target-restricted to
                                 PenguCrushV2; funded 0.005 ETH. NOT wired
@@ -486,6 +493,41 @@ ADR-005 (2026-05-18) — AGW session keys for in-game txs
   consumeBooster, awardShards, claimRegen, etc.). Shop functions are
   excluded — they always require explicit AGW prompt because real $.
   Why: eliminates per-tx prompt UX, AGW-native primitive, owner can revoke.
+
+2026-05-27 — Session 4: daily wheel go-live (V2.8)
+  First contract upgrade since V2.7. The daily-wheel code (frontend map.js +
+  wheel.js, edge fn pengu-wheel-roll, session-key policy) had all shipped in
+  prior sessions, but the matching contract logic + on-chain config had never
+  been deployed — the live impl (0x6CFBa38D, deployed 05-19) predated the
+  "daily wheel updated" commit (e42379d, 05-25). So the live wheel was running
+  the OLD seeded slot table while the frontend already rendered the NEW labels
+  → players saw labels that didn't match the prize granted, and the shard slot
+  was a silent no-op (items[pool.shards] kind == None).
+
+  ▸ Upgraded proxy → impl 0xA863504ff6285E820025728A3FC64E5EA00b3439
+      upgradeTx 0xd202e594790e27ee7bbd75e73f2f4edd2c3e451638b5d1e0f732416c96802cc7
+      Adds _resolveDailyPool (deterministic booster-of-the-day from
+      pool.dailyboost keyed on UTC day), pool.shards resolution for the shard
+      slot, and DailySpin now emits the RESOLVED sku/amount (not the alias).
+      No storage-layout change (internal fns + bodies only) → upgrade-safe.
+  ▸ Pushed wheel config via set-wheel-config.cjs (seed funcs only run at
+      initialize(), NOT on upgrade — config must be pushed explicitly):
+      setRandomPool(pool.dailyboost) = 5 boosters
+      setRandomPool(pool.shards)     = 3 shards
+      batchSetWheel(6 slots)  tx 0xa0c2064d6c8e1a755e27e8eee667b9c18398509bf204c57ae61c8726324ad7c6
+      New slots: 0 TryAgain(3500) · 1 XP100(3500) · 2 XP250(800) ·
+                 3 dailyboost(1000) · 4 1 Life(1000) · 5 shard(200)
+      Now matches frontend getDailyWheelSliceLabels() exactly.
+  ▸ Bug fixed in set-wheel-config.cjs: used ethers-v5 helpers (utils.id,
+      utils.hexZeroPad) absent from v6 zksync-ethers utils → switched to
+      ethers.id / ethers.ZeroHash. This is why the script had never run before.
+  ▸ First REAL paid spin (owner wallet, own gas — no paymaster per policy):
+      spinTx 0x251812afd8a1ebb5569187ecd71dbcff3b898fa5b7aa751ef834c35c38f7306d
+      landed slot 1 = 100 XP; currencyBalance[owner][currency.xp] = 100
+      confirmed on chain; lastWheelDay set to 20599 (day-lock works).
+      Proves edge-fn signature recovers to on-chain wheelRelayer end-to-end.
+  ▸ No DB change required — wheel state is fully on-chain (lastWheelDay),
+      tx logging uses existing pengu_tx_log, spin analytics go to gtag not DB.
 
 ═══════════════════════════════════════════════════════════════════════════════
 3. ISSUES & FIXES (failed + successful)
