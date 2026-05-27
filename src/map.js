@@ -10,6 +10,7 @@ import {
 import { getPublicClient } from './agw.js';
 import { formatEther } from 'viem';
 import penguCrushAbiJson from '../contracts/PenguCrushABI.json';
+import { Events, setAnalyticsUser } from './analytics.js';
 import { renderLivesHud } from './lives-hud.js';
 
 /** Map inventory grid: 5 boosters + 3 shards = 4×2 */
