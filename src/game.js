@@ -2076,6 +2076,9 @@ function showLevelPopup(won) {
 
   _endPopupWon = won;
   clearEndPopupLivesInterval();
+  refreshEndPopupLives();
+  updateEndPopupActionStates(won);
+
   Inventory.hydrateFromChain()
     .catch(() => {})
     .finally(() => {
