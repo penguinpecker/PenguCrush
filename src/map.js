@@ -63,7 +63,7 @@ function loadProgress() {
       stars = p.stars || 0;
       best = p.best || 0;
       if (stars > 0) status = 'completed';
-      else if (p.unlocked) status = 'current';
+      else if (p.unlocked && pos.id > 1 && (saved[pos.id - 1]?.stars || 0) > 0) status = 'current';
     }
     return { ...pos, stars, best, status };
   });

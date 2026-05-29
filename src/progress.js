@@ -25,7 +25,7 @@ export function isLevelUnlockedLocal(levelN) {
     const prev = p[levelN - 1];
     if (prev && prev.stars > 0) return true;
     const cur = p[levelN];
-    if (cur && cur.unlocked) return true;
+    if (cur && cur.unlocked && prev && prev.stars > 0) return true;
   } catch (_) {}
   return false;
 }

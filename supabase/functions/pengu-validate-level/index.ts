@@ -75,10 +75,9 @@ function computeStars(score: number, movesUsed: number, level: number): number {
     score >= t[0] ? 1 : 0;
 
   const pct = budget > 0 ? movesRemainingForStars(movesUsed, budget) / budget : 0;
-  const moveStars =
-    pct >= MOVE_STAR_3_PCT ? 3 :
-    pct >= MOVE_STAR_2_PCT ? 2 :
-    1;
+  const moveStars = score >= t[0]
+    ? (pct >= MOVE_STAR_3_PCT ? 3 : pct >= MOVE_STAR_2_PCT ? 2 : 1)
+    : 0;
 
   return Math.max(scoreStars, moveStars);
 }
@@ -141,6 +140,9 @@ Deno.serve(async (req) => {
     // Deterministic stars check — hybrid score + moves-remaining (matches src/levels.js).
     const expectedStars = j.completed ? computeStars(score, movesUsed, level) : 0;
     if (j.completed) {
+      if (score < LEVEL_STARS[level][0]) {
+        return json({ error: 'completed but score below win threshold' }, 400);
+      }
       if (stars !== expectedStars) return json({ error: `stars mismatch (claimed ${stars}, computed ${expectedStars})` }, 400);
     } else {
       if (stars !== 0) return json({ error: 'failed level must have 0 stars' }, 400);

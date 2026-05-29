@@ -515,11 +515,11 @@ export function computeStars(score, movesUsed, cfg) {
     score >= s2 ? 2 :
     score >= s1 ? 1 : 0;
 
+  // Efficiency stars only apply after the score gate (s1 === targetScore) is met.
   const pct = budget > 0 ? movesRemainingForStars(movesUsed, budget) / budget : 0;
-  const moveStars =
-    pct >= MOVE_STAR_3_PCT ? 3 :
-    pct >= MOVE_STAR_2_PCT ? 2 :
-    1;
+  const moveStars = score >= s1
+    ? (pct >= MOVE_STAR_3_PCT ? 3 : pct >= MOVE_STAR_2_PCT ? 2 : 1)
+    : 0;
 
   return Math.max(scoreStars, moveStars);
 }

@@ -1677,7 +1677,8 @@ async function resolveLevelStateAfterBoardSettled() {
   await processFallers();
   if (gameOver) return;
   if (await autoShuffleIfDead()) return;
-  if (checkObjective()) {
+  syncGoalDisplayToActual();
+  if (isLevelWin()) {
     await delay(400);
     showLevelPopup(true);
   } else if (moves <= 0) {
@@ -1730,8 +1731,26 @@ function meetsPrimaryObjective() {
   }
 }
 
-function checkObjective() {
+function isLevelWin() {
   return meetsPrimaryObjective() && meetsScoreTarget();
+}
+
+function getFailPopupMessage() {
+  const primaryDone = meetsPrimaryObjective();
+  const scoreDone = meetsScoreTarget();
+  const chip = getObjectiveChip(CONFIG);
+  let msg = 'Try again!';
+  if (!primaryDone && !scoreDone) {
+    msg = chip
+      ? 'Reach the score target and complete the objective'
+      : 'Reach the score target';
+  } else if (!scoreDone) {
+    msg = `Need ${CONFIG.targetScore.toLocaleString()} points`;
+  } else if (!primaryDone) {
+    msg = chip ? 'Objective not complete' : 'Try again!';
+  }
+  if (!canSpendLife()) msg += ' · No lives left';
+  return msg;
 }
 
 function countsForObjectiveTile(tileType) {
@@ -2036,6 +2055,7 @@ function getMovesUsed() {
 }
 
 function getStars() {
+  if (!isLevelWin()) return 0;
   return computeStars(score, getMovesUsed(), CONFIG);
 }
 
@@ -2107,16 +2127,24 @@ function flashNoLivesFeedback(...btns) {
   btns.forEach(shakeElement);
 }
 
-function showLevelPopup(won) {
+function showLevelPopup(wonHint) {
   gameOver = true;
   syncGoalDisplayToActual();
+  // Re-check at popup time — never award stars/unlock unless both gates are met.
+  const won = isLevelWin();
+  if (wonHint && !won) {
+    console.warn('[level-end] Win blocked: score or primary objective incomplete');
+  }
+
+  const popup = document.getElementById('levelPopup');
+  popup?.classList.toggle('fail', !won);
+
   // Fire analytics first so we have a clean snapshot before any UI mutation
   const movesUsedNow = getMovesUsed();
   const durationMsNow = Math.round(performance.now() - gameStartTime);
   const starsNow = won ? getStars() : 0;
   if (won) Events.levelWin(levelNum, score, starsNow, movesUsedNow, durationMsNow);
   else     Events.levelFail(levelNum, score, movesUsedNow, durationMsNow);
-  const popup = document.getElementById('levelPopup');
   const title = document.getElementById('levelPopupTitle');
   const starsEl = document.getElementById('levelPopupStars');
   const scoreEl = document.getElementById('levelPopupScore');
@@ -2157,17 +2185,17 @@ function showLevelPopup(won) {
     title.innerHTML = 'Out of<br>Moves!';
     title.classList.add('fail');
 
-    // Failure: all three slots empty → no overlays needed, baked-in
-    // stars on the popup frame show through.
+    // Failure: overlay empty stars so baked-in frame art doesn't look like a reward.
     starsEl.innerHTML = '';
     for (let i = 0; i < 3; i++) {
       const img = document.createElement('img');
-      img.style.visibility = 'hidden';
+      img.src = '/assets/ui/star-empty.png';
+      img.alt = '';
       starsEl.appendChild(img);
     }
 
     scoreEl.textContent = score.toLocaleString();
-    objEl.textContent = canSpendLife() ? 'Try again!' : 'Try again! · No lives left';
+    objEl.textContent = getFailPopupMessage();
     updateEndPopupActionStates(false);
   }
 
@@ -2191,7 +2219,7 @@ function showLevelPopup(won) {
   const progress = JSON.parse(localStorage.getItem('pengucrush_progress') || '{}');
   const prev = progress[levelNum] || { stars: 0, best: 0 };
   progress[levelNum] = { stars: Math.max(prev.stars, stars), best: Math.max(prev.best, score) };
-  if (won && !progress[levelNum + 1] && hasLevel(levelNum + 1)) {
+  if (won && stars > 0 && !progress[levelNum + 1] && hasLevel(levelNum + 1)) {
     progress[levelNum + 1] = { stars: 0, best: 0, unlocked: true };
   }
   localStorage.setItem('pengucrush_progress', JSON.stringify(progress));
