@@ -471,6 +471,29 @@ function removeFrozenOverlay(tile) {
   tile.frozen = false;
 }
 
+/** One match-adjacent hit — peels a layer or fully breaks the blocker. */
+function damageBlocker(tile) {
+  if (!tile?.frozen) return false;
+  if ((tile.iceLayer || 0) > 1) {
+    tile.iceLayer--;
+    return false;
+  }
+  removeFrozenOverlay(tile);
+  tile.iceLayer = 0;
+  blockersDestroyed.frozen = (blockersDestroyed.frozen || 0) + 1;
+  blockersDestroyed.ice = (blockersDestroyed.ice || 0) + 1;
+  return true;
+}
+
+/** Booster / hammer — strips all layers and counts one broken blocker. */
+function fullyBreakBlocker(tile) {
+  if (!tile?.frozen) return;
+  removeFrozenOverlay(tile);
+  tile.iceLayer = 0;
+  blockersDestroyed.frozen = (blockersDestroyed.frozen || 0) + 1;
+  blockersDestroyed.ice = (blockersDestroyed.ice || 0) + 1;
+}
+
 function createWall(row, col) {
   let mesh;
   if (blockerGlbCache['wall']) {
@@ -598,6 +621,85 @@ function hasAnyValidSwap() {
     }
   }
   return false;
+}
+
+const MAX_SHUFFLE_ATTEMPTS = 6;
+
+function getShuffleablePositions() {
+  const positions = [];
+  for (let r = 0; r < GRID; r++) {
+    for (let c = 0; c < GRID; c++) {
+      const t = board[r]?.[c];
+      if (t && !t.isWall && !t.frozen && !t.isFaller) positions.push([r, c]);
+    }
+  }
+  return positions;
+}
+
+/** Re-roll tile types at given cells until a valid swap exists (or attempts exhausted). */
+function rerollShuffleableTiles(positions) {
+  const newTiles = [];
+  if (positions.length === 0) return newTiles;
+
+  let solvable = false;
+  for (let attempt = 0; attempt < MAX_SHUFFLE_ATTEMPTS && !solvable; attempt++) {
+    if (attempt > 0) {
+      for (const tile of newTiles) {
+        try { scene.remove(tile.mesh); } catch (_) {}
+      }
+    }
+    for (const [r, c] of positions) board[r][c] = null;
+    newTiles.length = 0;
+    for (const [r, c] of positions) {
+      let type;
+      do { type = randomType(); } while (
+        (c >= 2 && board[r][c - 1]?.type === type && board[r][c - 2]?.type === type) ||
+        (r >= 2 && board[r - 1]?.[c]?.type === type && board[r - 2]?.[c]?.type === type)
+      );
+      const tile = createTile(type, r, c);
+      board[r][c] = tile;
+      newTiles.push(tile);
+    }
+    solvable = hasAnyValidSwap();
+  }
+  return newTiles;
+}
+
+/** Sync re-roll at level start / after blockers — no animation, no move cost. */
+function ensureBoardPlayableSync() {
+  if (hasAnyValidSwap()) return;
+  const positions = getShuffleablePositions();
+  if (positions.length === 0) return;
+  for (const [r, c] of positions) {
+    const t = board[r][c];
+    if (t?.mesh) scene.remove(t.mesh);
+    board[r][c] = null;
+  }
+  rerollShuffleableTiles(positions);
+}
+
+/** Free auto-shuffle when no valid swap remains — does not consume a booster or a move. */
+async function autoShuffleIfDead() {
+  if (gameOver || hasAnyValidSwap()) return false;
+
+  const positions = getShuffleablePositions();
+  if (positions.length === 0) return false;
+
+  const wasAnimating = animating;
+  animating = true;
+  showMsg('No moves — shuffling!', 1400);
+
+  const vanishPs = positions.map(([r, c]) => animShuffleTileVanish(board[r][c].mesh));
+  await Promise.all(vanishPs);
+  for (const [r, c] of positions) board[r][c] = null;
+
+  const newTiles = rerollShuffleableTiles(positions);
+  await Promise.all(
+    newTiles.map(tile => animSpawn(tile.mesh, gridToWorld(tile.row, tile.col), 450))
+  );
+  await delay(80);
+  animating = wasAnimating;
+  return true;
 }
 
 function findMatches() {
@@ -829,7 +931,7 @@ async function animRowBoosterFx(row) {
   for (let c = 0; c < GRID; c++) {
     const tile = board[row][c];
     if (!tile || tile.isWall) continue;
-    if (tile.frozen) { removeFrozenOverlay(tile); tile.iceLayer = 0; continue; }
+    if (tile.frozen) { fullyBreakBlocker(tile); continue; }
 
     const dir = c <= centerCol ? -1 : 1;
     const distFromCenter = Math.abs(c - centerCol);
@@ -950,7 +1052,7 @@ async function animColBoosterFx(col) {
   for (let r = 0; r < GRID; r++) {
     const tile = board[r][col];
     if (!tile || tile.isWall) continue;
-    if (tile.frozen) { removeFrozenOverlay(tile); tile.iceLayer = 0; continue; }
+    if (tile.frozen) { fullyBreakBlocker(tile); continue; }
 
     const dir = r <= centerRow ? 1 : -1; // upper half → up (+Y), lower half → down (-Y)
     const distFromCenter = Math.abs(r - centerRow);
@@ -1330,8 +1432,7 @@ async function animHammerBreakIce(tile, cellCenterWorld) {
       ringColor: 0x99ddff,
     });
     particles(burstPos.clone(), 0xaaeeff);
-    removeFrozenOverlay(tile);
-    tile.iceLayer = 0;
+    fullyBreakBlocker(tile);
   });
   await animShake(tile.mesh, 220);
 }
@@ -1395,17 +1496,12 @@ async function removeMatches(matched) {
         const adj = board[nr]?.[nc];
         if (adj && adj.frozen && !unfrozen.has(`${nr},${nc}`)) {
           unfrozen.add(`${nr},${nc}`);
-          if (adj.iceLayer > 1) {
-            adj.iceLayer--;
-            // Visual feedback — shake the frozen tile
+          const broken = damageBlocker(adj);
+          if (broken) {
+            particles(adj.mesh.position.clone(), 0xaaeeff);
+          } else {
             ps.push(animShake(adj.mesh, 200));
             particles(adj.mesh.position.clone(), 0x88ccff);
-          } else {
-            removeFrozenOverlay(adj);
-            adj.iceLayer = 0;
-            particles(adj.mesh.position.clone(), 0xaaeeff);
-            blockersDestroyed['frozen'] = (blockersDestroyed['frozen'] || 0) + 1;
-            blockersDestroyed['ice'] = (blockersDestroyed['ice'] || 0) + 1;
           }
         }
       }
@@ -1576,10 +1672,11 @@ async function processFallers() {
   await dropFallers();
 }
 
-/** After cascades settle: faller step, then win / out-of-moves popup (same as a normal swap). */
+/** After cascades settle: faller step, auto-shuffle if dead, then win / out-of-moves popup. */
 async function resolveLevelStateAfterBoardSettled() {
   await processFallers();
   if (gameOver) return;
+  if (await autoShuffleIfDead()) return;
   if (checkObjective()) {
     await delay(400);
     showLevelPopup(true);
@@ -2340,6 +2437,8 @@ async function useBoosterHammer(row, col) {
 
   if (tile.frozen) {
     await animHammerBreakIce(tile, wp);
+    updateHUD();
+    await resolveLevelStateAfterBoardSettled();
   } else {
     const mesh = tile.mesh;
     const ttype = tile.type;
@@ -2583,11 +2682,7 @@ async function useBoosterShuffle() {
   if (animating) return;
   animating = true;
 
-  const positions = [];
-  for (let r = 0; r < GRID; r++) for (let c = 0; c < GRID; c++) {
-    const t = board[r][c];
-    if (t && !t.isWall && !t.frozen && !t.isFaller) positions.push([r, c]);
-  }
+  const positions = getShuffleablePositions();
   if (positions.length === 0) {
     animating = false;
     return;
@@ -2599,36 +2694,10 @@ async function useBoosterShuffle() {
   await Promise.all(vanishPs);
   for (const [r, c] of positions) board[r][c] = null;
 
-  // Try up to a few layouts so a degenerate shuffle (no valid swap exists)
-  // doesn't soft-lock the level (audit H9). Each retry only re-rolls tile
-  // types — no extra vanish/spawn animation. On the final attempt we accept
-  // whatever came out so the player isn't left with an empty board.
-  const MAX_SHUFFLE_ATTEMPTS = 6;
-  const newTiles = [];
-  let solvable = false;
-  for (let attempt = 0; attempt < MAX_SHUFFLE_ATTEMPTS && !solvable; attempt++) {
-    if (attempt > 0) {
-      for (const tile of newTiles) {
-        try { scene.remove(tile.mesh); } catch (_) {}
-      }
-    }
-    for (const [r, c] of positions) board[r][c] = null;
-    newTiles.length = 0;
-    for (const [r, c] of positions) {
-      let type;
-      do { type = randomType(); } while (
-        (c >= 2 && board[r][c-1]?.type === type && board[r][c-2]?.type === type) ||
-        (r >= 2 && board[r-1]?.[c]?.type === type && board[r-2]?.[c]?.type === type)
-      );
-      const tile = createTile(type, r, c);
-      board[r][c] = tile;
-      newTiles.push(tile);
-    }
-    solvable = hasAnyValidSwap();
-  }
-
-  const spawnPs = newTiles.map(tile => animSpawn(tile.mesh, gridToWorld(tile.row, tile.col), 450));
-  await Promise.all(spawnPs);
+  const newTiles = rerollShuffleableTiles(positions);
+  await Promise.all(
+    newTiles.map(tile => animSpawn(tile.mesh, gridToWorld(tile.row, tile.col), 450))
+  );
 
   await close();
   await delay(80);
@@ -3213,6 +3282,7 @@ async function init() {
   setupLevelPopupButtons();
   setupShardHud();
   initBoard();
+  ensureBoardPlayableSync();
   animate();
 
 }

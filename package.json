@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "make-hud-panel": "node scripts/make-hud-panel.mjs"
+    "make-hud-panel": "node scripts/make-hud-panel.mjs",
+    "audit:levels": "node scripts/audit-levels.mjs"
   },
   "dependencies": {
     "@abstract-foundation/agw-client": "^1.12.0",

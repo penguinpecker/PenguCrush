@@ -153,7 +153,7 @@ const LEVELS = [
     moves: 29,
     targetScore: 6000,
     tiles: ['ice', 'fish', 'popsicle', 'frostice', 'shrimp'],
-    objective: { type: 'score', target: 6000 },
+    objective: { type: 'breakBlocker', blockerType: 'frozen', count: 5 },
     blockers: [{ type: 'frozen', count: 5 }],
     boosters: ['row', 'col', 'colorBomb', 'hammer', 'shuffle'],
     stars: [6000, 8000, 11000],
@@ -249,7 +249,7 @@ const LEVELS = [
     targetScore: 9500,
     tiles: ['ice', 'fish', 'popsicle', 'frostice', 'shrimp', 'crab'],
     objective: { type: 'combo', scoreTarget: 9500, blockerType: 'ice', blockerCount: 6 },
-    blockers: [{ type: 'ice', count: 3, layers: 3 }, { type: 'wall', count: 3 }],
+    blockers: [{ type: 'ice', count: 6, layers: 2 }, { type: 'wall', count: 3 }],
     boosters: ['row', 'col', 'colorBomb', 'hammer', 'shuffle'],
     stars: [9500, 13000, 17000],
     bg: '/assets/board/bg-volcano-ice.png',
@@ -314,7 +314,7 @@ const LEVELS = [
     targetScore: 11500,
     tiles: ['ice', 'fish', 'popsicle', 'frostice', 'shrimp', 'crab'],
     objective: { type: 'combo', scoreTarget: 11500, blockerType: 'ice', blockerCount: 6 },
-    blockers: [{ type: 'ice', count: 3, layers: 2 }, { type: 'wall', count: 3 }, { type: 'faller', interval: 3 }],
+    blockers: [{ type: 'ice', count: 6, layers: 2 }, { type: 'wall', count: 3 }, { type: 'faller', interval: 3 }],
     boosters: ['row', 'col', 'colorBomb', 'hammer', 'shuffle'],
     stars: [11500, 15000, 20000],
     bg: '/assets/board/bg-skylands.png',
@@ -522,6 +522,110 @@ export function computeStars(score, movesUsed, cfg) {
     1;
 
   return Math.max(scoreStars, moveStars);
+}
+
+/** Count placed blockers of a given type (frozen | ice | wall | faller config rows). */
+export function countBlockersOnBoard(blockers, type) {
+  return (blockers || [])
+    .filter(b => b.type === type)
+    .reduce((sum, b) => sum + (b.count || 0), 0);
+}
+
+/** Interior cells available for random blocker placement (matches game.js margin). */
+export function maxBlockerSlots(grid) {
+  const interior = Math.max(0, (grid || 8) - 2);
+  return interior * interior;
+}
+
+/**
+ * Static audit for unwinnable / inconsistent level configs.
+ * Returns human-readable issue strings (empty = OK).
+ */
+export function auditLevelConfig(cfg) {
+  const issues = [];
+  const level = cfg?.level ?? '?';
+  const prefix = `Level ${level}:`;
+  const obj = cfg?.objective;
+  const blockers = cfg.blockers || [];
+  const grid = cfg.grid || 8;
+
+  if (!Array.isArray(cfg.stars) || cfg.stars.length !== 3) {
+    issues.push(`${prefix} stars must be [s1, s2, s3]`);
+  } else if (cfg.stars[0] !== cfg.targetScore) {
+    issues.push(`${prefix} stars[0] (${cfg.stars[0]}) !== targetScore (${cfg.targetScore})`);
+  }
+
+  const placed = blockers.reduce((s, b) => s + (b.count || 0), 0);
+  const slots = maxBlockerSlots(grid);
+  if (placed > slots) {
+    issues.push(`${prefix} ${placed} blockers exceed ${slots} interior slots — some may not spawn`);
+  }
+
+  if (!obj) {
+    issues.push(`${prefix} missing objective`);
+    return issues;
+  }
+
+  switch (obj.type) {
+    case 'breakBlocker': {
+      const onBoard = countBlockersOnBoard(blockers, obj.blockerType);
+      if (onBoard < obj.count) {
+        issues.push(
+          `${prefix} breakBlocker requires ${obj.count} ${obj.blockerType} but only ${onBoard} on board`
+        );
+      }
+      break;
+    }
+    case 'combo': {
+      if (obj.blockerType != null && obj.blockerCount != null) {
+        const onBoard = countBlockersOnBoard(blockers, obj.blockerType);
+        if (onBoard < obj.blockerCount) {
+          issues.push(
+            `${prefix} combo requires ${obj.blockerCount} ${obj.blockerType} breaks but only ${onBoard} on board`
+          );
+        }
+      }
+      if (obj.surviveDrops != null && !blockers.some(b => b.type === 'faller')) {
+        issues.push(`${prefix} surviveDrops objective but no faller blocker configured`);
+      }
+      break;
+    }
+    case 'breakAll': {
+      const breakable = countBlockersOnBoard(blockers, 'frozen') + countBlockersOnBoard(blockers, 'ice');
+      if (breakable === 0) {
+        issues.push(`${prefix} breakAll but no frozen/ice blockers on board`);
+      }
+      break;
+    }
+    case 'clearPercent': {
+      const need = Math.ceil(grid * grid * obj.percent / 100);
+      const walls = countBlockersOnBoard(blockers, 'wall');
+      const maxClearable = grid * grid - walls;
+      if (need > maxClearable) {
+        issues.push(
+          `${prefix} clear ${obj.percent}% (${need} tiles) exceeds ${maxClearable} clearable cells (${walls} walls)`
+        );
+      }
+      break;
+    }
+    default:
+      break;
+  }
+
+  return issues;
+}
+
+/** Run auditLevelConfig on every level; returns { ok, issuesByLevel }. */
+export function auditAllLevels(levels = LEVELS) {
+  const issuesByLevel = {};
+  for (const cfg of levels) {
+    const issues = auditLevelConfig(cfg);
+    if (issues.length) issuesByLevel[cfg.level] = issues;
+  }
+  return {
+    ok: Object.keys(issuesByLevel).length === 0,
+    issuesByLevel,
+  };
 }
 
 export default LEVELS;
