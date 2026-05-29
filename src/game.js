@@ -2880,6 +2880,20 @@ function setupBoosterUI() {
     });
     slotsEl.appendChild(btn);
   }
+
+  const shopBtn = document.createElement('button');
+  shopBtn.type = 'button';
+  shopBtn.className = 'lives-hud__plus booster-bar__shop-plus';
+  shopBtn.id = 'gameBoosterShopBtn';
+  shopBtn.setAttribute('aria-label', 'Buy boosters');
+  shopBtn.innerHTML = '<img src="/assets/ui/lives/plus-button.png" draggable="false" alt="" />';
+  shopBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    Events.shopOpen();
+    document.getElementById('shopOverlay')?.classList.add('active');
+  });
+  slotsEl.appendChild(shopBtn);
+
   updateBoosterUI();
 }
 

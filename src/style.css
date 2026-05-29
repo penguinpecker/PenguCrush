@@ -813,6 +813,14 @@ body[data-screen="game"] {
   display: none;
 }
 
+.booster-bar__shop-plus {
+  width: clamp(20px, 5vmin, 28px);
+  height: clamp(20px, 5vmin, 28px);
+  align-self: center;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
 /* ═══ Level Complete / Fail Popup ═══ */
 .level-popup-overlay {
   position: fixed;
