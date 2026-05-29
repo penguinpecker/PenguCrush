@@ -111,6 +111,7 @@ const TRAITS = computeTraits(Inventory.getShards());
 
 let board = [], selected = null, animating = false, score = 0, moves = CONFIG.moves + TRAITS.bonusMoves, combo = 0;
 let gameOver = false;
+let lowMovesWarned = false;
 
 // Objective tracking
 const objective = { ...CONFIG.objective };
@@ -1625,7 +1626,9 @@ async function dropFallers() {
         particles(tile.mesh.position.clone(), 0xff4444);
         await animDestroy(tile.mesh);
         board[r][c] = null;
+        const prevMoves = moves;
         moves = Math.max(0, moves - 1);
+        maybeWarnLowMoves(prevMoves);
         fallerDropsPenalized++;
         updateHUD();
         showMsg('-1 Move!', 600);
@@ -2046,6 +2049,12 @@ function updateHUD() {
   if (mc) drawHUDPanel(mc);
 }
 
+function maybeWarnLowMoves(prevMoves) {
+  if (gameOver || lowMovesWarned || moves !== 3 || prevMoves <= 3) return;
+  lowMovesWarned = true;
+  showMsg('Only 3 moves left!', 2200);
+}
+
 function getTotalMoveBudget() {
   return CONFIG.moves + TRAITS.bonusMoves;
 }
@@ -2403,7 +2412,11 @@ async function handleSwap(r1, c1, r2, c2) {
     await Promise.all([animShake(board[r1][c1].mesh), animShake(board[r2][c2].mesh)]);
     showMsg('No match!', 500);
   } else {
-    moves--; updateHUD(); await processMatches();
+    const prevMoves = moves;
+    moves--;
+    maybeWarnLowMoves(prevMoves);
+    updateHUD();
+    await processMatches();
     // Mid-game snapshot every 5 moves — saves to localStorage + Supabase for
     // cross-device resume. On-chain checkpoint removed: rejecting it didn't
     // block gameplay anyway, so it was a meaningless prompt for non-session
