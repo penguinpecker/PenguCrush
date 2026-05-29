@@ -835,6 +835,78 @@ body[data-screen="game"] {
 
 .level-popup-overlay.active {
   display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right))
+    max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+}
+
+.level-confetti {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0;
+}
+
+.level-confetti.active {
+  opacity: 1;
+}
+
+.level-popup-stack {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(10px, 2.5vh, 20px);
+  width: min(92vw, 600px);
+  max-width: 100%;
+}
+
+.level-result-banner {
+  width: 100%;
+  text-align: center;
+  animation: level-banner-in 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.level-result-banner[hidden] {
+  display: none !important;
+}
+
+.level-result-banner__text {
+  display: inline-block;
+  font-family: 'Fredoka', sans-serif;
+  font-size: clamp(26px, 6.5vw, 46px);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.1;
+  padding: clamp(8px, 1.5vh, 12px) clamp(18px, 5vw, 32px);
+  border-radius: 18px;
+  text-shadow: 0 3px 0 rgba(0, 0, 0, 0.28);
+}
+
+.level-result-banner--win .level-result-banner__text {
+  color: #fffde7;
+  background: linear-gradient(180deg, rgba(102, 187, 106, 0.95), rgba(27, 94, 32, 0.96));
+  border: 2.5px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 8px 28px rgba(76, 175, 80, 0.5), 0 0 40px rgba(255, 235, 59, 0.25);
+}
+
+.level-result-banner--lose .level-result-banner__text {
+  color: #ffebee;
+  background: linear-gradient(180deg, rgba(229, 57, 53, 0.92), rgba(136, 14, 79, 0.94));
+  border: 2.5px solid rgba(255, 255, 255, 0.38);
+  box-shadow: 0 8px 28px rgba(198, 40, 40, 0.45);
+}
+
+@keyframes level-banner-in {
+  0% { transform: translateY(-24px) scale(0.75); opacity: 0; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
 }
 
 /* Lives HUD on end-game dialog — absolute within overlay (not a flex item) */
@@ -901,7 +973,7 @@ body[data-screen="game"] {
   position: relative;
   container-type: inline-size;
   container-name: level-popup;
-  width: min(92vw, 600px, calc(85dvh * 91 / 45));
+  width: 100%;
   aspect-ratio: 91 / 45;
   max-width: 100%;
   animation: popup-scale-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -2272,8 +2344,17 @@ body:not([data-screen="game"]) .shard-hud { display: none; }
     font-size: 18px;
   }
 
+  .level-popup-stack {
+    width: min(94vw, 600px);
+  }
+
+  .level-result-banner__text {
+    font-size: clamp(22px, 5.5vw, 36px);
+    padding: 8px 16px;
+  }
+
   .level-popup {
-    width: min(94vw, calc(88dvh * 91 / 45));
+    width: 100%;
   }
 
   .level-popup-buttons {

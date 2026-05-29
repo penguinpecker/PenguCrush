@@ -384,6 +384,7 @@
 
     <!-- Level Complete / Fail Popup -->
     <div class="level-popup-overlay" id="levelPopup">
+      <canvas id="levelConfetti" class="level-confetti" aria-hidden="true"></canvas>
       <div class="lives-hud lives-hud--end-popup" id="levelPopupLivesHud" aria-label="Lives">
         <img class="lives-hud__bg" src="/assets/ui/lives/lives-container.png" draggable="false" alt="" />
         <div class="lives-hud__inner">
@@ -399,7 +400,11 @@
           </button>
         </div>
       </div>
-      <div class="level-popup">
+      <div class="level-popup-stack">
+        <div class="level-result-banner" id="levelResultBanner" aria-live="polite" hidden>
+          <span class="level-result-banner__text" id="levelResultBannerText">You Won!</span>
+        </div>
+        <div class="level-popup">
         <img src="/assets/ui/level-popup-frame.png" class="level-popup-bg" draggable="false" />
         <div class="level-popup-content">
           <div class="level-popup-title" id="levelPopupTitle">
@@ -415,6 +420,7 @@
             <button class="level-popup-btn level-popup-btn--next" id="levelPopupNext">Next</button>
           </div>
         </div>
+      </div>
       </div>
     </div>
   </div>

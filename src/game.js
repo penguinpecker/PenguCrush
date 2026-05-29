@@ -2136,6 +2136,91 @@ function flashNoLivesFeedback(...btns) {
   btns.forEach(shakeElement);
 }
 
+let _confettiRaf = null;
+let _confettiResize = null;
+
+function stopWinConfetti() {
+  if (_confettiRaf) {
+    cancelAnimationFrame(_confettiRaf);
+    _confettiRaf = null;
+  }
+  if (_confettiResize) {
+    window.removeEventListener('resize', _confettiResize);
+    _confettiResize = null;
+  }
+  const canvas = document.getElementById('levelConfetti');
+  if (!canvas) return;
+  canvas.classList.remove('active');
+  const ctx = canvas.getContext('2d');
+  if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+function spawnWinConfetti() {
+  const canvas = document.getElementById('levelConfetti');
+  if (!canvas) return;
+  stopWinConfetti();
+  canvas.classList.add('active');
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  const resize = () => {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  };
+  resize();
+  _confettiResize = resize;
+  window.addEventListener('resize', resize);
+
+  const colors = ['#FFD700', '#FF6B6B', '#4FC3F7', '#7CB342', '#FF7043', '#AB47BC', '#FFFFFF', '#FFEB3B'];
+  const particles = Array.from({ length: 140 }, () => ({
+    x: Math.random() * canvas.width,
+    y: -30 - Math.random() * canvas.height * 0.4,
+    w: 5 + Math.random() * 7,
+    h: 3 + Math.random() * 5,
+    color: colors[Math.floor(Math.random() * colors.length)],
+    vx: (Math.random() - 0.5) * 5,
+    vy: 2.5 + Math.random() * 5,
+    rot: Math.random() * Math.PI * 2,
+    vr: (Math.random() - 0.5) * 0.25,
+  }));
+
+  const start = performance.now();
+  const duration = 4000;
+
+  const frame = now => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (const p of particles) {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += 0.06;
+      p.vx *= 0.998;
+      p.rot += p.vr;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      ctx.restore();
+    }
+    if (now - start < duration) {
+      _confettiRaf = requestAnimationFrame(frame);
+    } else {
+      stopWinConfetti();
+    }
+  };
+  _confettiRaf = requestAnimationFrame(frame);
+}
+
+function setLevelResultBanner(won) {
+  const banner = document.getElementById('levelResultBanner');
+  const textEl = document.getElementById('levelResultBannerText');
+  if (!banner || !textEl) return;
+  banner.hidden = false;
+  banner.classList.toggle('level-result-banner--win', won);
+  banner.classList.toggle('level-result-banner--lose', !won);
+  textEl.textContent = won ? 'You Won!' : 'You Lost!';
+}
+
 function showLevelPopup(wonHint) {
   gameOver = true;
   syncGoalDisplayToActual();
@@ -2163,9 +2248,15 @@ function showLevelPopup(wonHint) {
   const stars = won ? getStars() : 0;
   const durationMs = Math.round(performance.now() - gameStartTime);
 
+  setLevelResultBanner(won);
+  if (won) spawnWinConfetti();
+  else stopWinConfetti();
+
+  const levelTitleHtml = `<span class="level-popup-title-label">LEVEL</span><span class="level-popup-title-num">${levelNum}</span>`;
+
   if (won) {
     title.classList.remove('fail');
-    title.innerHTML = `<span class="level-popup-title-label">LEVEL</span><span class="level-popup-title-num">${levelNum}</span>`;
+    title.innerHTML = levelTitleHtml;
 
     // level-popup-frame.png has three empty stars baked into the art,
     // so only render a gold overlay for each EARNED star. Empty slots
@@ -2191,8 +2282,8 @@ function showLevelPopup(wonHint) {
     nextBtn.classList.remove('hidden');
     updateEndPopupActionStates(true);
   } else {
-    title.innerHTML = 'Out of<br>Moves!';
-    title.classList.add('fail');
+    title.classList.remove('fail');
+    title.innerHTML = levelTitleHtml;
 
     // Failure: overlay empty stars so baked-in frame art doesn't look like a reward.
     starsEl.innerHTML = '';
