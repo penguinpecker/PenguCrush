@@ -1699,6 +1699,150 @@
   pointer-events: none;
 }
 
+/* ── Alert dot — red badge shown when spin is available ── */
+.daily-wheel-alert-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ff3b30;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 2px rgba(255, 59, 48, 0.45);
+  animation: wheel-dot-pulse 1.6s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 2;
+}
+
+@keyframes wheel-dot-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 2px rgba(255, 59, 48, 0.45); }
+  50% { transform: scale(1.25); box-shadow: 0 0 0 5px rgba(255, 59, 48, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .daily-wheel-alert-dot { animation: none; }
+}
+
+/* ═══════════════════════════════════════════════
+   DAILY WHEEL — win celebration burst
+   ═══════════════════════════════════════════════ */
+.wheel-win-burst {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  z-index: 10;
+  isolation: isolate;
+}
+
+.wheel-win-burst--active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.wheel-win-burst__rays {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 220vmax;
+  height: 220vmax;
+  margin: -110vmax 0 0 -110vmax;
+  border-radius: 50%;
+  opacity: 0.5;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.05) 35%, transparent 60%),
+    conic-gradient(
+      from 0deg,
+      rgba(255, 220, 80, 0.5) 0deg,
+      rgba(255, 140, 60, 0.3) 30deg,
+      rgba(255, 255, 120, 0.45) 60deg,
+      rgba(100, 220, 255, 0.35) 100deg,
+      rgba(255, 255, 255, 0.5) 140deg,
+      rgba(255, 200, 80, 0.4) 180deg,
+      rgba(80, 200, 255, 0.35) 220deg,
+      rgba(255, 240, 100, 0.48) 270deg,
+      rgba(255, 160, 60, 0.3) 320deg,
+      rgba(255, 220, 80, 0.5) 360deg
+    );
+  animation: crush-pass-spin 8s linear infinite;
+  will-change: transform;
+  transform: rotate(0deg) translateZ(0);
+  filter: blur(0.5px);
+  mix-blend-mode: soft-light;
+}
+
+.wheel-win-burst__confetti {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.wheel-win-burst__confetti-piece {
+  position: absolute;
+  top: -10px;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  opacity: 0;
+  animation: wheel-confetti-fall var(--fall-dur, 1.8s) var(--fall-delay, 0s) ease-in forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes wheel-confetti-fall {
+  0% {
+    transform: translateY(0) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  80% { opacity: 1; }
+  100% {
+    transform: translateY(110vh) rotate(var(--rot, 360deg)) scale(0.6);
+    opacity: 0;
+  }
+}
+
+.wheel-win-burst__label {
+  position: relative;
+  z-index: 2;
+  font-family: 'Fredoka', sans-serif;
+  font-size: clamp(32px, 9vmin, 64px);
+  font-weight: 800;
+  color: #fff;
+  text-align: center;
+  letter-spacing: 0.02em;
+  padding: 0 16px;
+  max-width: min(94vw, 560px);
+  text-shadow:
+    0 0 24px rgba(255, 220, 80, 0.95),
+    0 0 48px rgba(255, 160, 40, 0.7),
+    0 0 80px rgba(255, 100, 0, 0.45),
+    0 4px 12px rgba(0, 20, 50, 0.9);
+  opacity: 0;
+  transform: scale(0.6);
+  transition: opacity 0.4s ease 0.1s, transform 0.4s cubic-bezier(0.34, 1.45, 0.64, 1) 0.1s;
+}
+
+.wheel-win-burst--active .wheel-win-burst__label {
+  opacity: 1;
+  transform: scale(1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wheel-win-burst__rays { animation: none; }
+  .wheel-win-burst__confetti-piece { animation: none; opacity: 0; }
+  .wheel-win-burst__label {
+    transition: none;
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 /* ═══════════════════════════════════════════════
    DAILY WHEEL — fullscreen overlay
    ═══════════════════════════════════════════════ */

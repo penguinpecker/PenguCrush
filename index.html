@@ -240,6 +240,7 @@
           </button>
           <button type="button" class="daily-wheel-btn" id="dailyWheelOpen" aria-label="Open daily spin">
             <img src="/assets/ui/daily-wheel.png" alt="" class="daily-wheel-btn__img" draggable="false" />
+            <span class="daily-wheel-alert-dot" id="dailyWheelAlertDot" aria-hidden="true" hidden></span>
           </button>
         </div>
       </div>
@@ -304,6 +305,12 @@
         </div>
         <button type="button" class="daily-wheel-spin-btn" id="dailyWheelSpinBtn">SPIN</button>
         <p class="daily-wheel-result" id="dailyWheelResult" hidden></p>
+      </div>
+      <!-- Win celebration burst — shown over the wheel overlay after a real prize -->
+      <div class="wheel-win-burst" id="wheelWinBurst" aria-hidden="true">
+        <div class="wheel-win-burst__rays" aria-hidden="true"></div>
+        <div class="wheel-win-burst__confetti" id="wheelWinConfetti" aria-hidden="true"></div>
+        <span class="wheel-win-burst__label" id="wheelWinLabel"></span>
       </div>
     </div>
 

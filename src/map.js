@@ -560,6 +560,52 @@ export function initMap() {
   const dailySpinEl = document.getElementById('dailyWheelSpin');
   const dailySpinBtn = document.getElementById('dailyWheelSpinBtn');
   const dailyResult = document.getElementById('dailyWheelResult');
+  const dailyAlertDot = document.getElementById('dailyWheelAlertDot');
+  const wheelWinBurst = document.getElementById('wheelWinBurst');
+  const wheelWinLabel = document.getElementById('wheelWinLabel');
+  const wheelWinConfetti = document.getElementById('wheelWinConfetti');
+
+  function refreshWheelAlertDot() {
+    if (!dailyAlertDot) return;
+    const canSpin = Inventory.canSpinDaily();
+    dailyAlertDot.hidden = !canSpin;
+  }
+
+  const CONFETTI_COLORS = [
+    '#ff3b30','#ff9500','#ffcc00','#34c759','#007aff','#af52de','#ff2d55','#5ac8fa','#fff'
+  ];
+
+  function spawnWheelConfetti() {
+    if (!wheelWinConfetti) return;
+    wheelWinConfetti.innerHTML = '';
+    const count = 80;
+    for (let i = 0; i < count; i++) {
+      const el = document.createElement('div');
+      el.className = 'wheel-win-burst__confetti-piece';
+      el.style.left = `${Math.random() * 100}%`;
+      el.style.width = `${6 + Math.random() * 8}px`;
+      el.style.height = `${6 + Math.random() * 8}px`;
+      el.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
+      el.style.background = CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)];
+      el.style.setProperty('--fall-dur', `${1.4 + Math.random() * 1.4}s`);
+      el.style.setProperty('--fall-delay', `${Math.random() * 0.8}s`);
+      el.style.setProperty('--rot', `${(Math.random() > 0.5 ? 1 : -1) * (180 + Math.floor(Math.random() * 360))}deg`);
+      wheelWinConfetti.appendChild(el);
+    }
+  }
+
+  function showWheelWinCelebration(prizeText) {
+    if (!wheelWinBurst || !wheelWinLabel) return;
+    wheelWinLabel.textContent = `🎉 ${prizeText}!`;
+    spawnWheelConfetti();
+    wheelWinBurst.classList.add('wheel-win-burst--active');
+    wheelWinBurst.setAttribute('aria-hidden', 'false');
+    // Auto-dismiss after 3 seconds
+    setTimeout(() => {
+      wheelWinBurst.classList.remove('wheel-win-burst--active');
+      wheelWinBurst.setAttribute('aria-hidden', 'true');
+    }, 3000);
+  }
 
   const DAILY_SEGMENTS = 6;
   const DAILY_SEGMENT_DEG = 360 / DAILY_SEGMENTS;
@@ -601,6 +647,7 @@ export function initMap() {
   }
 
   refreshWheelSliceLabels();
+  refreshWheelAlertDot();
 
   let dailyWheelRotation = DAILY_BASE_ROTATION_DEG;
   let dailySpinning = false;
@@ -739,12 +786,13 @@ export function initMap() {
       const rewardText = readPrizeFromReceipt(r.receipt) || getDailyWheelSliceLabels()[slot] || 'a reward';
       Inventory.markDailySpun(rewardText);
       Events.wheelSpinComplete(r.hash);
+      refreshWheelAlertDot();
+      const isTryAgain = rewardText === 'Try Again';
       if (dailyResult) {
-        dailyResult.textContent = rewardText === 'Try Again'
-          ? 'Try again tomorrow!'
-          : `You won: ${rewardText}!`;
+        dailyResult.textContent = isTryAgain ? 'Try again tomorrow!' : `You won: ${rewardText}!`;
         dailyResult.hidden = false;
       }
+      if (!isTryAgain) showWheelWinCelebration(rewardText);
     } catch (err) {
       const msg = String(err?.shortMessage || err?.message || err).slice(0, 300);
       console.warn('Wheel spin failed:', msg);
@@ -770,6 +818,7 @@ export function initMap() {
     Events.wheelOpen();
     openDailyWheel();
     refreshSpinButtonState();
+    refreshWheelAlertDot();
   });
   dailyClose?.addEventListener('click', () => closeDailyWheel());
   dailyOverlay?.querySelector('.daily-wheel-overlay__backdrop')?.addEventListener('click', () => closeDailyWheel());

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { createGLTFLoader } from './gltf-loader.js';
-import { getLevel, hasLevel, getObjectiveChip, computeStars, movesRemainingForStars } from './levels.js';
+import { getLevel, hasLevel, getObjectiveChip, computeStars, movesRemainingForStars, auditLevelConfig } from './levels.js';
 import { getWallet, ensureWallet, saveLevelResult } from './supabase.js';
 import * as Inventory from './inventory.js';
 import { startLevel as chainStartLevel, submitLevel as chainSubmitLevel, submitAndStartNext as chainSubmitAndStartNext, sku as nameToSku } from './onchain.js';
@@ -42,6 +42,12 @@ const levelNum = (() => {
   return Number.isFinite(fromUrl) && fromUrl >= 1 ? fromUrl : 1;
 })();
 const CONFIG = getLevel(levelNum);
+
+// Fix #4: Audit level config at startup in dev mode to catch misconfigured levels early.
+if (import.meta.env.DEV) {
+  const auditIssues = auditLevelConfig(CONFIG);
+  if (auditIssues.length) console.warn('[level-audit] Level', levelNum, 'issues:\n' + auditIssues.join('\n'));
+}
 
 const GRID = CONFIG.grid;
 const CELL = 1.2;
@@ -698,6 +704,10 @@ async function autoShuffleIfDead() {
   await Promise.all(
     newTiles.map(tile => animSpawn(tile.mesh, gridToWorld(tile.row, tile.col), 450))
   );
+  // Fix #3: Warn the player if all shuffle attempts failed to produce a solvable board.
+  if (!hasAnyValidSwap()) {
+    showMsg('No moves available!', 2500);
+  }
   await delay(80);
   animating = wasAnimating;
   return true;
@@ -1668,9 +1678,16 @@ async function dropFallers() {
 async function processFallers() {
   if (!fallerConfig) return;
   turnCount++;
+  // Fix #7: Warn the player when a faller is about to drop next turn.
+  const turnsUntilNext = fallerConfig.interval - (turnCount % fallerConfig.interval);
+  if (turnsUntilNext === 1) showMsg('❄ Ice block incoming!', 900);
   if (turnCount % fallerConfig.interval !== 0) return;
   fallerDropCycles++;
-  spawnFaller();
+  // Fix #9 (snapshot): Skip spawning a new faller if one already exists on the board
+  // (can happen when restoring a mid-game snapshot where the saved turnCount aligns with
+  // the spawn interval but the faller was already serialized into the board state).
+  const fallerAlreadyOnBoard = board.some(row => row.some(t => t?.isFaller));
+  if (!fallerAlreadyOnBoard) spawnFaller();
   await delay(200);
   await dropFallers();
 }
@@ -2039,7 +2056,14 @@ function updateHUD() {
   document.getElementById('scoreVal').textContent = score.toLocaleString();
   const targetEl = document.getElementById('targetScoreVal');
   if (targetEl) targetEl.textContent = CONFIG.targetScore.toLocaleString();
-  document.getElementById('movesVal').textContent = moves;
+  // Fix #8: Show total moves including shard bonus so players see their full budget.
+  const movesEl = document.getElementById('movesVal');
+  if (movesEl) {
+    movesEl.textContent = moves;
+    if (TRAITS.bonusMoves > 0) {
+      movesEl.title = `${moves} moves (includes +${TRAITS.bonusMoves} shard bonus)`;
+    }
+  }
   syncGoalHud();
   const sc = document.getElementById('scoreCanvas');
   const mc = document.getElementById('movesCanvas');
@@ -2050,6 +2074,9 @@ function updateHUD() {
 }
 
 function maybeWarnLowMoves(prevMoves) {
+  // Fix #10: Reset the flag when moves recover above 3 so the warning re-triggers
+  // if the player drops back down (e.g. after a faller penalty following a booster gain).
+  if (moves > 3) lowMovesWarned = false;
   if (gameOver || lowMovesWarned || moves !== 3 || prevMoves <= 3) return;
   lowMovesWarned = true;
   showMsg('Only 3 moves left!', 2200);
@@ -2249,7 +2276,9 @@ function showLevelPopup(wonHint) {
   const durationMs = Math.round(performance.now() - gameStartTime);
 
   setLevelResultBanner(won);
-  if (won) spawnWinConfetti();
+  // Fix #9 (UX): Delay confetti by ~400ms so goal-counter fly-in FX finish before
+  // confetti starts — the two animations competed visually when fired simultaneously.
+  if (won) setTimeout(spawnWinConfetti, 400);
   else stopWinConfetti();
 
   const levelTitleHtml = `<span class="level-popup-title-label">LEVEL</span><span class="level-popup-title-num">${levelNum}</span>`;
@@ -3049,7 +3078,12 @@ canvas.addEventListener('click', async e => {
       validTarget = !!target && !target.isWall && !target.frozen;
     }
     if (!validTarget) {
-      // Keep the booster armed; player can pick a different tile.
+      // Fix #1/#6: Give visual + text feedback so the player knows why the booster didn't fire.
+      // Booster stays armed so they can pick a valid tile instead.
+      const badMesh = board[cl.row]?.[cl.col]?.mesh;
+      if (badMesh) animShake(badMesh);
+      const reason = !target || target.isWall ? "Can't use on walls!" : "Can't use on frozen tiles!";
+      showMsg(reason, 700);
       return;
     }
     activeBooster = null;
