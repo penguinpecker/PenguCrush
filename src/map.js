@@ -12,6 +12,7 @@ import { formatEther } from 'viem';
 import penguCrushAbiJson from '../contracts/PenguCrushABI.json';
 import { Events, setAnalyticsUser } from './analytics.js';
 import { renderLivesHud } from './lives-hud.js';
+import { playSfx } from './audio.js';
 
 /** Map inventory grid: 5 boosters + 3 shards = 4×2 */
 const INVENTORY_MAP_SLOTS = [
@@ -594,14 +595,25 @@ export function initMap() {
     }
   }
 
+  let _wheelWinTimer = null;
+
+  function clearWheelWinCelebration() {
+    if (_wheelWinTimer !== null) { clearTimeout(_wheelWinTimer); _wheelWinTimer = null; }
+    if (wheelWinBurst) {
+      wheelWinBurst.classList.remove('wheel-win-burst--active');
+      wheelWinBurst.setAttribute('aria-hidden', 'true');
+    }
+  }
+
   function showWheelWinCelebration(prizeText) {
     if (!wheelWinBurst || !wheelWinLabel) return;
+    clearWheelWinCelebration(); // cancel any stale timer from a previous win
     wheelWinLabel.textContent = `🎉 ${prizeText}!`;
     spawnWheelConfetti();
     wheelWinBurst.classList.add('wheel-win-burst--active');
     wheelWinBurst.setAttribute('aria-hidden', 'false');
-    // Auto-dismiss after 3 seconds
-    setTimeout(() => {
+    _wheelWinTimer = setTimeout(() => {
+      _wheelWinTimer = null;
       wheelWinBurst.classList.remove('wheel-win-burst--active');
       wheelWinBurst.setAttribute('aria-hidden', 'true');
     }, 3000);
@@ -665,6 +677,7 @@ export function initMap() {
   function closeDailyWheel() {
     dailyOverlay?.classList.remove('active');
     dailyOverlay?.setAttribute('aria-hidden', 'true');
+    clearWheelWinCelebration(); // cancel stale dismiss timer and reset burst element
   }
 
   function prefersReducedMotion() {
@@ -761,6 +774,7 @@ export function initMap() {
       return;
     }
     Events.wheelSpinStart();
+    playSfx('wheelSpin');
     dailySpinning = true;
     if (dailySpinBtn) dailySpinBtn.disabled = true;
     if (dailyResult) {
@@ -792,7 +806,7 @@ export function initMap() {
         dailyResult.textContent = isTryAgain ? 'Try again tomorrow!' : `You won: ${rewardText}!`;
         dailyResult.hidden = false;
       }
-      if (!isTryAgain) showWheelWinCelebration(rewardText);
+      if (!isTryAgain) { playSfx('wheelPrize'); showWheelWinCelebration(rewardText); }
     } catch (err) {
       const msg = String(err?.shortMessage || err?.message || err).slice(0, 300);
       console.warn('Wheel spin failed:', msg);
@@ -815,6 +829,7 @@ export function initMap() {
 
   dailyOpen?.addEventListener('click', e => {
     e.stopPropagation();
+    playSfx('buttonTap');
     Events.wheelOpen();
     openDailyWheel();
     refreshSpinButtonState();

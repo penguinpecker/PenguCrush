@@ -1,0 +1,169 @@
+/**
+ * Lightweight audio manager.
+ *
+ * SFX are pooled (up to POOL_SIZE clones per key) so rapid-fire events like
+ * cascades don't cut themselves off.  BGM loops with a cross-fade.
+ *
+ * All audio is disabled while the tab is hidden (visibilitychange) and
+ * respects a persistent user mute preference stored in localStorage.
+ *
+ * Attribution (required by CC-BY 3.0):
+ *   Background music "Happy Arcade Tune" by rezoner — opengameart.org
+ *   SFX from Kenney UI Audio & Impact Sounds packs — kenney.nl (CC0)
+ */
+
+const SFX_BASE = '/assets/audio/sfx/';
+const MUS_BASE = '/assets/audio/music/';
+const POOL_SIZE = 4;
+const MUTE_KEY  = 'pengucrush_mute';
+const VOL_KEY   = 'pengucrush_volume';
+
+const SFX_FILES = {
+  tileSelect:       'tile-select.ogg',
+  tileSwap:         'tile-swap.ogg',
+  match:            'match.ogg',
+  matchCascade:     'match-cascade.ogg',
+  noMatch:          'no-match.ogg',
+  boosterHammer:    'booster-hammer.ogg',
+  boosterRowCol:    'booster-row-col.ogg',
+  boosterColorBomb: 'booster-color-bomb.ogg',
+  boosterShuffle:   'booster-shuffle.ogg',
+  blockerBreak:     'blocker-break.ogg',
+  fallerPenalty:    'faller-penalty.ogg',
+  levelWin:         'level-win.ogg',
+  levelFail:        'level-fail.ogg',
+  buttonTap:        'button-tap.ogg',
+  wheelSpin:        'wheel-spin.ogg',
+  wheelPrize:       'wheel-prize.ogg',
+};
+
+// ── State ────────────────────────────────────────────────────────────────────
+let _muted  = localStorage.getItem(MUTE_KEY)  === 'true';
+let _volume = parseFloat(localStorage.getItem(VOL_KEY) || '1');
+if (!Number.isFinite(_volume) || _volume < 0 || _volume > 1) _volume = 1;
+
+/** @type {Map<string, HTMLAudioElement[]>} */
+const _pools = new Map();
+/** @type {HTMLAudioElement | null} */
+let _bgm = null;
+let _bgmFading = false;
+/** Track name currently playing — used for dedup without URL matching. */
+let _bgmKey = '';
+/** Volume arg last passed to playBgm — kept so setMuted/setVolume can restore it correctly. */
+let _bgmVolume = 0.35;
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function _clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+function _getPool(key) {
+  if (!_pools.has(key)) {
+    const src = SFX_BASE + SFX_FILES[key];
+    const pool = Array.from({ length: POOL_SIZE }, () => {
+      const a = new Audio(src);
+      a.preload = 'auto';
+      return a;
+    });
+    _pools.set(key, pool);
+  }
+  return _pools.get(key);
+}
+
+function _getReady(key) {
+  const pool = _getPool(key);
+  // Prefer an element that has finished or not yet started
+  return pool.find(a => a.paused || a.ended) || pool[0];
+}
+
+// ── Public API ───────────────────────────────────────────────────────────────
+
+/** Play a one-shot SFX (fire-and-forget). */
+export function playSfx(key, { volume = 1 } = {}) {
+  if (_muted || document.hidden) return;
+  if (!SFX_FILES[key]) { console.warn('[audio] unknown SFX key:', key); return; }
+  try {
+    const el = _getReady(key);
+    el.currentTime = 0;
+    el.volume = _clamp(_volume * volume, 0, 1);
+    el.play().catch(() => {});
+  } catch (_) {}
+}
+
+/** Start looping BGM with optional fade-in. */
+export function playBgm(src = 'game-bgm.mp3', { volume = 0.35, fadeMs = 1200 } = {}) {
+  // Use key-based dedup so tab-hidden (paused) BGM is resumed rather than replaced.
+  if (_bgmKey === src) {
+    if (_bgm && _bgm.paused && !_muted) _bgm.play().catch(() => {});
+    return;
+  }
+  _bgmKey    = src;
+  _bgmVolume = volume;
+  stopBgm(300);
+  const a = new Audio(MUS_BASE + src);
+  a.loop    = true;
+  a.preload = 'auto';
+  a.volume  = 0; // always start silent; fade-in or direct-set below corrects it
+  _bgm = a;
+  a.play().catch(() => {});
+  if (!_muted && fadeMs > 0) {
+    const target = _clamp(_volume * volume, 0, 1);
+    const steps  = 30;
+    const dt     = fadeMs / steps;
+    let   i      = 0;
+    const t = setInterval(() => {
+      if (a !== _bgm) { clearInterval(t); return; }
+      i++;
+      a.volume = _clamp((i / steps) * target, 0, 1);
+      if (i >= steps) clearInterval(t);
+    }, dt);
+  } else if (!_muted) {
+    a.volume = _clamp(_volume * volume, 0, 1);
+  }
+}
+
+/** Fade out and stop BGM. */
+export function stopBgm(fadeMs = 600) {
+  _bgmKey = ''; // clear key so playBgm can start a new track
+  const a = _bgm;
+  if (!a || a.paused) { _bgm = null; return; }
+  _bgm = null;
+  if (fadeMs <= 0 || _bgmFading) { _bgmFading = false; a.pause(); return; }
+  _bgmFading = true;
+  const startVol = a.volume;
+  const steps = 20;
+  const dt = fadeMs / steps;
+  let i = 0;
+  const t = setInterval(() => {
+    i++;
+    a.volume = _clamp(startVol * (1 - i / steps), 0, 1);
+    if (i >= steps) { clearInterval(t); a.pause(); _bgmFading = false; }
+  }, dt);
+}
+
+export function getMuted()  { return _muted; }
+export function getVolume() { return _volume; }
+
+export function setMuted(v) {
+  _muted = !!v;
+  localStorage.setItem(MUTE_KEY, String(_muted));
+  if (_bgm) _bgm.volume = _muted ? 0 : _clamp(_volume * _bgmVolume, 0, 1);
+}
+
+export function setVolume(v) {
+  _volume = _clamp(Number(v), 0, 1);
+  localStorage.setItem(VOL_KEY, String(_volume));
+  if (_bgm && !_muted) _bgm.volume = _clamp(_volume * _bgmVolume, 0, 1);
+}
+
+export function toggleMute() { setMuted(!_muted); return _muted; }
+
+// Pause BGM when tab is hidden; resume the same element when visible again.
+// We do NOT recreate the Audio object here — playBgm's key-based dedup
+// already handles that correctly on the next explicit playBgm call.
+document.addEventListener('visibilitychange', () => {
+  if (!_bgm) return;
+  if (document.hidden) {
+    _bgm.pause();
+  } else if (!_muted) {
+    _bgm.play().catch(() => {});
+  }
+});

@@ -8,6 +8,7 @@ import { rollShardsForMatch, renderShardSlots, computeTraits } from './shards.js
 import { saveSnapshot as saveMidGameSnapshot, loadSnapshot as loadMidGameSnapshot, clearSnapshot as clearMidGameSnapshot } from './mid-game.js';
 import { Events } from './analytics.js';
 import { renderLivesHud, canSpendLife, shakeLivesHud, shakeElement } from './lives-hud.js';
+import { playSfx, playBgm, stopBgm } from './audio.js';
 
 // ─── Per-level journal accumulated during play, submitted on-chain at end ────
 const journal = {
@@ -489,6 +490,7 @@ function damageBlocker(tile) {
   tile.iceLayer = 0;
   blockersDestroyed.frozen = (blockersDestroyed.frozen || 0) + 1;
   blockersDestroyed.ice = (blockersDestroyed.ice || 0) + 1;
+  playSfx('blockerBreak');
   return true;
 }
 
@@ -499,6 +501,7 @@ function fullyBreakBlocker(tile) {
   tile.iceLayer = 0;
   blockersDestroyed.frozen = (blockersDestroyed.frozen || 0) + 1;
   blockersDestroyed.ice = (blockersDestroyed.ice || 0) + 1;
+  playSfx('blockerBreak'); // centralised here so every call site (row/col/bomb/hammer) gets the sound
 }
 
 function createWall(row, col) {
@@ -694,6 +697,7 @@ async function autoShuffleIfDead() {
 
   const wasAnimating = animating;
   animating = true;
+  playSfx('boosterShuffle');
   showMsg('No moves — shuffling!', 1400);
 
   const vanishPs = positions.map(([r, c]) => animShuffleTileVanish(board[r][c].mesh));
@@ -1554,7 +1558,9 @@ async function processMatches() {
   combo = 0;
   let m = findMatches();
   while (m.size > 0) {
-    combo++; score += Math.round(m.size * 10 * combo * TRAITS.scoreMultiplier * Inventory.getScoreMultiplier());
+    combo++;
+    playSfx(combo > 1 ? 'matchCascade' : 'match');
+    score += Math.round(m.size * 10 * combo * TRAITS.scoreMultiplier * Inventory.getScoreMultiplier());
     if (combo === 5) { journal.bigCombos++; Events.bigCombo(combo, levelNum); }
     else if (combo > 5) { journal.bigCombos++; /* extension of an already-tracked combo */ }
     // Mid-level shard drops: any 4+ run rolls each shard independently
@@ -1641,6 +1647,7 @@ async function dropFallers() {
         maybeWarnLowMoves(prevMoves);
         fallerDropsPenalized++;
         updateHUD();
+        playSfx('fallerPenalty');
         showMsg('-1 Move!', 600);
         Events.fallerPenalty(levelNum);
 
@@ -2250,6 +2257,7 @@ function setLevelResultBanner(won) {
 
 function showLevelPopup(wonHint) {
   gameOver = true;
+  stopBgm(800); // fade out BGM before win/fail SFX plays
   syncGoalDisplayToActual();
   // Re-check at popup time — never award stars/unlock unless both gates are met.
   const won = isLevelWin();
@@ -2264,8 +2272,8 @@ function showLevelPopup(wonHint) {
   const movesUsedNow = getMovesUsed();
   const durationMsNow = Math.round(performance.now() - gameStartTime);
   const starsNow = won ? getStars() : 0;
-  if (won) Events.levelWin(levelNum, score, starsNow, movesUsedNow, durationMsNow);
-  else     Events.levelFail(levelNum, score, movesUsedNow, durationMsNow);
+  if (won) { Events.levelWin(levelNum, score, starsNow, movesUsedNow, durationMsNow); playSfx('levelWin'); }
+  else     { Events.levelFail(levelNum, score, movesUsedNow, durationMsNow); playSfx('levelFail'); }
   const title = document.getElementById('levelPopupTitle');
   const starsEl = document.getElementById('levelPopupStars');
   const scoreEl = document.getElementById('levelPopupScore');
@@ -2526,10 +2534,12 @@ window.addEventListener('pengu:inventory', () => {
 
 async function handleSwap(r1, c1, r2, c2) {
   if (animating || gameOver) return; animating = true;
+  playSfx('tileSwap');
   await swapTiles(r1, c1, r2, c2);
   if (findMatches().size === 0) {
     await swapTiles(r2, c2, r1, c1);
     await Promise.all([animShake(board[r1][c1].mesh), animShake(board[r2][c2].mesh)]);
+    playSfx('noMatch');
     showMsg('No match!', 500);
   } else {
     const prevMoves = moves;
@@ -2570,6 +2580,7 @@ const delay = ms => new Promise(r => setTimeout(r, ms));
 async function useBoosterRow(row) {
   if (animating) return;
   animating = true;
+  playSfx('boosterRowCol');
   await animRowBoosterFx(row);
   await delay(100);
   await dropTiles();
@@ -2581,6 +2592,7 @@ async function useBoosterRow(row) {
 async function useBoosterCol(col) {
   if (animating) return;
   animating = true;
+  playSfx('boosterRowCol');
   await animColBoosterFx(col);
   await delay(100);
   await dropTiles();
@@ -2597,10 +2609,12 @@ async function useBoosterHammer(row, col) {
   const wp = gridToWorld(row, col);
 
   if (tile.frozen) {
+    playSfx('boosterHammer'); // swing sound — plays at start of swing, blockerBreak fires at impact inside fullyBreakBlocker
     await animHammerBreakIce(tile, wp);
     updateHUD();
     await resolveLevelStateAfterBoardSettled();
   } else {
+    playSfx('boosterHammer');
     const mesh = tile.mesh;
     const ttype = tile.type;
     const wp = mesh.position.clone();
@@ -2620,6 +2634,7 @@ async function useBoosterColorBomb(row, col) {
   const tile = board[row][col];
   if (!tile || tile.isWall || tile.frozen) return;
   animating = true;
+  playSfx('boosterColorBomb');
   const targetType = tile.type;
 
   const targets = [];
@@ -3104,6 +3119,7 @@ canvas.addEventListener('click', async e => {
 
   if (!selected) {
     if (blocked(cl.row, cl.col)) return;
+    playSfx('tileSelect');
     selected = cl;
     const p = gridToWorld(cl.row, cl.col);
     selRing.position.set(p.x, p.y, 0.6); selRing.visible = true;
@@ -3464,6 +3480,7 @@ async function init() {
   initBoard();
   ensureBoardPlayableSync();
   animate();
+  playBgm('game-bgm.mp3', { volume: 0.32, fadeMs: 1500 });
 
 }
 
