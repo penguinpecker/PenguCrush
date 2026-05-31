@@ -3455,6 +3455,38 @@ function drawHUDPanel(cvs) {
   ctx.shadowBlur = 0;
 }
 
+// ── Game-level loading overlay helpers ──────────────────────────
+const _gameLoadEl  = document.getElementById('gameLoading');
+const _gameLoadBar = document.getElementById('gameLoadingBar');
+const _gameLoadTip = document.getElementById('gameLoadingTip');
+
+// Stamp the level number into the overlay
+const _gameLoadLvlEl = document.getElementById('gameLoadingLevelNum');
+if (_gameLoadLvlEl) _gameLoadLvlEl.textContent = String(levelNum);
+
+let _loadDone  = 0;
+let _loadTotal = 1; // set before use; avoid div-by-zero
+
+function _bumpLoad(tip) {
+  _loadDone = Math.min(_loadDone + 1, _loadTotal);
+  const pct = (_loadDone / _loadTotal) * 100;
+  if (_gameLoadBar) _gameLoadBar.style.width = `${pct}%`;
+  if (tip && _gameLoadTip) _gameLoadTip.textContent = tip;
+}
+
+function _hideGameLoader() {
+  if (!_gameLoadEl) return;
+  // Set bar to 100% before fading out
+  if (_gameLoadBar) _gameLoadBar.style.width = '100%';
+  // Small delay so the filled bar is visible for a moment
+  setTimeout(() => {
+    _gameLoadEl.classList.add('game-loading--done');
+    const cleanup = () => _gameLoadEl.remove();
+    _gameLoadEl.addEventListener('transitionend', cleanup, { once: true });
+    setTimeout(cleanup, 600); // fallback if transitionend never fires
+  }, 180);
+}
+
 async function init() {
   // chainStartLevel was MOVED to the map's Play button (src/map.js) so the
   // chain prompt happens BEFORE the user is teleported into the play page.
@@ -3462,13 +3494,24 @@ async function init() {
   // the life is debited, so this init() trusts the gate and just renders.
   Events.levelStart(levelNum);
 
-  await preloadAssets(() => {});
-  await ensureHammerSwingModel();
-  await loadGridFrame();
-  await loadHUDPanel('scoreCanvas', '/assets/hud/score-panel.glb');
-  if (getObjectiveChip(CONFIG)) await loadGoalHUDPanel();
-  await loadHUDPanel('movesCanvas', '/assets/hud/moves-panel.glb');
-  await preCacheBoosterCursors();
+  // ── Count total load steps for accurate progress ──
+  // Per-tile GLBs + per-needed-blocker GLBs + 5 fixed steps (hammer, frame,
+  // score panel, moves panel, cursors) + 1 optional (goal panel).
+  const blockerTypes = new Set(CONFIG.blockers.map(b => b.type));
+  const assetSteps   = Object.keys(GLB_PATHS).length
+                     + Object.keys(BLOCKER_GLB_PATHS).filter(t => blockerTypes.has(t)).length;
+  const hasGoal      = !!getObjectiveChip(CONFIG);
+  _loadTotal = assetSteps + 5 + (hasGoal ? 1 : 0);
+
+  if (_gameLoadTip) _gameLoadTip.textContent = 'Loading tiles…';
+
+  await preloadAssets(() => _bumpLoad('Loading tiles…'));
+  await ensureHammerSwingModel();   _bumpLoad('Loading tools…');
+  await loadGridFrame();            _bumpLoad('Building board…');
+  await loadHUDPanel('scoreCanvas', '/assets/hud/score-panel.glb'); _bumpLoad('Preparing HUD…');
+  if (hasGoal) { await loadGoalHUDPanel(); _bumpLoad('Setting goal…'); }
+  await loadHUDPanel('movesCanvas', '/assets/hud/moves-panel.glb'); _bumpLoad('Almost ready…');
+  await preCacheBoosterCursors();   _bumpLoad('Ready!');
 
   const targetEl = document.getElementById('targetScoreVal');
   if (targetEl) targetEl.textContent = CONFIG.targetScore.toLocaleString();
@@ -3480,9 +3523,10 @@ async function init() {
   initBoard();
   ensureBoardPlayableSync();
   animate();
+
+  _hideGameLoader();
   // BGM is started globally by entry.js after the loading screen clears,
   // so it plays on home/map/game without interruption. No call needed here.
-
 }
 
 let shardPulseId = null;

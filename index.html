@@ -346,6 +346,20 @@
 
   <!-- ═══ GAME SCREEN ═══ -->
   <div id="gameScreen" class="screen screen--hidden">
+
+    <!-- Level loading overlay — shown while init() loads GLBs, hidden when ready -->
+    <div class="game-loading" id="gameLoading" role="status" aria-label="Loading level" aria-live="polite">
+      <div class="game-loading__card">
+        <p class="game-loading__level-label">LEVEL</p>
+        <p class="game-loading__level-num" id="gameLoadingLevelNum">1</p>
+        <div class="game-loading__bar-track" aria-hidden="true">
+          <div class="game-loading__bar-fill" id="gameLoadingBar"></div>
+          <div class="game-loading__bar-shine" aria-hidden="true"></div>
+        </div>
+        <p class="game-loading__tip" id="gameLoadingTip">Loading…</p>
+      </div>
+    </div>
+
     <button class="game-back-btn" id="gameBackBtn" aria-label="Leave level and return to map">
       <span class="game-back-btn__arrow" aria-hidden="true">◀</span>
       <span class="game-back-btn__label">Map</span>

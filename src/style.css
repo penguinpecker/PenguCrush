@@ -532,6 +532,117 @@ body[data-screen="game"] {
   min-height: 100dvh;
 }
 
+/* ══════════════════════════════════════════════════════════
+   GAME-LEVEL LOADING OVERLAY
+   Sits on top of the game screen while init() loads GLBs.
+   Removed from DOM entirely once loading completes.
+   ══════════════════════════════════════════════════════════ */
+.game-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 14, 28, 0.88);
+  backdrop-filter: blur(6px);
+  transition: opacity 0.45s ease;
+}
+
+.game-loading--done {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Card */
+.game-loading__card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 32px 40px 28px;
+  border-radius: 24px;
+  background: linear-gradient(160deg, rgba(12, 40, 72, 0.95), rgba(6, 22, 44, 0.97));
+  border: 1.5px solid rgba(100, 200, 255, 0.2);
+  box-shadow: 0 12px 40px rgba(0, 20, 50, 0.65), 0 0 0 1px rgba(255,255,255,0.04) inset;
+  min-width: min(280px, 80vw);
+}
+
+/* Level label + number */
+.game-loading__level-label {
+  margin: 0;
+  font-family: 'Fredoka', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: rgba(180, 230, 255, 0.6);
+  text-transform: uppercase;
+}
+
+.game-loading__level-num {
+  margin: 0;
+  font-family: 'Fredoka', sans-serif;
+  font-size: clamp(48px, 12vmin, 72px);
+  font-weight: 800;
+  line-height: 1;
+  color: #fff;
+  text-shadow: 0 0 24px rgba(80, 180, 255, 0.7), 0 4px 12px rgba(0, 20, 50, 0.8);
+}
+
+/* Progress bar */
+.game-loading__bar-track {
+  position: relative;
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.game-loading__bar-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #38bdf8, #818cf8);
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.6);
+  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Animated shine sweep */
+.game-loading__bar-shine {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.35) 50%, transparent 100%);
+  animation: game-loading-shine 1.6s ease-in-out infinite;
+}
+
+@keyframes game-loading-shine {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+/* Tip text */
+.game-loading__tip {
+  margin: 0;
+  font-family: 'Fredoka', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(180, 220, 255, 0.65);
+  letter-spacing: 0.03em;
+  min-height: 1.4em;
+  transition: opacity 0.2s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-loading__bar-shine { animation: none; }
+  .game-loading--done { transition: none; }
+  .game-loading__bar-fill { transition: none; }
+}
+
 /* ═══ Back-to-map button on the game screen ═══ */
 .game-back-btn {
   position: fixed;
