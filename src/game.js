@@ -2577,11 +2577,30 @@ const delay = ms => new Promise(r => setTimeout(r, ms));
 // ═══════════════════════════════════════════════════════════════
 //  BOOSTERS
 // ═══════════════════════════════════════════════════════════════
+/** Points per tile/blocker directly cleared by a booster (no combo multiplier). */
+const BOOSTER_PTS_TILE    = 15; // per normal tile cleared
+const BOOSTER_PTS_ICE     = 5;  // per frozen/ice blocker broken (tile stays, ice removed)
+const BOOSTER_PTS_HAMMER  = 20; // hammer on a normal tile
+const BOOSTER_PTS_HAMMER_ICE = 10; // hammer on a frozen tile
+
+/** Award points for what a booster cleared, using delta on the global counters. */
+function awardBoosterScore(tilesBefore, icesBefore, ptsPerTile, ptsPerIce) {
+  const tilesClrd  = totalTilesCleared - tilesBefore;
+  const icesBroken = (blockersDestroyed.ice || 0) - icesBefore;
+  const pts = Math.round(
+    (tilesClrd * ptsPerTile + icesBroken * ptsPerIce)
+    * TRAITS.scoreMultiplier * Inventory.getScoreMultiplier()
+  );
+  if (pts > 0) { score += pts; updateHUD(); }
+}
+
 async function useBoosterRow(row) {
   if (animating) return;
   animating = true;
   playSfx('boosterRowCol');
+  const tilesBefore = totalTilesCleared, icesBefore = blockersDestroyed.ice || 0;
   await animRowBoosterFx(row);
+  awardBoosterScore(tilesBefore, icesBefore, BOOSTER_PTS_TILE, BOOSTER_PTS_ICE);
   await delay(100);
   await dropTiles();
   await processMatches();
@@ -2593,7 +2612,9 @@ async function useBoosterCol(col) {
   if (animating) return;
   animating = true;
   playSfx('boosterRowCol');
+  const tilesBefore = totalTilesCleared, icesBefore = blockersDestroyed.ice || 0;
   await animColBoosterFx(col);
+  awardBoosterScore(tilesBefore, icesBefore, BOOSTER_PTS_TILE, BOOSTER_PTS_ICE);
   await delay(100);
   await dropTiles();
   await processMatches();
@@ -2609,8 +2630,10 @@ async function useBoosterHammer(row, col) {
   const wp = gridToWorld(row, col);
 
   if (tile.frozen) {
-    playSfx('boosterHammer'); // swing sound — plays at start of swing, blockerBreak fires at impact inside fullyBreakBlocker
+    playSfx('boosterHammer'); // swing sound — blockerBreak fires at impact inside fullyBreakBlocker
+    const icesBefore = blockersDestroyed.ice || 0;
     await animHammerBreakIce(tile, wp);
+    awardBoosterScore(totalTilesCleared, icesBefore, 0, BOOSTER_PTS_HAMMER_ICE);
     updateHUD();
     await resolveLevelStateAfterBoardSettled();
   } else {
@@ -2618,8 +2641,10 @@ async function useBoosterHammer(row, col) {
     const mesh = tile.mesh;
     const ttype = tile.type;
     const wp = mesh.position.clone();
+    const tilesBefore = totalTilesCleared;
     recordTileCleared(ttype, wp);
     board[row][col] = null;
+    awardBoosterScore(tilesBefore, blockersDestroyed.ice || 0, BOOSTER_PTS_HAMMER, 0);
     await animHammerHitCandy(mesh, wp);
     await delay(100);
     await dropTiles();
@@ -2638,6 +2663,7 @@ async function useBoosterColorBomb(row, col) {
   const targetType = tile.type;
 
   const targets = [];
+  const tilesBefore = totalTilesCleared;
   for (let r = 0; r < GRID; r++) for (let c = 0; c < GRID; c++) {
     const t = board[r][c];
     if (!t || t.isWall || t.frozen || t.type !== targetType) continue;
@@ -2647,6 +2673,7 @@ async function useBoosterColorBomb(row, col) {
   }
 
   await animColorBombBoosterFx(row, col, targets);
+  awardBoosterScore(tilesBefore, blockersDestroyed.ice || 0, BOOSTER_PTS_TILE, 0);
   await delay(100);
   await dropTiles();
   await processMatches();
