@@ -146,6 +146,13 @@ const fallerConfig = CONFIG.blockers.find(b => b.type === 'faller');
 let fallerDropsPenalized = 0;
 let fallerDropCycles = 0;
 
+// Per-level point multiplier. Compensates for the fact that boards with more
+// tile types produce far fewer/smaller cascades, so a 6-type level's raw scoring
+// is a fraction of a 4-type level's. scoreScale normalises point output across
+// levels so the displayed score targets can rise smoothly with difficulty.
+// Tuned by scripts/sim-winnability.mjs; defaults to 1 when absent.
+const SCORE_SCALE = CONFIG.scoreScale || 1;
+
 // Set background based on era
 if (CONFIG.bg) {
   document.body.style.background = `url('${CONFIG.bg}') center/cover no-repeat fixed`;
@@ -1560,7 +1567,7 @@ async function processMatches() {
   while (m.size > 0) {
     combo++;
     playSfx(combo > 1 ? 'matchCascade' : 'match');
-    score += Math.round(m.size * 10 * combo * TRAITS.scoreMultiplier * Inventory.getScoreMultiplier());
+    score += Math.round(m.size * 10 * combo * SCORE_SCALE * TRAITS.scoreMultiplier * Inventory.getScoreMultiplier());
     if (combo === 5) { journal.bigCombos++; Events.bigCombo(combo, levelNum); }
     else if (combo > 5) { journal.bigCombos++; /* extension of an already-tracked combo */ }
     // Mid-level shard drops: any 4+ run rolls each shard independently
@@ -2589,7 +2596,7 @@ function awardBoosterScore(tilesBefore, icesBefore, ptsPerTile, ptsPerIce) {
   const icesBroken = (blockersDestroyed.ice || 0) - icesBefore;
   const pts = Math.round(
     (tilesClrd * ptsPerTile + icesBroken * ptsPerIce)
-    * TRAITS.scoreMultiplier * Inventory.getScoreMultiplier()
+    * SCORE_SCALE * TRAITS.scoreMultiplier * Inventory.getScoreMultiplier()
   );
   if (pts > 0) { score += pts; updateHUD(); }
 }
