@@ -858,6 +858,26 @@ export function initMap() {
   const crushPassCancelPurchaseBtn = document.getElementById('crushPassCancelPurchaseBtn');
   const crushPassPurchaseCard = document.getElementById('crushPassPurchaseCard');
   const crushPassPurchaseNote = document.getElementById('crushPassPurchaseNote');
+  const crushPassPurchasePerks = document.getElementById('crushPassPurchasePerks');
+  const crushPassPurchasePrice = document.getElementById('crushPassPurchasePrice');
+
+  // Perk lists differ between a fresh/renew purchase and an extend. On extend the
+  // 2× score / 2× wheel multipliers are ALREADY running (extend just prolongs
+  // them), ice hearts are capped at the max, and only boosters + the shard roll
+  // genuinely re-apply — so the copy must not re-promise "all week" benefits.
+  const CRUSH_PASS_PERKS_FRESH = [
+    '3× each booster',
+    '+2 bonus ice hearts (5 lives this week)',
+    '2× score multiplier all week',
+    '2× daily wheel rewards all week',
+    'Lucky shard bonus (15% chance)',
+  ];
+  const CRUSH_PASS_PERKS_EXTEND = [
+    '+3 of each booster (stacks on what you have)',
+    '7 more days of 2× score & 2× wheel rewards',
+    'Ice hearts kept topped up',
+    'Another lucky shard roll (15% chance)',
+  ];
 
   let crushPassAnimating = false;
   /** Reward payload waiting for user to "crack open" the ticket after purchase. */
@@ -893,9 +913,19 @@ export function initMap() {
     return `${Math.max(1, m)}m`;
   }
 
+  function renderCrushPassPerks(items) {
+    if (!crushPassPurchasePerks) return;
+    crushPassPurchasePerks.innerHTML = '';
+    for (const text of items) {
+      const li = document.createElement('li');
+      li.textContent = text; // textContent — never parse as HTML
+      crushPassPurchasePerks.appendChild(li);
+    }
+  }
+
   /**
    * Sets the buy-modal copy based on the player's pass state:
-   *  - active   → "Extend +1 week" + green note that time stacks
+   *  - active   → "Extend +1 week" + green note that time stacks, extend perks
    *  - lapsed   → "Renew Pass" (had one before, it expired)
    *  - first    → "Buy Pass"
    */
@@ -905,6 +935,10 @@ export function initMap() {
     if (crushPassBuyBtn) {
       crushPassBuyBtn.textContent = active ? 'Extend +1 week' : returning ? 'Renew Pass' : 'Buy Pass';
     }
+    if (crushPassPurchasePrice) {
+      crushPassPurchasePrice.textContent = active ? '$4.99 — adds 1 week' : '$4.99 / week';
+    }
+    renderCrushPassPerks(active ? CRUSH_PASS_PERKS_EXTEND : CRUSH_PASS_PERKS_FRESH);
     if (crushPassPurchaseNote) {
       if (active) {
         const ms = Inventory.crushPassExpiresIn();
