@@ -12,7 +12,7 @@ import { formatEther } from 'viem';
 import penguCrushAbiJson from '../contracts/PenguCrushABI.json';
 import { Events, setAnalyticsUser } from './analytics.js';
 import { renderLivesHud } from './lives-hud.js';
-import { playSfx } from './audio.js';
+import { playSfx, playSfxLoop } from './audio.js';
 
 /** Map inventory grid: 5 boosters + 3 shards = 4×2 */
 const INVENTORY_MAP_SLOTS = [
@@ -774,7 +774,6 @@ export function initMap() {
       return;
     }
     Events.wheelSpinStart();
-    playSfx('wheelSpin');
     dailySpinning = true;
     if (dailySpinBtn) dailySpinBtn.disabled = true;
     if (dailyResult) {
@@ -792,8 +791,11 @@ export function initMap() {
       if (slot == null) slot = 0; // safe fallback; chain credited correctly regardless
 
       // ── 3) Now animate to the chain-determined slot ──
+      // Start the ratchet tick loop exactly when the wheel begins spinning (4 s animation).
       if (dailyResult) dailyResult.textContent = 'Spinning…';
+      const stopSpinSound = playSfxLoop('wheelSpin', { intervalMs: 160, durationMs: 4500, volume: 0.6 });
       await animateWheelToSlot(slot);
+      stopSpinSound(); // cancel any remaining ticks the moment the wheel stops
 
       // ── 4) Pull fresh balances + show reward ──
       await Inventory.hydrateFromChain().catch(() => {});

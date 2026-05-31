@@ -83,6 +83,28 @@ function _getReady(key) {
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
+/**
+ * Play a short SFX repeatedly for the duration of an animation (e.g. wheel spin ratchet).
+ * Returns a cancel function — call it to stop early if the animation is cut short.
+ *
+ * @param {string} key        SFX key from SFX_FILES
+ * @param {number} intervalMs How often to fire the sound (ms). Default 180ms.
+ * @param {number} durationMs Total duration to loop for (ms). Default 4200ms.
+ * @param {number} volume     Per-play volume multiplier (0–1). Default 0.55.
+ * @returns {() => void}      Cancel function.
+ */
+export function playSfxLoop(key, { intervalMs = 180, durationMs = 4200, volume = 0.55 } = {}) {
+  if (_sfxMuted || !SFX_FILES[key]) return () => {};
+  playSfx(key, { volume }); // fire immediately on first call
+  let elapsed = 0;
+  const t = setInterval(() => {
+    elapsed += intervalMs;
+    if (elapsed >= durationMs) { clearInterval(t); return; }
+    playSfx(key, { volume });
+  }, intervalMs);
+  return () => clearInterval(t); // caller can cancel early
+}
+
 /** Play a one-shot SFX (fire-and-forget). */
 export function playSfx(key, { volume = 1 } = {}) {
   if (_sfxMuted || document.hidden) return;
