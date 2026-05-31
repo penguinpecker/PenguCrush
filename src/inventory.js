@@ -301,6 +301,15 @@ export function crushPassExpiresIn() {
   return Math.max(0, Date.parse(s.crushPassExpiresAt) - Date.now());
 }
 
+/**
+ * True if the player has ever owned a pass (active or lapsed). Used to pick
+ * "Renew Pass" (lapsed returning buyer) vs "Get Pass" (first-timer) wording.
+ */
+export function hadCrushPassBefore() {
+  const s = getInventory();
+  return (s.crushPassHistory?.length || 0) > 0 || !!s.crushPassPurchasedAt;
+}
+
 export function getScoreMultiplier() {
   return hasCrushPass() ? 2 : 1;
 }

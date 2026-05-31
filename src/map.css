@@ -810,16 +810,6 @@
   transform: scale(1.02);
 }
 
-.crush-pass-manage__btn--cancel {
-  color: #d8e8f0;
-  background: rgba(20, 40, 60, 0.55);
-  border: 1px solid rgba(140, 200, 255, 0.35);
-}
-
-.crush-pass-manage__btn--cancel:hover {
-  background: rgba(30, 55, 80, 0.65);
-}
-
 /* Mock purchase modal (Crush Pass) */
 .crush-pass-purchase-overlay {
   position: fixed;
@@ -904,6 +894,19 @@
   margin: 0 0 0.6em;
   text-align: center;
   text-shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
+}
+
+.crush-pass-purchase-note {
+  font-family: 'Fredoka', sans-serif;
+  font-size: clamp(13px, 3vmin, 15px);
+  font-weight: 700;
+  text-align: center;
+  margin: -0.2em 0 0.9em;
+  padding: 0.4em 0.8em;
+  border-radius: 12px;
+  color: #bff0d0;
+  background: rgba(52, 199, 89, 0.14);
+  border: 1px solid rgba(52, 199, 89, 0.35);
 }
 
 .crush-pass-purchase-perks {

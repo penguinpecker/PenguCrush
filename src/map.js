@@ -853,11 +853,11 @@ export function initMap() {
   const crushPassHint = document.getElementById('crushPassHint');
   const crushPassManageRow = document.getElementById('crushPassManageRow');
   const crushPassRenewBtn = document.getElementById('crushPassRenewBtn');
-  const crushPassCancelSubscriptionBtn = document.getElementById('crushPassCancelSubscriptionBtn');
   const crushPassPurchaseOverlay = document.getElementById('crushPassPurchaseOverlay');
   const crushPassBuyBtn = document.getElementById('crushPassBuyBtn');
   const crushPassCancelPurchaseBtn = document.getElementById('crushPassCancelPurchaseBtn');
   const crushPassPurchaseCard = document.getElementById('crushPassPurchaseCard');
+  const crushPassPurchaseNote = document.getElementById('crushPassPurchaseNote');
 
   let crushPassAnimating = false;
   /** Reward payload waiting for user to "crack open" the ticket after purchase. */
@@ -893,7 +893,32 @@ export function initMap() {
     return `${Math.max(1, m)}m`;
   }
 
+  /**
+   * Sets the buy-modal copy based on the player's pass state:
+   *  - active   → "Extend +1 week" + green note that time stacks
+   *  - lapsed   → "Renew Pass" (had one before, it expired)
+   *  - first    → "Buy Pass"
+   */
+  function applyCrushPassPurchaseCopy() {
+    const active = Inventory.hasCrushPass();
+    const returning = Inventory.hadCrushPassBefore();
+    if (crushPassBuyBtn) {
+      crushPassBuyBtn.textContent = active ? 'Extend +1 week' : returning ? 'Renew Pass' : 'Buy Pass';
+    }
+    if (crushPassPurchaseNote) {
+      if (active) {
+        const ms = Inventory.crushPassExpiresIn();
+        crushPassPurchaseNote.textContent = `+7 days added on top of your current time (${formatCrushPassActiveCountdown(ms)} left)`;
+        crushPassPurchaseNote.hidden = false;
+      } else {
+        crushPassPurchaseNote.hidden = true;
+        crushPassPurchaseNote.textContent = '';
+      }
+    }
+  }
+
   function openCrushPassPurchaseOverlay() {
+    applyCrushPassPurchaseCopy();
     crushPassPurchaseOverlay?.classList.add('active');
     crushPassPurchaseOverlay?.setAttribute('aria-hidden', 'false');
   }
@@ -1176,31 +1201,10 @@ export function initMap() {
     closeCrushPassOverlay();
     openCrushPassPurchaseOverlay();
   });
-  crushPassCancelSubscriptionBtn?.addEventListener('click', async (e) => {
-    e.stopPropagation();
-    if (crushPassCancelSubscriptionBtn.disabled) return;
-    const orig = crushPassCancelSubscriptionBtn.textContent;
-    crushPassCancelSubscriptionBtn.disabled = true;
-    crushPassCancelSubscriptionBtn.textContent = 'Cancelling…';
-    try {
-      const { cancelCrushPass: chainCancelCrushPass } = await import('./onchain.js');
-      const r = await chainCancelCrushPass();
-      if (!r?.hash) throw new Error('no tx hash returned');
-      await Inventory.hydrateFromChain().catch(() => {});
-      Events.passCancelled();
-      refreshCrushPassChrome();
-      closeCrushPassOverlay();
-    } catch (err) {
-      const msg = String(err?.shortMessage || err?.message || err).slice(0, 240);
-      console.warn('cancelCrushPass failed:', msg);
-      if (!/reject|denied|cancel/i.test(msg)) {
-        alert(`Could not cancel the pass on chain:\n\n${msg}`);
-      }
-    } finally {
-      crushPassCancelSubscriptionBtn.disabled = false;
-      if (orig) crushPassCancelSubscriptionBtn.textContent = orig;
-    }
-  });
+  // The "Cancel renewal" action was removed: the pass is not an auto-renewing
+  // subscription (no recurring charge), so there's nothing to cancel — it simply
+  // expires on its own. The old cancel button also wiped remaining paid time and
+  // bonus lives, which destroyed value the player had already paid for.
   crushPassTicket?.addEventListener('click', e => {
     e.stopPropagation();
     handleCrushPassTicketActivate();
