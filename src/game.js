@@ -8,7 +8,7 @@ import { rollShardsForMatch, renderShardSlots, computeTraits } from './shards.js
 import { saveSnapshot as saveMidGameSnapshot, loadSnapshot as loadMidGameSnapshot, clearSnapshot as clearMidGameSnapshot } from './mid-game.js';
 import { Events } from './analytics.js';
 import { renderLivesHud, canSpendLife, shakeLivesHud, shakeElement } from './lives-hud.js';
-import { playSfx, playBgm, stopBgm } from './audio.js';
+import { playSfx, stopBgm } from './audio.js';
 
 // ─── Per-level journal accumulated during play, submitted on-chain at end ────
 const journal = {
@@ -3480,7 +3480,8 @@ async function init() {
   initBoard();
   ensureBoardPlayableSync();
   animate();
-  playBgm('game-bgm.mp3', { volume: 0.32, fadeMs: 1500 });
+  // BGM is started globally by entry.js after the loading screen clears,
+  // so it plays on home/map/game without interruption. No call needed here.
 
 }
 

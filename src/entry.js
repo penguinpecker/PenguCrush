@@ -6,10 +6,31 @@ import { isLevelUnlocked } from './progress.js';
 import { buyBoosterETH, buyLivesETH, claimStarterPack, ensureStarterPack } from './onchain.js';
 import { setupStatus, hideSetupStatus } from './setup-status.js';
 import { Events, setAnalyticsUser } from './analytics.js';
+import { playBgm, getMuted, toggleMute } from './audio.js';
 import './dev-stars.js'; // adds window.__pengu.starDev() — no UI unless enabled
 import './dev-shop.js';  // adds window.__pengu.shopDev() — align booster grid
 import './dev-booster-export.js'; // adds window.__pengu.exportBoosterPNGs()
 if (import.meta.env.DEV) import('./dev-audit.js'); // adds window.__pengu_audit.run()
+
+// ── Global audio control button ────────────────────────────────
+const _audioBtn     = document.getElementById('audioBtn');
+const _audioBtnIcon = document.getElementById('audioBtnIcon');
+
+function syncAudioBtn() {
+  if (!_audioBtn) return;
+  const muted = getMuted();
+  _audioBtnIcon.textContent = muted ? '🔇' : '🔊';
+  _audioBtn.setAttribute('aria-label', muted ? 'Unmute audio' : 'Mute audio');
+  _audioBtn.setAttribute('aria-pressed', String(muted));
+}
+
+if (_audioBtn) {
+  _audioBtn.addEventListener('click', () => {
+    toggleMute();
+    syncAudioBtn();
+  });
+  syncAudioBtn(); // reflect persisted mute state on load
+}
 
 // ── Current level routing (internal, not in the URL bar) ───────
 // The URL never carries ?level=N anymore — the level is stored in
@@ -674,6 +695,11 @@ void (async () => {
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     await holdMinLoadingVideoPlayback(loadingVideo);
     finishLoadingOutro();
+
+    // Start BGM as soon as loading screen clears — runs on every screen (home/map/game).
+    // game.js no longer calls playBgm; the key-based dedup in audio.js means navigating
+    // between screens that all call playBgm with the same track just resumes it.
+    playBgm('game-bgm.mp3', { volume: 0.32, fadeMs: 1200 });
 
     if (!sessionOk && (isPlay || page === 'map')) {
       history.replaceState(null, '', '/');
