@@ -38,19 +38,27 @@ function syncAudioUI() {
 }
 
 function openAudioPanel() {
-  if (!_audioPanel) return;
+  if (!_audioPanel || _audioPanelOpen) return;
   _audioPanelOpen = true;
-  _audioPanel.hidden = false;
+  _audioPanel.classList.remove('audio-ctrl__panel--closing');
+  _audioPanel.classList.add('audio-ctrl__panel--open');
   _audioPanel.setAttribute('aria-hidden', 'false');
   _audioBtn?.setAttribute('aria-expanded', 'true');
 }
 
 function closeAudioPanel() {
-  if (!_audioPanel) return;
+  if (!_audioPanel || !_audioPanelOpen) return;
   _audioPanelOpen = false;
-  _audioPanel.hidden = true;
-  _audioPanel.setAttribute('aria-hidden', 'true');
   _audioBtn?.setAttribute('aria-expanded', 'false');
+  _audioPanel.setAttribute('aria-hidden', 'true');
+  _audioPanel.classList.remove('audio-ctrl__panel--open');
+  _audioPanel.classList.add('audio-ctrl__panel--closing');
+  // Hide after the out-animation finishes (140ms)
+  const onEnd = () => {
+    _audioPanel.classList.remove('audio-ctrl__panel--closing');
+    _audioPanel.removeEventListener('animationend', onEnd);
+  };
+  _audioPanel.addEventListener('animationend', onEnd, { once: true });
 }
 
 if (_audioBtn) {
