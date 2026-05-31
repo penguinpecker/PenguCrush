@@ -6,31 +6,87 @@ import { isLevelUnlocked } from './progress.js';
 import { buyBoosterETH, buyLivesETH, claimStarterPack, ensureStarterPack } from './onchain.js';
 import { setupStatus, hideSetupStatus } from './setup-status.js';
 import { Events, setAnalyticsUser } from './analytics.js';
-import { playBgm, getMuted, toggleMute } from './audio.js';
+import { playBgm, getMusicMuted, getSfxMuted, setMusicMuted, setSfxMuted } from './audio.js';
 import './dev-stars.js'; // adds window.__pengu.starDev() — no UI unless enabled
 import './dev-shop.js';  // adds window.__pengu.shopDev() — align booster grid
 import './dev-booster-export.js'; // adds window.__pengu.exportBoosterPNGs()
 if (import.meta.env.DEV) import('./dev-audit.js'); // adds window.__pengu_audit.run()
 
-// ── Global audio control button ────────────────────────────────
+// ── Global audio control dropdown ──────────────────────────────
+const _audioCtrl    = document.getElementById('audioCtrl');
 const _audioBtn     = document.getElementById('audioBtn');
 const _audioBtnIcon = document.getElementById('audioBtnIcon');
+const _audioPanel   = document.getElementById('audioPanel');
+const _musicToggle  = document.getElementById('musicToggle');
+const _sfxToggle    = document.getElementById('sfxToggle');
 
-function syncAudioBtn() {
-  if (!_audioBtn) return;
-  const muted = getMuted();
-  _audioBtnIcon.textContent = muted ? '🔇' : '🔊';
-  _audioBtn.setAttribute('aria-label', muted ? 'Unmute audio' : 'Mute audio');
-  _audioBtn.setAttribute('aria-pressed', String(muted));
+let _audioPanelOpen = false;
+
+function _updateToggleEl(el, on) {
+  if (!el) return;
+  el.setAttribute('aria-pressed', String(on));
+}
+
+function syncAudioUI() {
+  const musicOn = !getMusicMuted();
+  const sfxOn   = !getSfxMuted();
+  // Main icon: 🔊 both on, 🎵 only sfx off, 🔇 both off, 🔈 only music off
+  const icon = (musicOn && sfxOn) ? '🔊' : (!musicOn && !sfxOn) ? '🔇' : !musicOn ? '🔈' : '🎵';
+  if (_audioBtnIcon) _audioBtnIcon.textContent = icon;
+  _updateToggleEl(_musicToggle, musicOn);
+  _updateToggleEl(_sfxToggle,   sfxOn);
+}
+
+function openAudioPanel() {
+  if (!_audioPanel) return;
+  _audioPanelOpen = true;
+  _audioPanel.hidden = false;
+  _audioPanel.setAttribute('aria-hidden', 'false');
+  _audioBtn?.setAttribute('aria-expanded', 'true');
+}
+
+function closeAudioPanel() {
+  if (!_audioPanel) return;
+  _audioPanelOpen = false;
+  _audioPanel.hidden = true;
+  _audioPanel.setAttribute('aria-hidden', 'true');
+  _audioBtn?.setAttribute('aria-expanded', 'false');
 }
 
 if (_audioBtn) {
-  _audioBtn.addEventListener('click', () => {
-    toggleMute();
-    syncAudioBtn();
+  _audioBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    _audioPanelOpen ? closeAudioPanel() : openAudioPanel();
   });
-  syncAudioBtn(); // reflect persisted mute state on load
 }
+
+if (_musicToggle) {
+  _musicToggle.addEventListener('click', () => {
+    setMusicMuted(!getMusicMuted());
+    syncAudioUI();
+  });
+}
+
+if (_sfxToggle) {
+  _sfxToggle.addEventListener('click', () => {
+    setSfxMuted(!getSfxMuted());
+    syncAudioUI();
+  });
+}
+
+// Close panel when clicking outside
+document.addEventListener('click', (e) => {
+  if (_audioPanelOpen && _audioCtrl && !_audioCtrl.contains(e.target)) {
+    closeAudioPanel();
+  }
+});
+
+// Close on Escape
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && _audioPanelOpen) closeAudioPanel();
+});
+
+syncAudioUI(); // reflect persisted state immediately on load
 
 // ── Current level routing (internal, not in the URL bar) ───────
 // The URL never carries ?level=N anymore — the level is stored in

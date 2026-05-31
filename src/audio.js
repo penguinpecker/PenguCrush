@@ -37,10 +37,17 @@ const SFX_FILES = {
   wheelPrize:       'wheel-prize.ogg',
 };
 
+const MUSIC_MUTE_KEY = 'pengucrush_music_muted';
+const SFX_MUTE_KEY   = 'pengucrush_sfx_muted';
+
 // ── State ────────────────────────────────────────────────────────────────────
-let _muted  = localStorage.getItem(MUTE_KEY)  === 'true';
-let _volume = parseFloat(localStorage.getItem(VOL_KEY) || '1');
+let _volume      = parseFloat(localStorage.getItem(VOL_KEY) || '1');
 if (!Number.isFinite(_volume) || _volume < 0 || _volume > 1) _volume = 1;
+
+let _musicMuted = localStorage.getItem(MUSIC_MUTE_KEY) === 'true';
+let _sfxMuted   = localStorage.getItem(SFX_MUTE_KEY)   === 'true';
+// Legacy global mute key — if it was set before the split, honour it for both channels on first load.
+if (localStorage.getItem(MUTE_KEY) === 'true') { _musicMuted = true; _sfxMuted = true; }
 
 /** @type {Map<string, HTMLAudioElement[]>} */
 const _pools = new Map();
@@ -49,7 +56,7 @@ let _bgm = null;
 let _bgmFading = false;
 /** Track name currently playing — used for dedup without URL matching. */
 let _bgmKey = '';
-/** Volume arg last passed to playBgm — kept so setMuted/setVolume can restore it correctly. */
+/** Volume arg last passed to playBgm — kept so setVolume can restore it correctly. */
 let _bgmVolume = 0.35;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -78,7 +85,7 @@ function _getReady(key) {
 
 /** Play a one-shot SFX (fire-and-forget). */
 export function playSfx(key, { volume = 1 } = {}) {
-  if (_muted || document.hidden) return;
+  if (_sfxMuted || document.hidden) return;
   if (!SFX_FILES[key]) { console.warn('[audio] unknown SFX key:', key); return; }
   try {
     const el = _getReady(key);
@@ -92,7 +99,7 @@ export function playSfx(key, { volume = 1 } = {}) {
 export function playBgm(src = 'game-bgm.mp3', { volume = 0.35, fadeMs = 1200 } = {}) {
   // Use key-based dedup so tab-hidden (paused) BGM is resumed rather than replaced.
   if (_bgmKey === src) {
-    if (_bgm && _bgm.paused && !_muted) _bgm.play().catch(() => {});
+    if (_bgm && _bgm.paused && !_musicMuted) _bgm.play().catch(() => {});
     return;
   }
   _bgmKey    = src;
@@ -103,8 +110,8 @@ export function playBgm(src = 'game-bgm.mp3', { volume = 0.35, fadeMs = 1200 } =
   a.preload = 'auto';
   a.volume  = 0; // always start silent; fade-in or direct-set below corrects it
   _bgm = a;
-  a.play().catch(() => {});
-  if (!_muted && fadeMs > 0) {
+  if (!_musicMuted) a.play().catch(() => {});
+  if (!_musicMuted && fadeMs > 0) {
     const target = _clamp(_volume * volume, 0, 1);
     const steps  = 30;
     const dt     = fadeMs / steps;
@@ -115,7 +122,7 @@ export function playBgm(src = 'game-bgm.mp3', { volume = 0.35, fadeMs = 1200 } =
       a.volume = _clamp((i / steps) * target, 0, 1);
       if (i >= steps) clearInterval(t);
     }, dt);
-  } else if (!_muted) {
+  } else if (!_musicMuted) {
     a.volume = _clamp(_volume * volume, 0, 1);
   }
 }
@@ -139,31 +146,43 @@ export function stopBgm(fadeMs = 600) {
   }, dt);
 }
 
-export function getMuted()  { return _muted; }
-export function getVolume() { return _volume; }
+export function getMusicMuted() { return _musicMuted; }
+export function getSfxMuted()   { return _sfxMuted; }
+export function getVolume()     { return _volume; }
 
-export function setMuted(v) {
-  _muted = !!v;
-  localStorage.setItem(MUTE_KEY, String(_muted));
-  if (_bgm) _bgm.volume = _muted ? 0 : _clamp(_volume * _bgmVolume, 0, 1);
+export function setMusicMuted(v) {
+  _musicMuted = !!v;
+  localStorage.setItem(MUSIC_MUTE_KEY, String(_musicMuted));
+  if (_bgm) {
+    if (_musicMuted) { _bgm.pause(); }
+    else { _bgm.volume = _clamp(_volume * _bgmVolume, 0, 1); _bgm.play().catch(() => {}); }
+  }
+}
+
+export function setSfxMuted(v) {
+  _sfxMuted = !!v;
+  localStorage.setItem(SFX_MUTE_KEY, String(_sfxMuted));
 }
 
 export function setVolume(v) {
   _volume = _clamp(Number(v), 0, 1);
   localStorage.setItem(VOL_KEY, String(_volume));
-  if (_bgm && !_muted) _bgm.volume = _clamp(_volume * _bgmVolume, 0, 1);
+  if (_bgm && !_musicMuted) _bgm.volume = _clamp(_volume * _bgmVolume, 0, 1);
 }
 
-export function toggleMute() { setMuted(!_muted); return _muted; }
+/** Legacy helper — toggles both channels at once. */
+export function toggleMute() {
+  const both = !(_musicMuted && _sfxMuted);
+  setMusicMuted(both);
+  setSfxMuted(both);
+}
 
-// Pause BGM when tab is hidden; resume the same element when visible again.
-// We do NOT recreate the Audio object here — playBgm's key-based dedup
-// already handles that correctly on the next explicit playBgm call.
+// Pause BGM when tab is hidden; resume when visible again (unless music is muted).
 document.addEventListener('visibilitychange', () => {
   if (!_bgm) return;
   if (document.hidden) {
     _bgm.pause();
-  } else if (!_muted) {
+  } else if (!_musicMuted) {
     _bgm.play().catch(() => {});
   }
 });

@@ -571,12 +571,35 @@ body[data-screen="game"] {
   box-shadow: 0 1px 0 #4f98b2, 0 3px 8px rgba(0, 40, 80, 0.2);
 }
 
-/* ── Global audio mute toggle — fixed top-right, all screens ── */
-.audio-btn {
+/* ══════════════════════════════════════════════════════════
+   GLOBAL AUDIO CONTROL — fixed top-right, all screens
+   On the map screen the wallet button occupies top:14px right:14px,
+   so we push the audio control below it there.
+   ══════════════════════════════════════════════════════════ */
+
+.audio-ctrl {
   position: fixed;
   top: 14px;
   right: 14px;
   z-index: 200;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+/* On the map screen, push below the wallet button */
+body[data-screen="map"] .audio-ctrl {
+  top: 66px;
+}
+
+/* Hide during loading so it doesn't flash before the game is ready */
+body:has(.loading-screen:not(.loading-screen--exit)) .audio-ctrl {
+  display: none;
+}
+
+/* ── Trigger button ── */
+.audio-ctrl__btn {
   width: 40px;
   height: 40px;
   padding: 0;
@@ -588,30 +611,109 @@ body[data-screen="game"] {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.15s ease, filter 0.15s ease, opacity 0.15s ease;
+  transition: transform 0.15s ease, filter 0.15s ease;
 }
-.audio-btn:hover {
-  transform: translateY(-2px);
-  filter: brightness(1.08);
-}
-.audio-btn:active {
-  transform: translateY(1px);
-  box-shadow: 0 1px 0 #4f98b2, 0 3px 8px rgba(0, 40, 80, 0.2);
-}
-.audio-btn[aria-pressed="true"] {
-  opacity: 0.65;
-  filter: grayscale(0.4);
-}
-.audio-btn__icon {
+.audio-ctrl__btn:hover { transform: translateY(-2px); filter: brightness(1.08); }
+.audio-ctrl__btn:active { transform: translateY(1px); box-shadow: 0 1px 0 #4f98b2, 0 3px 8px rgba(0,40,80,0.2); }
+.audio-ctrl__btn[aria-expanded="true"] { filter: brightness(1.1); box-shadow: 0 3px 0 #4f98b2, 0 0 0 3px rgba(80,190,230,0.35); }
+
+.audio-ctrl__btn-icon {
   font-size: 18px;
   line-height: 1;
   pointer-events: none;
   user-select: none;
 }
-/* Hide during loading screen so it doesn't flash before the game is ready */
-body:has(.loading-screen:not(.loading-screen--exit)) .audio-btn {
-  display: none;
+
+/* ── Dropdown panel ── */
+.audio-ctrl__panel {
+  background: linear-gradient(160deg, rgba(22, 55, 90, 0.96), rgba(10, 32, 58, 0.96));
+  border: 1.5px solid rgba(100, 200, 255, 0.25);
+  border-radius: 14px;
+  box-shadow: 0 8px 28px rgba(0, 20, 50, 0.55), 0 2px 0 rgba(255,255,255,0.07) inset;
+  padding: 10px 14px;
+  min-width: 172px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transform-origin: top right;
+  animation: audio-panel-in 0.18s cubic-bezier(0.34, 1.35, 0.64, 1) both;
 }
+
+@keyframes audio-panel-in {
+  from { opacity: 0; transform: scale(0.85); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* ── Rows inside dropdown ── */
+.audio-ctrl__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.audio-ctrl__row-icon {
+  font-size: 16px;
+  width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.audio-ctrl__row-label {
+  font-family: 'Fredoka', sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  color: #d8f2fb;
+  flex: 1;
+  user-select: none;
+}
+
+/* ── iOS-style toggle switch ── */
+.audio-ctrl__toggle {
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 999px;
+}
+
+.audio-ctrl__toggle-track {
+  display: block;
+  width: 42px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1.5px solid rgba(255,255,255,0.15);
+  position: relative;
+  transition: background 0.22s ease, border-color 0.22s ease;
+}
+
+.audio-ctrl__toggle-thumb {
+  display: block;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.55);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.35);
+  transition: transform 0.22s cubic-bezier(0.34, 1.4, 0.64, 1), background 0.22s ease;
+}
+
+/* ON state (aria-pressed="true") */
+.audio-ctrl__toggle[aria-pressed="true"] .audio-ctrl__toggle-track {
+  background: #34c759;
+  border-color: #28a046;
+}
+.audio-ctrl__toggle[aria-pressed="true"] .audio-ctrl__toggle-thumb {
+  transform: translateX(18px);
+  background: #fff;
+}
+
+/* Hover highlight */
+.audio-ctrl__toggle:hover .audio-ctrl__toggle-track { filter: brightness(1.12); }
+.audio-ctrl__toggle:focus-visible { outline: 2px solid #5ce0e6; outline-offset: 2px; border-radius: 999px; }
 
 .logo {
   width: 440px;
