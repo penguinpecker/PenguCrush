@@ -46,8 +46,20 @@ if (!Number.isFinite(_volume) || _volume < 0 || _volume > 1) _volume = 1;
 
 let _musicMuted = localStorage.getItem(MUSIC_MUTE_KEY) === 'true';
 let _sfxMuted   = localStorage.getItem(SFX_MUTE_KEY)   === 'true';
-// Legacy global mute key — if it was set before the split, honour it for both channels on first load.
-if (localStorage.getItem(MUTE_KEY) === 'true') { _musicMuted = true; _sfxMuted = true; }
+
+// One-time migration from the old global mute key.
+// We read it ONCE, write it into the new split keys, then DELETE it
+// so it never silently overrides individual settings on future reloads.
+const _legacyMuted = localStorage.getItem(MUTE_KEY);
+if (_legacyMuted !== null) {
+  if (_legacyMuted === 'true') {
+    _musicMuted = true;
+    _sfxMuted   = true;
+    localStorage.setItem(MUSIC_MUTE_KEY, 'true');
+    localStorage.setItem(SFX_MUTE_KEY,   'true');
+  }
+  localStorage.removeItem(MUTE_KEY); // remove so it never runs again
+}
 
 /** @type {Map<string, HTMLAudioElement[]>} */
 const _pools = new Map();

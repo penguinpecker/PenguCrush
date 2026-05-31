@@ -40,6 +40,7 @@ function syncAudioUI() {
 function openAudioPanel() {
   if (!_audioPanel || _audioPanelOpen) return;
   _audioPanelOpen = true;
+  syncAudioUI(); // always show fresh state when panel opens
   _audioPanel.classList.remove('audio-ctrl__panel--closing');
   _audioPanel.classList.add('audio-ctrl__panel--open');
   _audioPanel.setAttribute('aria-hidden', 'false');
