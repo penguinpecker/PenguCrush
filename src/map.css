@@ -1177,7 +1177,7 @@
 .agw-btn {
   position: fixed;
   top: 14px;
-  right: 14px;
+  right: 62px; /* sits left of the 40px audio button (14px right + 40px + 8px gap) */
   z-index: 100;
   font-family: 'Fredoka', sans-serif;
   font-size: 13px;
@@ -2101,8 +2101,8 @@
 
   .agw-btn {
     top: max(8px, env(safe-area-inset-top));
-    right: max(8px, env(safe-area-inset-right));
-    max-width: 48vw;
+    right: 54px; /* audio button is ~40px wide + 6px gap at this breakpoint */
+    max-width: 42vw;
     padding: 7px 11px;
     font-size: 11px;
     line-height: 1.1;
@@ -2112,7 +2112,7 @@
   }
 
   .agw-btn.connected {
-    max-width: 42vw;
+    max-width: 36vw;
     padding: 7px 10px;
     font-size: 11px;
   }

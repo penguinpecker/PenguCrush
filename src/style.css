@@ -588,10 +588,6 @@ body[data-screen="game"] {
   gap: 6px;
 }
 
-/* On the map screen, push below the wallet button */
-body[data-screen="map"] .audio-ctrl {
-  top: 66px;
-}
 
 /* Hide during loading so it doesn't flash before the game is ready */
 body:has(.loading-screen:not(.loading-screen--exit)) .audio-ctrl {
