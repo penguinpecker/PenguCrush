@@ -2584,11 +2584,17 @@ const delay = ms => new Promise(r => setTimeout(r, ms));
 // ═══════════════════════════════════════════════════════════════
 //  BOOSTERS
 // ═══════════════════════════════════════════════════════════════
-/** Points per tile/blocker directly cleared by a booster (no combo multiplier). */
-const BOOSTER_PTS_TILE    = 15; // per normal tile cleared
-const BOOSTER_PTS_ICE     = 5;  // per frozen/ice blocker broken (tile stays, ice removed)
-const BOOSTER_PTS_HAMMER  = 20; // hammer on a normal tile
-const BOOSTER_PTS_HAMMER_ICE = 10; // hammer on a frozen tile
+// Booster point constants — calibrated so 3 boosters swing a gate level from
+// ~33% → ~75% win for a casual player (9% of targetScore per booster).
+// We divide by SCORE_SCALE upfront so that awardBoosterScore's × SCORE_SCALE
+// restores the correct display value regardless of which level is playing.
+// AVG_TILES * CASCADE_MULT (7 × 1.6 ≈ 11.2) is the expected tiles-plus-cascade
+// an average row/col booster produces.
+const _BOOSTER_BASE      = Math.round(CONFIG.targetScore * 0.09 / (7 * 1.6 * SCORE_SCALE));
+const BOOSTER_PTS_TILE       = _BOOSTER_BASE;           // row / col / bomb per tile
+const BOOSTER_PTS_ICE        = Math.round(_BOOSTER_BASE / 3);   // row / col ice-break
+const BOOSTER_PTS_HAMMER     = Math.round(_BOOSTER_BASE * 1.33); // hammer on normal tile
+const BOOSTER_PTS_HAMMER_ICE = Math.round(_BOOSTER_BASE * 0.67); // hammer on frozen
 
 /** Award points for what a booster cleared, using delta on the global counters. */
 function awardBoosterScore(tilesBefore, icesBefore, ptsPerTile, ptsPerIce) {

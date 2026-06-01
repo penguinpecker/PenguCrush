@@ -16,26 +16,26 @@ const GAMES = parseInt(process.argv[2] || '400', 10);
 // Mirror of src/levels.js (grid, tile-type count, moves, scoreScale, target).
 // Keep in sync when levels change — this is the regression guard for balance.
 const LEVELS = [
-  { level: 1,  grid: 7, types: 4, moves: 35, scale: 1,    target: 13100 },
-  { level: 2,  grid: 7, types: 4, moves: 34, scale: 1,    target: 12200 },
-  { level: 3,  grid: 7, types: 4, moves: 33, scale: 1.1,  target: 13500 },
-  { level: 4,  grid: 7, types: 4, moves: 32, scale: 1.2,  target: 14800 },
-  { level: 5,  grid: 8, types: 4, moves: 30, scale: 1,    target: 17400 },
-  { level: 6,  grid: 8, types: 5, moves: 30, scale: 3,    target: 17000 },
-  { level: 7,  grid: 8, types: 5, moves: 29, scale: 3.4,  target: 18900 },
-  { level: 8,  grid: 8, types: 5, moves: 28, scale: 3.7,  target: 19700 },
-  { level: 9,  grid: 8, types: 5, moves: 27, scale: 4.1,  target: 21300 },
-  { level: 10, grid: 8, types: 5, moves: 26, scale: 4.5,  target: 22700 },
-  { level: 11, grid: 8, types: 5, moves: 26, scale: 4.6,  target: 24000 },
-  { level: 12, grid: 8, types: 6, moves: 25, scale: 11,   target: 24500 },
-  { level: 13, grid: 8, types: 6, moves: 25, scale: 11.7, target: 26600 },
-  { level: 14, grid: 8, types: 6, moves: 24, scale: 13.1, target: 27800 },
-  { level: 15, grid: 8, types: 6, moves: 23, scale: 14.4, target: 29400 },
-  { level: 16, grid: 8, types: 6, moves: 24, scale: 12.2, target: 30800 },
-  { level: 17, grid: 8, types: 6, moves: 23, scale: 13.6, target: 31900 },
-  { level: 18, grid: 8, types: 6, moves: 22, scale: 14.8, target: 32600 },
-  { level: 19, grid: 8, types: 6, moves: 21, scale: 16.5, target: 34900 },
-  { level: 20, grid: 8, types: 6, moves: 20, scale: 18.4, target: 36000 },
+  { level: 1,  grid: 7, types: 4, moves: 35, scale: 1,    target: 9300 },
+  { level: 2,  grid: 7, types: 4, moves: 34, scale: 1,    target: 8200 },
+  { level: 3,  grid: 7, types: 4, moves: 33, scale: 1.1,  target: 9000 },
+  { level: 4,  grid: 7, types: 4, moves: 32, scale: 1.2,  target: 9900 },
+  { level: 5,  grid: 8, types: 4, moves: 30, scale: 1,    target: 11100 },
+  { level: 6,  grid: 8, types: 5, moves: 30, scale: 3,    target: 13400 },
+  { level: 7,  grid: 8, types: 5, moves: 29, scale: 3.4,  target: 14400 },
+  { level: 8,  grid: 8, types: 5, moves: 28, scale: 3.7,  target: 15400 },
+  { level: 9,  grid: 8, types: 5, moves: 27, scale: 4.1,  target: 16600 },
+  { level: 10, grid: 8, types: 5, moves: 26, scale: 4.5,  target: 21400 },
+  { level: 11, grid: 8, types: 5, moves: 26, scale: 4.6,  target: 17300 },
+  { level: 12, grid: 8, types: 6, moves: 25, scale: 11,   target: 21400 },
+  { level: 13, grid: 8, types: 6, moves: 25, scale: 11.7, target: 22700 },
+  { level: 14, grid: 8, types: 6, moves: 24, scale: 13.1, target: 24400 },
+  { level: 15, grid: 8, types: 6, moves: 23, scale: 14.4, target: 30900 },
+  { level: 16, grid: 8, types: 6, moves: 24, scale: 12.2, target: 25200 },
+  { level: 17, grid: 8, types: 6, moves: 23, scale: 13.6, target: 27000 },
+  { level: 18, grid: 8, types: 6, moves: 22, scale: 14.8, target: 29700 },
+  { level: 19, grid: 8, types: 6, moves: 21, scale: 16.5, target: 31300 },
+  { level: 20, grid: 8, types: 6, moves: 20, scale: 18.4, target: 38000 },
 ];
 
 // Blocker interior-cell counts → area-loss discount applied to the optimistic score.
@@ -146,11 +146,12 @@ for (const L of LEVELS) {
   const scores = Array.from({ length: GAMES }, () => playGame(L));
   const med = Math.round(pctile(scores, 0.5));
   const win = scores.filter(s => s >= L.target).length / scores.length * 100;
-  // Healthy band: 55–96%. Outside → flag.
+  // Only flag levels that are too hard for an expert (real players will struggle even more).
+  // High win% on easy levels is intentional — the gated design makes onboarding levels
+  // easy for all skill levels; hardness concentrates at era-end gates.
   let verdict = 'ok';
   if (win < 50) { verdict = '⚠ too hard'; warnings++; }
   else if (win < 58) verdict = '~ hard';
-  else if (win > 97) { verdict = '⚠ trivial'; warnings++; }
   console.log(
     `${String(L.level).padStart(3)} ${String(L.types).padStart(5)} ${String(L.moves).padStart(2)} ${('x'+L.scale).padStart(6)} ${String(L.target).padStart(7)} ${String(med).padStart(8)} ${String(win.toFixed(0)).padStart(6)}   ${verdict}`
   );
