@@ -296,7 +296,7 @@ const LEVELS = [
     objective: { type: 'breakAll' },
     blockers: [{ type: 'ice', count: 5, layers: 3 }, { type: 'wall', count: 5 }],
     boosters: ['row', 'col', 'colorBomb', 'hammer', 'shuffle'],
-    stars: [30900, 37100, 46400],
+    stars: [30900, 36300, 40700],
     bg: '/assets/board/bg-volcano-ice.png',
     gridTint: 0xFF6B3D,
   },
