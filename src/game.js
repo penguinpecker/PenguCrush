@@ -112,6 +112,34 @@ const TYPE_FIX = {
   crab:      { rx: 0, ry: 0, rz: 0, scale: 0.60 },
 };
 
+// Per-inner-type color grading so similar GLBs read distinctly on the board.
+const INNER_MATERIAL_TINTS = {
+  fish:     { multiply: 0xffa858, hue: 0.07, saturation: 1.15, lightness: 1.06, blend: 0.52, minSat: 0.42 },
+  shrimp:   { multiply: 0xff6eb8, hue: 0.86, saturation: 1.25, lightness: 1.0,  blend: 0.58, minSat: 0.48 },
+  crab:     { multiply: 0xe83820, hue: 0.01, saturation: 1.35, lightness: 0.88, blend: 0.58, minSat: 0.5  },
+  popsicle: { multiply: 0x8ee868, hue: 0.30, saturation: 1.12, lightness: 1.02, blend: 0.4,  minSat: 0.35 },
+};
+
+function applyInnerMaterialTint(material, innerType) {
+  const spec = INNER_MATERIAL_TINTS[innerType];
+  if (!spec || !material?.color) return;
+
+  const tint = new THREE.Color(spec.multiply);
+  material.color.lerp(tint, spec.blend ?? 0.55);
+
+  const hsl = { h: 0, s: 0, l: 0 };
+  material.color.getHSL(hsl);
+  if (spec.hue != null) hsl.h = spec.hue;
+  if (spec.saturation != null) hsl.s = Math.min(1, Math.max(spec.minSat ?? 0.3, hsl.s * spec.saturation));
+  if (spec.lightness != null) hsl.l = Math.min(1, Math.max(0.18, hsl.l * spec.lightness));
+  material.color.setHSL(hsl.h, hsl.s, hsl.l);
+
+  if (material.emissive) {
+    material.emissive.copy(tint).multiplyScalar(0.06);
+    if ('emissiveIntensity' in material) material.emissiveIntensity = Math.max(material.emissiveIntensity ?? 0, 0.12);
+  }
+}
+
 // Shard-driven passive traits (read once at load; shards earned mid-run
 // don't change the current level's buff — they kick in next level).
 const TRAITS = computeTraits(Inventory.getShards());
@@ -129,12 +157,12 @@ let totalTilesCleared = 0;
 let goalDisplayCount = 0;
 const goalIconBakeCache = {};
 const OBJECTIVE_TILE_COLORS = {
-  fish: 0xff7043,
+  fish: 0xffa858,
   popsicle: 0x7cb342,
   ice: 0x4fc3f7,
   frostice: 0xe0f0ff,
-  shrimp: 0xff5544,
-  crab: 0xff8844,
+  shrimp: 0xff6eb8,
+  crab: 0xe83820,
 };
 
 // Game timing
@@ -386,7 +414,18 @@ function createInsideIceTile(innerType) {
   // Inner object
   const innerClone = glbCache[innerType].clone();
   innerClone.traverse(ch => {
-    if (ch.isMesh && ch.material) ch.material = ch.material.clone();
+    if (!ch.isMesh || !ch.material) return;
+    if (Array.isArray(ch.material)) {
+      ch.material = ch.material.map(m => {
+        const c = m.clone();
+        applyInnerMaterialTint(c, innerType);
+        return c;
+      });
+    } else {
+      const c = ch.material.clone();
+      applyInnerMaterialTint(c, innerType);
+      ch.material = c;
+    }
   });
   const innerFix = TYPE_FIX[innerType];
   const innerPivot = new THREE.Group();
@@ -1498,7 +1537,7 @@ async function swapTiles(r1, c1, r2, c2) {
 }
 
 async function removeMatches(matched) {
-  const cols = { ice: 0x4fc3f7, popsicle: 0x7cb342, fish: 0xff7043, frostice: 0xe0f0ff, shrimp: 0xff5544, crab: 0xff8844 };
+  const cols = { ice: 0x4fc3f7, popsicle: 0x7cb342, fish: 0xffa858, frostice: 0xe0f0ff, shrimp: 0xff6eb8, crab: 0xe83820 };
   const ps = [];
   const unfrozen = new Set();
 
