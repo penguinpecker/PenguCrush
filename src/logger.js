@@ -65,28 +65,70 @@ function _persist() {
   } catch (_) {}
 }
 
-function _send(entry) {
+// Pending queue for batched remote sends (WARN+ERROR).
+// Entries are flushed immediately on ERROR, or every BATCH_INTERVAL_MS for WARN.
+const _queue = [];
+const BATCH_INTERVAL_MS = 10_000; // flush WARN queue every 10s
+let _flushTimer = null;
+
+function _getContext() {
+  return {
+    session: _sessionId,
+    wallet:  (() => { try { return window.__penguWallet || ''; } catch (_) { return ''; } })(),
+    ua:      navigator.userAgent.slice(0, 300),
+    url:     location.href.replace(/\?.*/, ''),
+  };
+}
+
+/** Send a batch of entries to the remote endpoint. */
+function _sendBatch(entries) {
+  if (!REPORT_API || !entries.length) return;
+  try {
+    fetch(REPORT_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ..._getContext(), entries }),
+      keepalive: true,
+    }).catch(() => {});
+  } catch (_) {}
+}
+
+/** Flush everything in _queue now. */
+function _flush() {
+  if (_flushTimer) { clearTimeout(_flushTimer); _flushTimer = null; }
+  if (!_queue.length) return;
+  _sendBatch(_queue.splice(0));
+}
+
+/** Schedule a flush if one isn't already pending. */
+function _scheduleFlush() {
+  if (_flushTimer) return;
+  _flushTimer = setTimeout(_flush, BATCH_INTERVAL_MS);
+}
+
+/** Enqueue an entry for remote send. WARN → batched; ERROR → immediate. */
+function _enqueue(entry) {
   if (!REPORT_API) return;
+  // Rate-limit per tag to avoid flooding on tight loops
   const now = Date.now();
   const last = _lastRemote.get(entry.tag) || 0;
   if (now - last < REMOTE_RATE_MS) return;
   _lastRemote.set(entry.tag, now);
 
-  try {
-    const wallet = (() => { try { return window.__penguWallet || ''; } catch (_) { return ''; } })();
-    fetch(REPORT_API, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        session: _sessionId,
-        wallet,
-        entry,
-        ua: navigator.userAgent.slice(0, 200),
-        url: location.href.replace(/\?.*/, ''),
-      }),
-      keepalive: true,
-    }).catch(() => {});
-  } catch (_) {}
+  _queue.push(entry);
+  if (entry.level >= LogLevel.ERROR) {
+    _flush(); // ERROR: send immediately
+  } else {
+    _scheduleFlush(); // WARN: batch
+  }
+}
+
+// Flush remaining entries when the tab closes or navigates away
+if (typeof window !== 'undefined') {
+  window.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') _flush();
+  });
+  window.addEventListener('beforeunload', _flush);
 }
 
 /**
@@ -104,7 +146,8 @@ export function log(level, tag, msg, data) {
   _buf.push(entry);
   if (_buf.length > MAX_MEM) _buf.shift();
   _persist();
-  if (level >= LogLevel.ERROR) _send(entry);
+  // Ship WARN and above to the remote store
+  if (level >= LogLevel.WARN) _enqueue(entry);
 }
 
 // Convenience helpers
