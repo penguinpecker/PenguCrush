@@ -7,6 +7,13 @@ import { buyBoosterETH, buyLivesETH, claimStarterPack, ensureStarterPack } from 
 import { setupStatus, hideSetupStatus } from './setup-status.js';
 import { Events, setAnalyticsUser } from './analytics.js';
 import { playBgm, getMusicMuted, getSfxMuted, setMusicMuted, setSfxMuted } from './audio.js';
+import { logInfo, logError, buildReport, copyReport, clearLogs, getEntries, logWarn } from './logger.js';
+
+// Keep a module-scoped wallet ref so the logger can attach it to remote reports.
+function _syncLoggerWallet() {
+  try { window.__penguWallet = getAGWAddress() || ''; } catch (_) {}
+}
+_syncLoggerWallet();
 import './dev-stars.js'; // adds window.__pengu.starDev() — no UI unless enabled
 import './dev-shop.js';  // adds window.__pengu.shopDev() — align booster grid
 import './dev-booster-export.js'; // adds window.__pengu.exportBoosterPNGs()
@@ -221,6 +228,30 @@ Object.assign(window.__pengu ||= {}, {
     console.log(`🗑 wiped ${remove.length} localStorage keys + all sessionStorage`);
     setTimeout(() => location.reload(), 100);
   },
+
+  // ── Diagnostics ────────────────────────────────────────────────
+  /** Copy a JSON diagnostic report to clipboard (for bug reports). */
+  async copyLogs() {
+    const ok = await copyReport();
+    console.log(ok ? '✓ Log report copied to clipboard.' : '✗ Clipboard unavailable — see the prompt.');
+    return ok;
+  },
+  /** Return raw log entries array. */
+  getLogs() { return getEntries(); },
+  /** Print a formatted summary to the console. */
+  showLogs() {
+    const entries = getEntries();
+    const levels = ['DEBUG','INFO','WARN','ERROR'];
+    const styles = ['color:#888','color:#adf','color:#fa0','color:#f44'];
+    console.group(`PenguCrush logs (${entries.length} entries)`);
+    for (const e of entries) {
+      const lvl = e.level ?? 0;
+      console.log(`%c${levels[lvl] || lvl}%c [${e.tag}] ${e.msg}`, styles[lvl]||'', 'color:inherit', e.data ?? '');
+    }
+    console.groupEnd();
+  },
+  /** Wipe the log buffer. */
+  clearLogs() { clearLogs(); console.log('Logs cleared.'); },
 });
 
 let mapInited = false;
@@ -583,6 +614,7 @@ homePlayBtn?.addEventListener('click', async () => {
       } catch (e) {
         const msg = String(e?.shortMessage || e?.message || e).slice(0, 200);
         Events.agwConnectFail(msg.slice(0, 100));
+        logError('entry.connect', 'AGW connect failed', { msg });
         setupStatus('Wallet connect failed', { detail: msg, tone: 'error' });
         hideSetupStatus(6000);
         throw e;
@@ -593,6 +625,8 @@ homePlayBtn?.addEventListener('click', async () => {
     // cost one popup per cold-start for zero security benefit. AGW
     // connection (above) already proves wallet ownership.
     setAnalyticsUser(getAGWAddress());
+    _syncLoggerWallet();
+    logInfo('entry.connect', 'wallet connected', { wallet: (getAGWAddress() || '').slice(0, 10) });
     // Pull chain state right after connect so the map HUD shows the truth.
     Inventory.hydrateFromChain().catch(() => {});
 

@@ -14,6 +14,7 @@ import { abstract } from 'viem/chains';
 import { keccak256, toBytes, encodeAbiParameters, parseAbiParameters } from 'viem';
 import { getGeneralPaymasterInput } from 'viem/zksync';
 import { logTxSubmitted, logTxResult, logTxError } from './tx-log.js';
+import { logInfo, logWarn, logError } from './logger.js';
 import penguCrushAbiJson from '../contracts/PenguCrushABI.json';
 
 const ENV = (import.meta.env || {});
@@ -135,7 +136,7 @@ async function chainWrite(label, functionName, args, options = {}) {
       if (/^Insufficient balance/.test(err?.message || '')) throw err;
       // Anything else (transient RPC failure, etc.) is logged but not fatal —
       // we still let the write proceed; the chain will surface its own error.
-      console.warn('[chainWrite] balance pre-check failed (proceeding):', err?.message || err);
+      logWarn('onchain.chainWrite', 'balance pre-check failed (proceeding)', { err: err?.message || String(err) });
     }
   }
 
@@ -156,7 +157,7 @@ async function chainWrite(label, functionName, args, options = {}) {
   // Loud per-tx logging so you can see at a glance which calls run silently
   // through the session key vs which ones pop the wallet. If gameplay calls
   // are showing 'wallet', the session-key path is broken and needs fixing.
-  console.info(`[chainWrite] ${label} (${functionName}) → ${sessionClient ? 'SESSION (silent)' : 'WALLET (popup)'}${options.requireUserPrompt ? ' [requireUserPrompt]' : ''}${wantSession && !sessionClient ? ' [session unavailable]' : ''}`);
+  logInfo('onchain.chainWrite', `${label} (${functionName}) → ${sessionClient ? 'SESSION' : 'WALLET'}${options.requireUserPrompt ? ' [requireUserPrompt]' : ''}${wantSession && !sessionClient ? ' [session unavailable]' : ''}`);
 
   let hash;
   try {
@@ -311,7 +312,7 @@ async function _renewSessionInteractive(walletAddr, triggeringLabel, originalErr
     try {
       const agwClient = getAgwClient();
       if (!agwClient) {
-        console.warn('[session-renew] no AGW client — cannot renew');
+        logWarn('onchain.sessionRenew', 'no AGW client — cannot renew');
         return false;
       }
       const { clearSessionForAddress, grantSession } = await import('./session-key.js');
@@ -325,7 +326,7 @@ async function _renewSessionInteractive(walletAddr, triggeringLabel, originalErr
         Events.sessionKeyFailed?.(`renew_triggered_by_${triggeringLabel}: ${String(originalErrMsg).slice(0, 80)}`);
       } catch (_) { /* ignore */ }
 
-      console.info('[session-renew] prompting user to renew session-key (triggered by ' + triggeringLabel + ')');
+      logInfo('onchain.sessionRenew', 'prompting user to renew session-key (triggered by ' + triggeringLabel + ')');
       const r = await grantSession(agwClient);
 
       try {
@@ -338,9 +339,9 @@ async function _renewSessionInteractive(walletAddr, triggeringLabel, originalErr
       const msg = err?.shortMessage || err?.message || String(err);
       // User cancelled the renewal popup — fine, just don't retry.
       if (/reject|denied|cancel/i.test(msg)) {
-        console.info('[session-renew] user declined renewal');
+        logInfo('onchain.sessionRenew', 'user declined renewal');
       } else {
-        console.warn('[session-renew] grantSession threw:', msg);
+        logWarn('onchain.sessionRenew', 'grantSession threw', { msg });
       }
       return false;
     } finally {
@@ -403,15 +404,15 @@ export async function startLevelWithSetup(level) {
   let alreadyClaimed = false;
   try { alreadyClaimed = !!(await readStarterPackClaimed(player)); }
   catch (err) {
-    console.warn('[startLevelWithSetup] readStarterPackClaimed failed, assuming not claimed:', err?.shortMessage || err?.message || err);
+    logWarn('onchain.startLevel', 'readStarterPackClaimed failed — assuming not claimed', { err: err?.shortMessage || err?.message || String(err) });
   }
 
   if (alreadyClaimed) {
-    console.info('[startLevelWithSetup] returning player — plain startLevel(' + level + ')');
+    logInfo('onchain.startLevel', `returning player — plain startLevel(${level})`);
     return startLevel(level);
   }
 
-  console.info('[startLevelWithSetup] cold-start — batching claimStarterPack + startLevel(' + level + ') into one popup');
+  logInfo('onchain.startLevel', `cold-start — batching claimStarterPack + startLevel(${level})`);
   const calls = [
     {
       target: PENGUCRUSH_ADDRESS,
@@ -452,7 +453,7 @@ export async function startLevelWithSetup(level) {
   } catch (err) {
     const msg = err?.shortMessage || err?.message || String(err);
     const rejected = /reject|denied|cancel/i.test(msg);
-    console.error('[startLevelWithSetup] batchCall write failed:', msg);
+    logError('onchain.startLevel', 'batchCall write failed', { msg });
     logTxResult(rowId, { status: 'error', error: rejected ? `user_rejected: ${msg}` : `batchCall: ${msg}` });
     throw err;
   }
@@ -513,27 +514,27 @@ export async function startLevelWithSetup(level) {
 export async function bootstrapBatch(_unusedLevel) {
   const player = getAGWAddress();
   if (!player) throw new Error('wallet not connected');
-  console.info('[bootstrap] start, player=', player);
+  logInfo('onchain.bootstrap', 'start', { player });
 
   let alreadyClaimed = false;
   try {
     alreadyClaimed = !!(await readStarterPackClaimed(player));
   } catch (err) {
-    console.warn('[bootstrap] readStarterPackClaimed failed, assuming not claimed:', err?.shortMessage || err?.message || err);
+    logWarn('onchain.bootstrap', 'readStarterPackClaimed failed — assuming not claimed', { err: err?.shortMessage || err?.message || String(err) });
   }
   if (alreadyClaimed) {
-    console.info('[bootstrap] starter pack already claimed — nothing to do');
+    logInfo('onchain.bootstrap', 'starter pack already claimed');
     return { sessionAddress: null, included: { session: false, starter: false } };
   }
 
-  console.info('[bootstrap] claiming starter pack');
+  logInfo('onchain.bootstrap', 'claiming starter pack');
   try {
     await claimStarterPack();
-    console.info('[bootstrap] starter pack claimed');
+    logInfo('onchain.bootstrap', 'starter pack claimed');
   } catch (err) {
     const msg = err?.shortMessage || err?.message || String(err);
     if (/already|StarterPackAlreadyClaimed/i.test(msg)) {
-      console.info('[bootstrap] starter pack was already claimed (race-tolerated)');
+      logInfo('onchain.bootstrap', 'starter pack was already claimed (race-tolerated)');
     } else {
       throw err;
     }
@@ -585,10 +586,10 @@ export async function submitLevel(journal) {
       }
     } else {
       const text = await res.text().catch(() => '');
-      console.warn('validator rejected journal:', res.status, text);
+      logWarn('onchain.validator', 'validator rejected journal', { status: res.status, body: text?.slice(0, 200) });
     }
   } catch (err) {
-    console.warn('validator unreachable, falling back to unvalidated:', err?.message || err);
+    logWarn('onchain.validator', 'validator unreachable — falling back to unvalidated', { err: err?.message || String(err) });
   }
   // 3) Validator down or rejected — degrade gracefully to unvalidated path so
   //    the chain still records the play (no leaderboard validation marker).
@@ -629,10 +630,10 @@ export async function submitAndStartNext(journal, nextLevel) {
       signature = body?.signature || null;
     } else {
       const text = await res.text().catch(() => '');
-      console.warn('validator rejected journal:', res.status, text);
+      logWarn('onchain.validator', 'validator rejected journal', { status: res.status, body: text?.slice(0, 200) });
     }
   } catch (err) {
-    console.warn('validator unreachable:', err?.message || err);
+    logWarn('onchain.validator', 'validator unreachable', { err: err?.message || String(err) });
   }
   if (!signature) {
     // Two-tx fallback. Still better than failing outright.
@@ -680,7 +681,7 @@ export function ensureStarterPack() {
     } catch (err) {
       _starterPackPromise = null; // allow retry on next call
       const msg = err?.shortMessage || err?.message || String(err);
-      console.warn('ensureStarterPack failed (will retry on next load):', msg);
+      logWarn('onchain.starterPack', 'ensureStarterPack failed (will retry on next load)', { msg });
       return { claimed: false, reason: msg };
     }
   })();

@@ -14,6 +14,7 @@ import { getPublicClient, getAGWAddress } from './agw.js';
 import { PENGUCRUSH_ADDRESS } from './onchain.js';
 import { fetchPlayerProgress } from './supabase.js';
 import penguCrushAbiJson from '../contracts/PenguCrushABI.json';
+import { logInfo, logWarn, logError } from './logger.js';
 
 const abi = Array.isArray(penguCrushAbiJson) ? penguCrushAbiJson : penguCrushAbiJson.abi || [];
 
@@ -46,7 +47,7 @@ export async function isLevelUnlockedOnchain(levelN) {
     const stars = Number(result?.stars ?? result?.[2] ?? 0);
     return stars > 0;
   } catch (err) {
-    console.warn('Level-unlock chain check failed:', err?.shortMessage || err?.message || err);
+    logWarn('progress.onchain', `level ${levelN} unlock chain check failed`, { err: err?.shortMessage || err?.message || String(err) });
     return null; // signal "unknown" so caller can fall through to backup
   }
 }
@@ -63,7 +64,7 @@ export async function isLevelUnlockedSupabase(levelN) {
     const prev = rows.find(r => Number(r.level) === levelN - 1);
     return Number(prev?.stars || 0) > 0;
   } catch (err) {
-    console.warn('Level-unlock supabase check failed:', err?.message || err);
+    logWarn('progress.supabase', `level ${levelN} unlock supabase check failed`, { err: err?.message || String(err) });
     return false;
   }
 }
@@ -90,12 +91,24 @@ export async function isLevelUnlocked(levelN) {
   // It's never shown on the map so only a manual goToLevel(99) hits it.
   if (levelN === 99) return true;
   const chain = await isLevelUnlockedOnchain(levelN);
-  if (chain === true) return true;
+  if (chain === true) {
+    logInfo('progress.unlock', `level ${levelN} unlocked via chain`);
+    return true;
+  }
   // chain === false  → explicit deny from chain; still consult Supabase as a backup
   // chain === null   → chain RPC failed; consult Supabase
   const supa = await isLevelUnlockedSupabase(levelN);
-  if (supa === true) return true;
+  if (supa === true) {
+    logInfo('progress.unlock', `level ${levelN} unlocked via supabase`);
+    return true;
+  }
   // Both remote sources unavailable or deny — fall back to localStorage so that
   // players who won but navigated to Map (losing pendingJournal) can still progress.
-  return isLevelUnlockedLocal(levelN);
+  const local = isLevelUnlockedLocal(levelN);
+  if (local) {
+    logInfo('progress.unlock', `level ${levelN} unlocked via localStorage (chain=${chain}, supa=${supa})`);
+  } else {
+    logWarn('progress.unlock', `level ${levelN} LOCKED on all sources (chain=${chain}, supa=${supa}, local=false)`);
+  }
+  return local;
 }

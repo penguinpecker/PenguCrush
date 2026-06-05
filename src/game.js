@@ -9,6 +9,7 @@ import { saveSnapshot as saveMidGameSnapshot, loadSnapshot as loadMidGameSnapsho
 import { Events } from './analytics.js';
 import { renderLivesHud, canSpendLife, shakeLivesHud, shakeElement } from './lives-hud.js';
 import { playSfx, stopBgm } from './audio.js';
+import { logInfo, logWarn, logError } from './logger.js';
 
 // ─── Per-level journal accumulated during play, submitted on-chain at end ────
 const journal = {
@@ -2318,8 +2319,13 @@ function showLevelPopup(wonHint) {
   const movesUsedNow = getMovesUsed();
   const durationMsNow = Math.round(performance.now() - gameStartTime);
   const starsNow = won ? getStars() : 0;
-  if (won) { Events.levelWin(levelNum, score, starsNow, movesUsedNow, durationMsNow); playSfx('levelWin'); }
-  else     { Events.levelFail(levelNum, score, movesUsedNow, durationMsNow); playSfx('levelFail'); }
+  if (won) {
+    Events.levelWin(levelNum, score, starsNow, movesUsedNow, durationMsNow); playSfx('levelWin');
+    logInfo('game.levelEnd', `level ${levelNum} WON`, { score, stars: starsNow, movesUsed: movesUsedNow, target: CONFIG.targetScore });
+  } else {
+    Events.levelFail(levelNum, score, movesUsedNow, durationMsNow); playSfx('levelFail');
+    logInfo('game.levelEnd', `level ${levelNum} FAILED`, { score, target: CONFIG.targetScore, movesUsed: movesUsedNow });
+  }
   const title = document.getElementById('levelPopupTitle');
   const starsEl = document.getElementById('levelPopupStars');
   const scoreEl = document.getElementById('levelPopupScore');
@@ -2504,9 +2510,11 @@ function setupLevelPopupButtons() {
     if (journal?.completed && journal.stars > 0) {
       // Best-effort background submit — don't block navigation, don't alert on failure.
       import('./onchain.js').then(({ submitLevel }) =>
-        submitLevel(journal).catch(err =>
-          console.warn('[level-end] background submitLevel failed (Map path):', err?.shortMessage || err?.message || err)
-        )
+        submitLevel(journal)
+          .then(r => logInfo('game.mapSubmit', `background submitLevel L${journal.level} ok`, { hash: r?.hash }))
+          .catch(err => logError('game.mapSubmit', `background submitLevel L${journal.level} failed`, {
+            err: err?.shortMessage || err?.message || String(err),
+          }))
       );
     }
     window.__pengu.goToMap();
@@ -2537,6 +2545,7 @@ function setupLevelPopupButtons() {
       await Inventory.hydrateFromChain().catch(() => {});
       window.__pengu.goToLevel(levelNum);
     } catch (err) {
+      logError('game.replay', `submitAndStartNext (Replay) L${levelNum} failed`, { err: err?.shortMessage || err?.message || String(err) });
       console.warn('submitAndStartNext (Replay) failed:', err);
       explainAndAlert(err, 'Could not restart this level on chain.');
       setBusy(false);
@@ -2569,6 +2578,7 @@ function setupLevelPopupButtons() {
       await Inventory.hydrateFromChain().catch(() => {});
       window.__pengu.goToLevel(levelNum + 1);
     } catch (err) {
+      logError('game.next', `submitAndStartNext (Next) L${levelNum}→${levelNum+1} failed`, { err: err?.shortMessage || err?.message || String(err) });
       console.warn('submitAndStartNext (Next) failed:', err);
       explainAndAlert(err, 'Could not advance to the next level on chain.');
       setBusy(false);
