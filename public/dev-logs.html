@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PenguCrush — Log Viewer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:#0a0f1a; --surface:#111827; --border:#1e2d42; --text:#d1e4f4;
+      --muted:#4a6a8a; --accent:#38bdf8;
+      --debug:#6b7280; --info:#60a5fa; --warn:#fbbf24; --error:#f87171;
+      --tag:#a78bfa; --pill-bg:#1e2d42;
+    }
+    body { font-family:'Segoe UI',system-ui,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; display:flex; flex-direction:column; }
+
+    header { display:flex; align-items:center; gap:12px; padding:14px 20px; background:var(--surface); border-bottom:1px solid var(--border); flex-wrap:wrap; }
+    header h1 { font-size:16px; font-weight:700; color:var(--accent); white-space:nowrap; }
+    .badge { font-size:11px; font-weight:700; padding:2px 8px; border-radius:99px; background:var(--pill-bg); color:var(--muted); }
+    .spacer { flex:1; }
+
+    /* Mode switch */
+    .mode-switch { display:flex; background:var(--bg); border:1px solid var(--border); border-radius:7px; overflow:hidden; }
+    .mode-btn { font-size:12px; font-weight:700; padding:5px 14px; border:none; background:transparent; color:var(--muted); cursor:pointer; transition:all .15s; }
+    .mode-btn.active { background:var(--accent); color:#04121f; }
+
+    .toolbar { display:flex; align-items:center; gap:8px; padding:10px 20px; background:var(--surface); border-bottom:1px solid var(--border); flex-wrap:wrap; }
+    .search { flex:1; min-width:140px; background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:6px 10px; color:var(--text); font-size:13px; outline:none; }
+    .search:focus { border-color:var(--accent); }
+    .search::placeholder { color:var(--muted); }
+    .wallet-filter { width:200px; }
+
+    .level-btns { display:flex; gap:4px; }
+    .lvl-btn { font-size:11px; font-weight:700; padding:4px 10px; border-radius:99px; border:1px solid transparent; cursor:pointer; transition:opacity .15s; background:var(--pill-bg); color:var(--muted); }
+    .lvl-btn.active-debug{border-color:var(--debug);color:var(--debug);} .lvl-btn.active-info{border-color:var(--info);color:var(--info);}
+    .lvl-btn.active-warn{border-color:var(--warn);color:var(--warn);} .lvl-btn.active-error{border-color:var(--error);color:var(--error);}
+    .lvl-btn:not([class*="active"]):hover { opacity:.75; }
+
+    .btn { font-size:12px; font-weight:600; padding:5px 12px; border-radius:6px; border:1px solid var(--border); background:var(--pill-bg); color:var(--text); cursor:pointer; transition:background .15s; }
+    .btn:hover { background:var(--border); }
+    .btn.danger { border-color:#7f1d1d; color:var(--error); } .btn.danger:hover { background:#1f0808; }
+    .btn.primary { border-color:var(--accent); color:var(--accent); } .btn.primary:hover { background:#0c2233; }
+
+    .stats { display:flex; gap:20px; padding:8px 20px; background:#0d1520; border-bottom:1px solid var(--border); font-size:12px; flex-wrap:wrap; }
+    .stat { display:flex; gap:5px; align-items:center; }
+    .stat-label { color:var(--muted); }
+    .stat-val { font-weight:700; } .stat-val.d{color:var(--debug);} .stat-val.i{color:var(--info);} .stat-val.w{color:var(--warn);} .stat-val.e{color:var(--error);}
+
+    .log-wrap { flex:1; overflow-y:auto; padding:8px 20px 32px; }
+    table { width:100%; border-collapse:collapse; font-size:12.5px; }
+    thead th { text-align:left; padding:6px 8px; color:var(--muted); font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--bg); z-index:1; }
+    tbody tr { border-bottom:1px solid #0f1822; transition:background .1s; }
+    tbody tr:hover { background:#0e1a2a; }
+    td { padding:5px 8px; vertical-align:top; }
+
+    .col-time{white-space:nowrap;color:var(--muted);font-size:11px;width:80px;}
+    .col-level{width:54px;} .col-wallet{width:110px;} .col-tag{width:175px;} .col-data{width:240px;}
+    .hide-remote, .hide-local { }
+
+    .lvl { font-size:10px; font-weight:700; padding:1px 6px; border-radius:3px; text-transform:uppercase; }
+    .lvl-DEBUG{background:#1f2937;color:var(--debug);} .lvl-INFO{background:#1e3050;color:var(--info);}
+    .lvl-WARN{background:#3b2a0a;color:var(--warn);} .lvl-ERROR{background:#3b0f0f;color:var(--error);}
+
+    .tag-text { color:var(--tag); font-family:monospace; font-size:11.5px; }
+    .wallet-text { color:#7da8c8; font-family:monospace; font-size:11px; cursor:pointer; }
+    .wallet-text:hover { color:var(--accent); }
+    .msg-text { color:var(--text); line-height:1.4; }
+    .data-text { color:#7da8c8; font-family:monospace; font-size:11px; white-space:pre-wrap; word-break:break-all; max-height:80px; overflow:hidden; cursor:pointer; }
+    .data-text.expanded { max-height:none; }
+
+    .empty { text-align:center; padding:60px 20px; color:var(--muted); }
+    .empty h2 { font-size:18px; margin-bottom:8px; }
+    .empty p { font-size:13px; line-height:1.6; }
+    .empty code { background:var(--pill-bg); padding:2px 6px; border-radius:4px; font-size:12px; }
+
+    .refresh-dot { width:7px; height:7px; border-radius:50%; background:var(--accent); animation:pulse 2s ease-in-out infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+    ::-webkit-scrollbar { width:6px; } ::-webkit-scrollbar-track { background:var(--bg); } ::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+
+    /* Settings modal */
+    .modal-bg { position:fixed; inset:0; background:rgba(4,10,20,.8); display:none; align-items:center; justify-content:center; z-index:100; }
+    .modal-bg.open { display:flex; }
+    .modal { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:24px; width:min(460px,92vw); box-shadow:0 12px 40px rgba(0,20,50,.6); }
+    .modal h2 { font-size:16px; color:var(--accent); margin-bottom:6px; }
+    .modal p.hint { font-size:12px; color:var(--muted); margin-bottom:16px; line-height:1.5; }
+    .field { margin-bottom:14px; }
+    .field label { display:block; font-size:12px; font-weight:600; color:var(--text); margin-bottom:5px; }
+    .field input { width:100%; background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:8px 10px; color:var(--text); font-size:13px; font-family:monospace; outline:none; }
+    .field input:focus { border-color:var(--accent); }
+    .field .sub { font-size:11px; color:var(--muted); margin-top:4px; }
+    .warn-box { background:#3b2a0a33; border:1px solid #fbbf2455; border-radius:8px; padding:10px 12px; font-size:11.5px; color:var(--warn); line-height:1.5; margin-bottom:16px; }
+    .modal-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:8px; }
+    .test-result { font-size:12px; margin-top:10px; min-height:16px; }
+    .test-result.ok { color:#4ade80; } .test-result.err { color:var(--error); }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🐧 PenguCrush Logs</h1>
+  <span class="badge" id="totalBadge">0 entries</span>
+  <div class="mode-switch">
+    <button class="mode-btn active" id="modeLocal" onclick="setMode('local')">This device</button>
+    <button class="mode-btn" id="modeRemote" onclick="setMode('remote')">All users (Supabase)</button>
+  </div>
+  <div class="spacer"></div>
+  <button class="btn" onclick="openSettings()">⚙ Settings</button>
+  <div class="refresh-dot" title="Auto-refreshes"></div>
+  <span style="font-size:11px;color:var(--muted);margin-left:4px" id="liveLabel">live</span>
+</header>
+
+<div class="toolbar">
+  <input class="search" id="searchInput" placeholder="Filter by tag, message, or data…" />
+  <input class="search wallet-filter hide-local" id="walletFilter" placeholder="Wallet (remote only)…" style="display:none" />
+  <div class="level-btns">
+    <button class="lvl-btn" data-level="DEBUG" onclick="toggleLevel(this)">DEBUG</button>
+    <button class="lvl-btn active-info" data-level="INFO"  onclick="toggleLevel(this)">INFO</button>
+    <button class="lvl-btn active-warn" data-level="WARN"  onclick="toggleLevel(this)">WARN</button>
+    <button class="lvl-btn active-error" data-level="ERROR" onclick="toggleLevel(this)">ERROR</button>
+  </div>
+  <button class="btn primary" onclick="refreshNow()">↻ Refresh</button>
+  <button class="btn" onclick="copyAll()">Copy JSON</button>
+  <button class="btn danger" id="clearBtn" onclick="clearLogs()">Clear local</button>
+</div>
+
+<div class="stats" id="statsRow"></div>
+
+<div class="log-wrap" id="logWrap">
+  <table id="logTable">
+    <thead>
+      <tr>
+        <th class="col-time">Time</th>
+        <th class="col-level">Level</th>
+        <th class="col-wallet hide-local" id="walletHead" style="display:none">Wallet</th>
+        <th class="col-tag">Tag</th>
+        <th class="col-msg">Message</th>
+        <th class="col-data">Data</th>
+      </tr>
+    </thead>
+    <tbody id="logBody"></tbody>
+  </table>
+  <div class="empty" id="emptyMsg" style="display:none"></div>
+</div>
+
+<!-- Settings modal -->
+<div class="modal-bg" id="settingsModal">
+  <div class="modal">
+    <h2>Supabase Admin Connection</h2>
+    <p class="hint">To view logs from <strong>all users</strong>, connect to your Supabase project.
+       Reading <code>pengu_client_logs</code> needs the service-role key (RLS blocks anon access).</p>
+    <div class="warn-box">
+      ⚠ The service-role key is powerful. It's stored only in <em>this browser's</em> localStorage
+      and never committed or sent anywhere except your own Supabase project. Don't use this page
+      on a shared/public machine, and don't deploy it publicly with a key entered.
+    </div>
+    <div class="field">
+      <label>Supabase Project URL</label>
+      <input id="cfgUrl" placeholder="https://xxxxx.supabase.co" />
+      <div class="sub">Dashboard → Project Settings → API → Project URL</div>
+    </div>
+    <div class="field">
+      <label>Service-role key</label>
+      <input id="cfgKey" type="password" placeholder="eyJ…" />
+      <div class="sub">Dashboard → Project Settings → API → service_role (secret)</div>
+    </div>
+    <div class="field">
+      <label>Max rows to fetch</label>
+      <input id="cfgLimit" type="number" value="500" min="50" max="5000" />
+    </div>
+    <div class="test-result" id="testResult"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeSettings()">Cancel</button>
+      <button class="btn" onclick="testConnection()">Test</button>
+      <button class="btn primary" onclick="saveSettings()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const LS_KEY = 'pengucrush_logs';        // game's local log buffer
+  const CFG_KEY = 'pengu_logviewer_cfg';   // this viewer's saved Supabase config
+  const LEVELS = ['DEBUG','INFO','WARN','ERROR'];
+
+  let mode = 'local';
+  let activeLevels = new Set(['INFO','WARN','ERROR']);
+  let allEntries = [];
+  let searchTerm = '';
+  let walletTerm = '';
+  let autoScrolling = false;
+  let cfg = loadCfg();
+  let remoteFetching = false;
+
+  // ── Config persistence ─────────────────────────────────────────
+  function loadCfg() {
+    try { return JSON.parse(localStorage.getItem(CFG_KEY) || '{}'); } catch(_) { return {}; }
+  }
+  function saveCfg(c) { localStorage.setItem(CFG_KEY, JSON.stringify(c)); }
+
+  // ── Mode switching ─────────────────────────────────────────────
+  function setMode(m) {
+    mode = m;
+    document.getElementById('modeLocal').classList.toggle('active', m==='local');
+    document.getElementById('modeRemote').classList.toggle('active', m==='remote');
+    document.getElementById('walletFilter').style.display = m==='remote' ? '' : 'none';
+    document.getElementById('walletHead').style.display   = m==='remote' ? '' : 'none';
+    document.getElementById('clearBtn').style.display      = m==='local'  ? '' : 'none';
+    document.getElementById('liveLabel').textContent = m==='local' ? 'live (3s)' : 'manual / 15s';
+    _prevLen = -1;
+    if (m==='remote' && (!cfg.url || !cfg.key)) {
+      openSettings();
+    }
+    refreshNow();
+  }
+
+  // ── Settings modal ─────────────────────────────────────────────
+  function openSettings() {
+    document.getElementById('cfgUrl').value   = cfg.url   || '';
+    document.getElementById('cfgKey').value   = cfg.key   || '';
+    document.getElementById('cfgLimit').value = cfg.limit || 500;
+    document.getElementById('testResult').textContent = '';
+    document.getElementById('settingsModal').classList.add('open');
+  }
+  function closeSettings() { document.getElementById('settingsModal').classList.remove('open'); }
+  function saveSettings() {
+    cfg = {
+      url:   document.getElementById('cfgUrl').value.trim().replace(/\/$/,''),
+      key:   document.getElementById('cfgKey').value.trim(),
+      limit: parseInt(document.getElementById('cfgLimit').value,10) || 500,
+    };
+    saveCfg(cfg);
+    closeSettings();
+    if (mode==='remote') refreshNow();
+    showToast('✓ Settings saved');
+  }
+
+  async function testConnection() {
+    const url = document.getElementById('cfgUrl').value.trim().replace(/\/$/,'');
+    const key = document.getElementById('cfgKey').value.trim();
+    const res = document.getElementById('testResult');
+    res.className = 'test-result'; res.textContent = 'Testing…';
+    if (!url || !key) { res.className='test-result err'; res.textContent='Enter both URL and key.'; return; }
+    try {
+      const r = await fetch(`${url}/rest/v1/pengu_client_logs?select=id&limit=1`, {
+        headers: { apikey:key, Authorization:`Bearer ${key}` },
+      });
+      if (r.ok) { res.className='test-result ok'; res.textContent='✓ Connected — table reachable.'; }
+      else {
+        const t = await r.text();
+        res.className='test-result err';
+        res.textContent = `✗ ${r.status}: ${t.slice(0,120)}`;
+      }
+    } catch(e) {
+      res.className='test-result err';
+      res.textContent = '✗ ' + (e.message || 'network error');
+    }
+  }
+
+  // ── Level toggle ───────────────────────────────────────────────
+  function toggleLevel(btn) {
+    const lvl = btn.dataset.level, cls = 'active-'+lvl.toLowerCase();
+    if (activeLevels.has(lvl)) { activeLevels.delete(lvl); btn.classList.remove(cls); }
+    else                        { activeLevels.add(lvl);    btn.classList.add(cls); }
+    _prevLen = -1; render();
+  }
+
+  // ── Data sources ───────────────────────────────────────────────
+  function loadLocal() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(LS_KEY) || '[]');
+      // normalise: local entries use numeric level + ts
+      return (Array.isArray(raw)?raw:[]).map(e => ({
+        ts: e.ts, level: e.level, tag: e.tag, msg: e.msg, data: e.data, wallet: null, session: null,
+      }));
+    } catch(_) { return []; }
+  }
+
+  async function loadRemote() {
+    if (!cfg.url || !cfg.key) return [];
+    const lvls = [...activeLevels];
+    const params = new URLSearchParams();
+    params.set('select', '*');
+    params.set('order', 'created_at.desc');
+    params.set('limit', String(cfg.limit || 500));
+    if (lvls.length && lvls.length < 4) params.set('level', `in.(${lvls.join(',')})`);
+    if (walletTerm) params.set('wallet', `ilike.*${walletTerm.toLowerCase()}*`);
+    try {
+      const r = await fetch(`${cfg.url}/rest/v1/pengu_client_logs?${params}`, {
+        headers: { apikey:cfg.key, Authorization:`Bearer ${cfg.key}` },
+      });
+      if (!r.ok) { showToast(`Remote error ${r.status}`); return []; }
+      const rows = await r.json();
+      // map server rows → viewer entry shape; reverse so oldest first
+      return rows.reverse().map(row => ({
+        ts: Date.parse(row.client_ts || row.created_at) || Date.now(),
+        level: LEVELS.indexOf(row.level),   // string → index
+        tag: row.tag, msg: row.msg, data: row.data,
+        wallet: row.wallet, session: row.session_id,
+        serverTs: row.created_at,
+      }));
+    } catch(e) { showToast('Remote fetch failed: '+(e.message||'')); return []; }
+  }
+
+  // ── Format helpers ─────────────────────────────────────────────
+  function relTime(ts) {
+    const d = Date.now()-ts;
+    if (d<1000) return 'now';
+    if (d<60000) return Math.floor(d/1000)+'s';
+    if (d<3600000) return Math.floor(d/60000)+'m';
+    if (d<86400000) return Math.floor(d/3600000)+'h';
+    return new Date(ts).toLocaleDateString([], {month:'short',day:'numeric'});
+  }
+  function absTime(ts){ return new Date(ts).toLocaleString(); }
+  function esc(s){ return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function fmtData(d){ if(d==null) return ''; try{ return JSON.stringify(d,null,2);}catch(_){return String(d);} }
+  function levelName(e){ return typeof e.level==='number' ? (LEVELS[e.level]??String(e.level)) : String(e.level); }
+  function shortWallet(w){ return w ? w.slice(0,6)+'…'+w.slice(-4) : ''; }
+
+  // ── Filter ─────────────────────────────────────────────────────
+  function filtered() {
+    const q = searchTerm.toLowerCase();
+    return allEntries.filter(e => {
+      if (!activeLevels.has(levelName(e))) return false;
+      if (q) {
+        const data = fmtData(e.data);
+        if (!((e.tag||'').toLowerCase().includes(q) || (e.msg||'').toLowerCase().includes(q) || data.toLowerCase().includes(q)))
+          return false;
+      }
+      return true;
+    });
+  }
+
+  // ── Stats ──────────────────────────────────────────────────────
+  function updateStats(entries) {
+    const c = {DEBUG:0,INFO:0,WARN:0,ERROR:0};
+    for (const e of entries) { const n=levelName(e); c[n]=(c[n]||0)+1; }
+    document.getElementById('statsRow').innerHTML = `
+      <div class="stat"><span class="stat-label">Total</span><span class="stat-val">${entries.length}</span></div>
+      <div class="stat"><span class="stat-label">DEBUG</span><span class="stat-val d">${c.DEBUG}</span></div>
+      <div class="stat"><span class="stat-label">INFO</span><span class="stat-val i">${c.INFO}</span></div>
+      <div class="stat"><span class="stat-label">WARN</span><span class="stat-val w">${c.WARN}</span></div>
+      <div class="stat"><span class="stat-label">ERROR</span><span class="stat-val e">${c.ERROR}</span></div>
+      <div class="stat" style="margin-left:auto"><span class="stat-label">Showing</span><span class="stat-val">${filtered().length}</span></div>
+    `;
+    document.getElementById('totalBadge').textContent = entries.length + (mode==='remote'?' remote':' local');
+  }
+
+  // ── Render ─────────────────────────────────────────────────────
+  let _prevLen = -1, _prevKey = '';
+  function render() {
+    const rows = filtered();
+    const key = searchTerm + walletTerm + [...activeLevels].join() + mode + rows.length;
+    if (key === _prevKey) { updateStats(allEntries); return; }
+    _prevKey = key;
+
+    const body = document.getElementById('logBody');
+    const empty = document.getElementById('emptyMsg');
+    const table = document.getElementById('logTable');
+    const showWallet = mode==='remote';
+
+    if (!rows.length) {
+      table.style.display='none'; empty.style.display='';
+      empty.innerHTML = mode==='local'
+        ? `<h2>No local logs</h2><p>Play the game in this browser, then return here.<br>Stored in <code>localStorage → pengucrush_logs</code>. Only WARN/ERROR captured by default.</p>`
+        : (!cfg.url||!cfg.key)
+          ? `<h2>Not connected</h2><p>Click <code>⚙ Settings</code> to connect your Supabase project and view all users' logs.</p>`
+          : `<h2>No remote logs match</h2><p>No rows in <code>pengu_client_logs</code> for the current filters.</p>`;
+      updateStats(allEntries); return;
+    }
+    table.style.display=''; empty.style.display='none';
+
+    body.innerHTML = rows.map(e => {
+      const lvl = levelName(e);
+      const data = fmtData(e.data);
+      const dataCell = data ? `<div class="data-text" title="Click to expand" onclick="this.classList.toggle('expanded')">${esc(data)}</div>` : '';
+      const walletCell = showWallet
+        ? `<td class="col-wallet"><span class="wallet-text" title="${esc(e.wallet||'')} — click to filter" onclick="filterWallet('${esc(e.wallet||'')}')">${esc(shortWallet(e.wallet))||'—'}</span></td>`
+        : '';
+      return `<tr>
+        <td class="col-time" title="${absTime(e.ts)}">${esc(relTime(e.ts))}</td>
+        <td class="col-level"><span class="lvl lvl-${lvl}">${lvl}</span></td>
+        ${walletCell}
+        <td class="col-tag"><span class="tag-text">${esc(e.tag)}</span></td>
+        <td class="col-msg"><span class="msg-text">${esc(e.msg)}</span></td>
+        <td class="col-data">${dataCell}</td>
+      </tr>`;
+    }).join('');
+    updateStats(allEntries);
+    if (autoScrolling) scrollToBottom();
+  }
+
+  // ── Refresh ────────────────────────────────────────────────────
+  async function refreshNow() {
+    if (mode==='local') {
+      allEntries = loadLocal();
+    } else {
+      if (remoteFetching) return;
+      remoteFetching = true;
+      document.getElementById('liveLabel').textContent = 'fetching…';
+      allEntries = await loadRemote();
+      remoteFetching = false;
+      document.getElementById('liveLabel').textContent = 'manual / 15s';
+    }
+    _prevKey = '';
+    render();
+  }
+
+  function filterWallet(w) {
+    document.getElementById('walletFilter').value = w;
+    walletTerm = w; _prevKey=''; refreshNow();
+  }
+
+  // ── Actions ────────────────────────────────────────────────────
+  function scrollToBottom() {
+    autoScrolling = true;
+    const wrap = document.getElementById('logWrap');
+    wrap.scrollTop = wrap.scrollHeight;
+    setTimeout(()=>autoScrolling=false, 200);
+  }
+  async function copyAll() {
+    const report = {
+      generated: new Date().toISOString(), mode,
+      total: allEntries.length, showing: filtered().length,
+      entries: filtered().map(e => ({
+        time:new Date(e.ts).toISOString(), level:levelName(e), tag:e.tag, msg:e.msg,
+        ...(e.wallet?{wallet:e.wallet}:{}), ...(e.data!==undefined?{data:e.data}:{}),
+      })),
+    };
+    const text = JSON.stringify(report,null,2);
+    try { await navigator.clipboard.writeText(text); showToast('✓ Copied'); }
+    catch(_) { prompt('Copy log report:', text); }
+  }
+  function clearLogs() {
+    if (mode!=='local') { showToast('Clear only affects local logs'); return; }
+    if (!confirm('Clear all local logs?')) return;
+    localStorage.removeItem(LS_KEY); allEntries=[]; _prevKey=''; render(); showToast('Local logs cleared');
+  }
+
+  function showToast(msg) {
+    const t = document.createElement('div');
+    t.textContent = msg;
+    Object.assign(t.style,{position:'fixed',bottom:'20px',right:'20px',zIndex:999,background:'#1e3a5f',color:'#a8d8f0',padding:'9px 16px',borderRadius:'8px',fontSize:'13px',fontWeight:'600',border:'1px solid #38bdf8',boxShadow:'0 4px 14px rgba(0,20,50,.5)'});
+    document.body.appendChild(t); setTimeout(()=>t.remove(),2200);
+  }
+
+  // ── Inputs ─────────────────────────────────────────────────────
+  document.getElementById('searchInput').addEventListener('input', e => { searchTerm=e.target.value; _prevKey=''; render(); });
+  let _walletDebounce;
+  document.getElementById('walletFilter').addEventListener('input', e => {
+    walletTerm = e.target.value.trim();
+    clearTimeout(_walletDebounce);
+    _walletDebounce = setTimeout(() => { if (mode==='remote') refreshNow(); }, 400);
+  });
+  document.getElementById('logWrap').addEventListener('scroll', e => {
+    const el=e.target; autoScrolling = el.scrollHeight-el.scrollTop-el.clientHeight < 40;
+  });
+  document.addEventListener('keydown', e => {
+    if ((e.ctrlKey||e.metaKey) && e.key==='k') { document.getElementById('searchInput').focus(); e.preventDefault(); }
+    if (e.key==='Escape') {
+      if (document.getElementById('settingsModal').classList.contains('open')) { closeSettings(); return; }
+      document.getElementById('searchInput').value=''; searchTerm=''; _prevKey=''; render();
+    }
+  });
+
+  // ── Boot + auto-refresh ────────────────────────────────────────
+  refreshNow();
+  setInterval(() => { if (mode==='local') refreshNow(); }, 3000);   // local: 3s
+  setInterval(() => { if (mode==='remote') refreshNow(); }, 15000); // remote: 15s
+</script>
+</body>
+</html>
