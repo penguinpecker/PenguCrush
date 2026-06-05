@@ -2493,12 +2493,22 @@ function setupLevelPopupButtons() {
     }
   }
 
-  /// Map button — zero chain calls, just navigate. The user is leaving;
-  /// score is discarded. If they want to record the run, they click
-  /// Next or Replay instead (both single-tx fused submits).
+  /// Map button — navigate to map. If a winning run is pending, fire a
+  /// background submitLevel (session-key, no popup) so the result lands
+  /// on-chain and the next level unlocks. localStorage already has the win
+  /// recorded (written in showLevelPopup) as a fallback.
   mapBtn.addEventListener('click', () => {
     if (_levelEndBusy) return;
+    const journal = pendingJournal;
     pendingJournal = null;
+    if (journal?.completed && journal.stars > 0) {
+      // Best-effort background submit — don't block navigation, don't alert on failure.
+      import('./onchain.js').then(({ submitLevel }) =>
+        submitLevel(journal).catch(err =>
+          console.warn('[level-end] background submitLevel failed (Map path):', err?.shortMessage || err?.message || err)
+        )
+      );
+    }
     window.__pengu.goToMap();
   });
 

@@ -69,9 +69,19 @@ export async function isLevelUnlockedSupabase(levelN) {
 }
 
 /**
- * Combined gate: chain is primary, Supabase is a backup. A level is
- * unlocked iff *either* trusted source confirms. If both say no, or
- * both are unreachable, the level stays locked.
+ * Combined gate: chain is primary, Supabase is backup, localStorage is last resort.
+ *
+ * localStorage is accepted as a final fallback because:
+ *   - saveLevelResult (Supabase write) was security-revoked in May 2026 and is
+ *     currently a no-op, so Supabase never has data to confirm unlocks.
+ *   - The "Map" popup button discards pendingJournal before a chain tx fires,
+ *     so chain records may also be missing for wins where the player navigated
+ *     away rather than clicking Next.
+ *   - game.js writes stars to pengucrush_progress in localStorage only when the
+ *     game engine itself records a win (score >= targetScore, objective met), so
+ *     the value is as trustworthy as client-side state can be.
+ *   - A player editing their own localStorage only affects their own progression;
+ *     the risk is cosmetic compared to permanently locking legitimate progress.
  */
 export async function isLevelUnlocked(levelN) {
   if (levelN <= 1) return true;
@@ -84,5 +94,8 @@ export async function isLevelUnlocked(levelN) {
   // chain === false  → explicit deny from chain; still consult Supabase as a backup
   // chain === null   → chain RPC failed; consult Supabase
   const supa = await isLevelUnlockedSupabase(levelN);
-  return supa === true;
+  if (supa === true) return true;
+  // Both remote sources unavailable or deny — fall back to localStorage so that
+  // players who won but navigated to Map (losing pendingJournal) can still progress.
+  return isLevelUnlockedLocal(levelN);
 }
