@@ -502,6 +502,43 @@ body[data-screen="game"] {
   50% { filter: drop-shadow(0 0 18px rgba(120, 220, 255, 0.7)); }
 }
 
+/* ── Shop purchase toast ── */
+.pengu-toast {
+  position: fixed;
+  bottom: 36px;
+  left: 50%;
+  transform: translateX(-50%) translateY(16px);
+  z-index: 9999;
+  background: rgba(5, 30, 15, 0.93);
+  border: 1.5px solid #4ade80;
+  color: #d1fae5;
+  font-family: 'Fredoka', sans-serif;
+  font-weight: 700;
+  font-size: clamp(14px, 1.8vw, 17px);
+  padding: 10px 24px 10px 14px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45), 0 0 20px rgba(74, 222, 128, 0.22);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.22s ease, transform 0.22s ease;
+  white-space: nowrap;
+  backdrop-filter: blur(6px);
+  letter-spacing: 0.2px;
+}
+.pengu-toast--show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.pengu-toast__icon {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .home-play-sun__rays {
     animation: none;

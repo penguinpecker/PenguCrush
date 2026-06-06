@@ -491,6 +491,49 @@ document.querySelectorAll('.lb-tab').forEach(tab => {
 // ═══════════════════════════════════════════════════
 // SHOP POPUP
 // ═══════════════════════════════════════════════════
+
+// ── Purchase success toast ──────────────────────────
+let _toastTimer = null;
+/**
+ * Show a brief success toast at the bottom of the screen.
+ * @param {string} label   e.g. "Row Clear"
+ * @param {number} qty     e.g. 4  (pass 0 for lives restore message)
+ * @param {string} iconSrc img src for the item icon (optional)
+ */
+function showPurchaseToast(label, qty, iconSrc) {
+  let toast = document.getElementById('penguPurchaseToast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'penguPurchaseToast';
+    toast.className = 'pengu-toast';
+    document.body.appendChild(toast);
+  }
+
+  // Build contents
+  toast.innerHTML = '';
+  if (iconSrc) {
+    const img = document.createElement('img');
+    img.src = iconSrc;
+    img.className = 'pengu-toast__icon';
+    img.alt = '';
+    toast.appendChild(img);
+  }
+  const text = document.createElement('span');
+  text.textContent = qty > 0 ? `✓ ${qty}× ${label} added!` : `✓ ${label}!`;
+  toast.appendChild(text);
+
+  // Animate in, then out
+  toast.classList.remove('pengu-toast--show');
+  if (_toastTimer) { clearTimeout(_toastTimer); _toastTimer = null; }
+  // Double-rAF ensures the browser registers the class removal before re-adding
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    toast.classList.add('pengu-toast--show');
+    _toastTimer = setTimeout(() => {
+      toast.classList.remove('pengu-toast--show');
+    }, 3200);
+  }));
+}
+
 // Shop BUY handlers — fetch signed quote from backend, send ETH payment via
 // AGW (always prompts — value-bearing tx). On success the chain credits the
 // inventory and the next chain-sync refreshes the localStorage cache.
@@ -499,6 +542,9 @@ document.querySelectorAll('.shop-tag[data-item]').forEach(tagEl => {
   const slotEl = document.querySelector(`.shop-slot[data-item="${itemType}"]`);
   const qty = parseInt(slotEl?.dataset.qty || '1', 10);
   const labelEl = tagEl.querySelector('.shop-tag__label');
+  const slotImg = slotEl?.querySelector('img');
+  const itemLabel = slotImg?.alt || itemType;
+  const iconSrc = slotImg?.src || '';
   if (!itemType) return;
   tagEl.addEventListener('click', async () => {
     if (tagEl.disabled) return;
@@ -523,6 +569,12 @@ document.querySelectorAll('.shop-tag[data-item]').forEach(tagEl => {
       await Inventory.hydrateFromChain().catch(() => {});
       Events.shopBuySuccess(itemType, qty, 'ETH', r.hash);
       if (labelEl) labelEl.textContent = '✓ Confirmed';
+      // Show success toast — lives get a restore message, boosters show qty
+      if (itemType === 'lives') {
+        showPurchaseToast('Lives fully restored', 0, iconSrc);
+      } else {
+        showPurchaseToast(itemLabel, qty, iconSrc);
+      }
     } catch (err) {
       const msg = String(err?.shortMessage || err?.message || err).slice(0, 200);
       Events.shopBuyFail(itemType, qty, 'ETH', msg);
